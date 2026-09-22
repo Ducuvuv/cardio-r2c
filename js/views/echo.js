@@ -695,6 +695,19 @@
       mdBlock(entry.description)
     ]);
   }
+  /* Le titre d'un schéma (« Rétrécissement aortique serré »…) donne quasiment toujours la
+   * réponse du quiz : on ne l'affiche jamais avant que l'utilisateur ait répondu. */
+  function isBlind(entry) {
+    var q = entry && entry.quiz;
+    return !!(q && Array.isArray(q.options) && q.options.length >= 2 && typeof q.correct === 'number');
+  }
+  function blindLabel(entry, idx) {
+    return isBlind(entry) ? ('Schéma n°' + (idx + 1)) : (entry.title || 'Schéma');
+  }
+  function titleRevealBlock(entry) {
+    if (!isBlind(entry) || !entry.title) return null;
+    return h('h3', { 'class': 'echo-reveal__title', text: entry.title });
+  }
 
   function srcLine(entry) {
     if (!entry.src) return null;
@@ -753,13 +766,13 @@
 
     var head = h('div', { 'class': 'echo-head' }, [
       pill('Écho', 'kind'), rankPill(entry.rank),
-      h('h2', { text: entry.title || 'Schéma' })
+      h('h2', { text: isBlind(entry) ? 'Schéma à interpréter' : (entry.title || 'Schéma') })
     ]);
     wrap.appendChild(head);
     var fig = figure(entry.schematic);
     if (fig) wrap.appendChild(fig);
 
-    var reveal = h('div', { 'class': 'echo-reveal' }, [findingsBlock(entry), measuresBlock(entry), descriptionBlock(entry), srcLine(entry)]);
+    var reveal = h('div', { 'class': 'echo-reveal' }, [titleRevealBlock(entry), findingsBlock(entry), measuresBlock(entry), descriptionBlock(entry), srcLine(entry)]);
     var gradesHost = h('div');
     var graded = false;
 
@@ -931,19 +944,20 @@
       }
       shown.forEach(function (e) {
         var idx = entries.indexOf(e);
+        var blind = isBlind(e);
         var thumb = h('span', { 'class': 'echo-item__thumb', attr: { 'aria-hidden': 'true' } });
         var s = schematic(e.schematic);
         if (s) thumb.appendChild(s);
-        var nMes = Array.isArray(e.measures) ? e.measures.length : 0;
+        var nMes = blind ? 0 : (Array.isArray(e.measures) ? e.measures.length : 0);
         var meta = h('span', { 'class': 'echo-item__meta' }, [
           rankPill(e.rank),
-          h('span', { text: legend(e.schematic).replace(/^Schéma simplifié — /, '') || 'Sans schéma' }),
+          blind ? null : h('span', { text: legend(e.schematic).replace(/^Schéma simplifié — /, '') || 'Sans schéma' }),
           nMes ? h('span', { text: '· ' + nMes + (nMes > 1 ? ' mesures' : ' mesure') }) : null,
-          e.quiz ? h('span', { text: '· quiz' }) : null
+          blind ? h('span', { text: '· quiz' }) : null
         ]);
         var btn = h('button', { 'class': 'card echo-item', attr: { type: 'button' } }, [
           thumb,
-          h('span', { 'class': 'echo-item__body' }, [h('span', { 'class': 'echo-item__title', text: e.title || 'Schéma' }), meta]),
+          h('span', { 'class': 'echo-item__body' }, [h('span', { 'class': 'echo-item__title', text: blindLabel(e, idx) }), meta]),
           h('span', { 'class': 'echo-item__chev', attr: { 'aria-hidden': 'true' }, text: '›' })
         ]);
         btn.addEventListener('click', function () { open(idx); });
@@ -964,35 +978,22 @@
 
   function buildEntry(host, num, entries, idx, backToList, open) {
     var entry = entries[idx];
-    var card = h('div', { 'class': 'card' }, [
-      h('div', { 'class': 'echo-head' }, [pill('Écho', 'kind'), rankPill(entry.rank), h('h2', { text: entry.title || 'Schéma' })]),
-      figure(entry.schematic),
-      findingsBlock(entry),
-      measuresBlock(entry),
-      descriptionBlock(entry),
-      srcLine(entry)
-    ]);
-
+    // « signes, seuils de sévérité et quiz » (cf. sous-titre de la liste) : le schéma est
+    // toujours présenté à l'aveugle d'abord — renderQuiz() masque lui-même le titre et la
+    // description jusqu'à ce que l'utilisateur ait répondu (ou se soit auto-évalué).
     var quizCard = h('div', { 'class': 'card' });
-    var testBtn = h('button', { 'class': 'btn btn--primary btn--block', attr: { type: 'button' }, text: entry.quiz ? 'Me tester sur ce schéma' : 'M\'auto-évaluer' });
-    testBtn.addEventListener('click', function () {
-      quizCard.textContent = '';
-      var q = renderQuiz(entry, {
-        onGrade: function (grade, score, extra) {
-          recordAttempt(entry, num, grade, score, extra);
-          var next = idx + 1 < entries.length;
-          quizCard.appendChild(h('div', { 'class': 'echo-nav' }, [
-            next
-              ? h('button', { 'class': 'btn btn--primary', attr: { type: 'button' }, text: 'Schéma suivant', on: { click: function () { open(idx + 1); } } })
-              : h('button', { 'class': 'btn btn--primary', attr: { type: 'button' }, text: 'Tous les schémas', on: { click: backToList } })
-          ]));
-        }
-      });
-      quizCard.appendChild(q);
-      try { q.focus({ preventScroll: true }); } catch (e) { /* silencieux */ }
+    var q = renderQuiz(entry, {
+      onGrade: function (grade, score, extra) {
+        recordAttempt(entry, num, grade, score, extra);
+        var hasNext = idx + 1 < entries.length;
+        quizCard.appendChild(h('div', { 'class': 'echo-nav' }, [
+          hasNext
+            ? h('button', { 'class': 'btn btn--primary', attr: { type: 'button' }, text: 'Schéma suivant', on: { click: function () { open(idx + 1); } } })
+            : h('button', { 'class': 'btn btn--primary', attr: { type: 'button' }, text: 'Tous les schémas', on: { click: backToList } })
+        ]));
+      }
     });
-    quizCard.appendChild(h('p', { 'class': 'echo-sub', text: entry.quiz ? 'Une question pour vérifier que le schéma est acquis.' : 'Relis le schéma puis note-toi.' }));
-    quizCard.appendChild(testBtn);
+    quizCard.appendChild(q);
 
     var prev = h('button', { 'class': 'btn btn--secondary', attr: { type: 'button' }, text: '‹ Précédent' });
     var next = h('button', { 'class': 'btn btn--secondary', attr: { type: 'button' }, text: 'Suivant ›' });
@@ -1008,10 +1009,10 @@
     append(host, [
       h('div', null, back),
       h('p', { 'class': 'echo-sub', text: 'Schéma ' + (idx + 1) + ' sur ' + entries.length }),
-      card,
       quizCard,
       h('div', { 'class': 'echo-nav' }, [prev, next])
     ]);
+    try { q.focus({ preventScroll: true }); } catch (e) { /* silencieux */ }
     scrollTop();
   }
 

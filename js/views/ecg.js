@@ -1041,6 +1041,20 @@
     if (!entry.diagnosis) return null;
     return h('div', { class: 'explain' }, [h('span', { class: 'caption' }, 'Diagnostic'), h('p', { style: 'margin:4px 0 0;font-weight:600' }, entry.diagnosis)]);
   }
+  /* Le titre d'un tracé (« Fibrillation atriale à grosses mailles »…) donne quasiment
+   * toujours la réponse du quiz. On ne l'affiche donc jamais avant que l'utilisateur
+   * ait répondu : ni dans l'en-tête du quiz, ni dans les listes qui mènent à un quiz. */
+  function isBlind(entry) {
+    const q = entry && entry.quiz;
+    return !!(q && Array.isArray(q.options) && q.options.length >= 2 && typeof q.correct === 'number');
+  }
+  function blindLabel(entry, idx) {
+    return isBlind(entry) ? ('Tracé n°' + (idx + 1)) : (entry.title || 'Tracé ECG');
+  }
+  function titleRevealBlock(entry) {
+    if (!isBlind(entry) || !entry.title) return null;
+    return h('h3', { class: 'ecg-reveal__title' }, entry.title);
+  }
   function teachingBlock(entry) {
     if (!entry.teaching) return null;
     return h('div', {}, [h('div', { class: 'ecg-sec-title' }, 'Enseignement'), mdBlock(entry.teaching)]);
@@ -1123,10 +1137,10 @@
     const startedAt = nowMs();
     const wrap = h('div', { class: 'ecg-quiz stack', dataset: { id: entry.id || '' }, tabindex: '-1' });
 
-    wrap.appendChild(h('div', { class: 'ecg-head' }, [pill('ECG', 'kind'), rankPill(entry.rank), h('h2', {}, entry.title || 'Tracé ECG')]));
+    wrap.appendChild(h('div', { class: 'ecg-head' }, [pill('ECG', 'kind'), rankPill(entry.rank), h('h2', {}, isBlind(entry) ? 'Tracé à interpréter' : (entry.title || 'Tracé ECG'))]));
     wrap.appendChild(buildTracing(entry, { mode: opts.mode }));
 
-    const reveal = h('div', { class: 'ecg-reveal' }, [diagnosisBlock(entry), findingsBlock(entry), teachingBlock(entry), srcLine(entry)]);
+    const reveal = h('div', { class: 'ecg-reveal' }, [titleRevealBlock(entry), diagnosisBlock(entry), findingsBlock(entry), teachingBlock(entry), srcLine(entry)]);
     const gradesHost = h('div');
     let graded = false;
 
@@ -1273,11 +1287,12 @@
       if (!shown.length) { listEl.appendChild(h('li', { class: 'ecg-sub' }, 'Aucun tracé de ce rang dans cet item.')); return; }
       shown.forEach((e) => {
         const idx = entries.indexOf(e);
-        const rhythmLabel = (e.ecg && RHYTHM_FR[e.ecg.rhythm]) || 'Tracé';
+        const blind = isBlind(e);
+        const rhythmLabel = blind ? null : ((e.ecg && RHYTHM_FR[e.ecg.rhythm]) || 'Tracé');
         const row = h('button', { type: 'button', class: 'card ecg-item' }, [
           h('span', { class: 'ecg-item__body' }, [
-            h('span', { class: 'ecg-item__title' }, e.title || 'Tracé ECG'),
-            h('span', { class: 'ecg-item__meta' }, [rankPill(e.rank), h('span', {}, '· ' + rhythmLabel), e.quiz ? h('span', {}, '· quiz') : null])
+            h('span', { class: 'ecg-item__title' }, blindLabel(e, idx)),
+            h('span', { class: 'ecg-item__meta' }, [rankPill(e.rank), rhythmLabel ? h('span', {}, '· ' + rhythmLabel) : null, blind ? h('span', {}, '· quiz') : null])
           ]),
           h('span', { class: 'ecg-item__chev', 'aria-hidden': 'true' }, '›')
         ]);
@@ -1299,31 +1314,22 @@
 
   function buildItemEntry(host, num, entries, idx, backToList, open) {
     const entry = entries[idx];
-    const card = h('div', { class: 'card' }, [
-      h('div', { class: 'ecg-head' }, [pill('ECG', 'kind'), rankPill(entry.rank), h('h2', {}, entry.title || 'Tracé ECG')]),
-      buildTracing(entry, {}),
-      diagnosisBlock(entry), findingsBlock(entry), teachingBlock(entry), srcLine(entry)
-    ]);
+    // « lis, réponds, puis vérifie » (cf. sous-titre de la liste) : le tracé est toujours
+    // présenté à l'aveugle d'abord — renderQuiz() gère lui-même le masquage du titre et
+    // du diagnostic jusqu'à ce que l'utilisateur ait répondu (ou se soit auto-évalué).
     const quizCard = h('div', { class: 'card' });
-    const testBtn = h('button', { type: 'button', class: 'btn btn--primary btn--block' }, entry.quiz ? 'Me tester sur ce tracé' : 'M’auto-évaluer');
-    testBtn.addEventListener('click', () => {
-      quizCard.replaceChildren();
-      const q = renderQuiz(entry, {
-        onGrade: (grade, score, extra) => {
-          recordAttempt(entry, num, grade, score, extra);
-          const next = idx + 1 < entries.length;
-          quizCard.appendChild(h('div', { class: 'ecg-nav' }, [
-            next
-              ? h('button', { type: 'button', class: 'btn btn--primary', on: { click: () => open(idx + 1) } }, 'Tracé suivant')
-              : h('button', { type: 'button', class: 'btn btn--primary', on: { click: backToList } }, 'Tous les tracés')
-          ]));
-        }
-      });
-      quizCard.appendChild(q);
-      try { q.focus({ preventScroll: true }); } catch (e) { /* silencieux */ }
+    const q = renderQuiz(entry, {
+      onGrade: (grade, score, extra) => {
+        recordAttempt(entry, num, grade, score, extra);
+        const hasNext = idx + 1 < entries.length;
+        quizCard.appendChild(h('div', { class: 'ecg-nav' }, [
+          hasNext
+            ? h('button', { type: 'button', class: 'btn btn--primary', on: { click: () => open(idx + 1) } }, 'Tracé suivant')
+            : h('button', { type: 'button', class: 'btn btn--primary', on: { click: backToList } }, 'Tous les tracés')
+        ]));
+      }
     });
-    quizCard.appendChild(h('p', { class: 'ecg-sub' }, entry.quiz ? 'Une question pour vérifier la lecture.' : 'Relis le tracé puis note-toi.'));
-    quizCard.appendChild(testBtn);
+    quizCard.appendChild(q);
 
     const prev = h('button', { type: 'button', class: 'btn btn--secondary' }, '‹ Précédent');
     const next = h('button', { type: 'button', class: 'btn btn--secondary' }, 'Suivant ›');
@@ -1334,8 +1340,9 @@
     back.addEventListener('click', backToList);
 
     host.replaceChildren();
-    [h('div', {}, back), h('p', { class: 'ecg-sub' }, 'Tracé ' + (idx + 1) + ' sur ' + entries.length), card, quizCard, h('div', { class: 'ecg-nav' }, [prev, next])]
+    [h('div', {}, back), h('p', { class: 'ecg-sub' }, 'Tracé ' + (idx + 1) + ' sur ' + entries.length), quizCard, h('div', { class: 'ecg-nav' }, [prev, next])]
       .forEach((k) => host.appendChild(k));
+    try { q.focus({ preventScroll: true }); } catch (e) { /* silencieux */ }
     scrollTop();
   }
 
@@ -1403,7 +1410,7 @@
     const dateStr = (U && typeof U.fmtDate === 'function') ? U.fmtDate(new Date(), { long: true, weekday: true }) : '';
     host.appendChild(h('div', { class: 'card ecg-daily-head' }, [
       h('span', { class: 'pill pill--kind' }, 'ECG du jour'),
-      h('h2', { style: 'margin:8px 0 0' }, item.entry.title || 'Tracé du jour'),
+      h('h2', { style: 'margin:8px 0 0' }, isBlind(item.entry) ? 'Le tracé du jour' : (item.entry.title || 'Tracé du jour')),
       h('p', { class: 'ecg-sub' }, (item.meta && item.meta.short ? item.meta.short : 'Item ' + item.num) + (dateStr ? ' · ' + dateStr : ''))
     ]));
     const q = renderQuiz(item.entry, { onGrade: (grade, score, extra) => recordAttempt(item.entry, item.num, grade, score, extra) });
@@ -1466,11 +1473,13 @@
 
       const listNodes = order.map((numKey) => {
         const groupMeta = groups[numKey][0].meta;
-        const items = groups[numKey].map((x) => {
+        const items = groups[numKey].map((x, xi) => {
+          const blind = isBlind(x.entry);
+          const rhythmLabel = blind ? null : ((RHYTHM_FR[x.entry.ecg && x.entry.ecg.rhythm]) || 'Tracé');
           const row = h('button', { type: 'button', class: 'card ecg-item' }, [
             h('span', { class: 'ecg-item__body' }, [
-              h('span', { class: 'ecg-item__title' }, x.entry.title || 'Tracé ECG'),
-              h('span', { class: 'ecg-item__meta' }, [rankPill(x.entry.rank), h('span', {}, '· ' + ((RHYTHM_FR[x.entry.ecg && x.entry.ecg.rhythm]) || 'Tracé'))])
+              h('span', { class: 'ecg-item__title' }, blindLabel(x.entry, xi)),
+              h('span', { class: 'ecg-item__meta' }, [rankPill(x.entry.rank), rhythmLabel ? h('span', {}, '· ' + rhythmLabel) : null, blind ? h('span', {}, '· quiz') : null])
             ]),
             h('span', { class: 'ecg-item__chev', 'aria-hidden': 'true' }, '›')
           ]);
