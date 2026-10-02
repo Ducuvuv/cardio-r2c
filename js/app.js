@@ -57,6 +57,7 @@
     ['#/errors',                  'quiz',       'review',   'Cahier d’erreurs',    true,  { mode: 'errors' }],
     ['#/items',                   'items',      'items',    'Items',               false, {}],
     ['#/item/:num',               'items',      'items',    'Item',                true,  { mode: 'hub' }],
+    ['#/item/:num/flash',         'flash',      'items',    'Fiche flash',         true,  {}],
     ['#/item/:num/cours',         'course',     'items',    'Fiche',               true,  { section: 'cours' }],
     ['#/item/:num/mnemos',        'course',     'items',    'Mnémos',              true,  { section: 'mnemos' }],
     ['#/item/:num/qcm',           'quiz',       'items',    'Questions',           true,  { mode: 'item' }],
@@ -66,11 +67,24 @@
     ['#/item/:num/cas/:caseId',   'cases',      'items',    'Cas clinique',        true,  {}],
     ['#/item/:num/ecg',           'ecg',        'items',    'ECG',                 true,  {}],
     ['#/item/:num/echo',          'echo',       'items',    'Échocardiographie',   true,  {}],
+    ['#/item/:num/semio',         'rubriques',  'items',    'Sémiologie',          true,  { kind: 'semio' }],
+    ['#/item/:num/criteres',      'rubriques',  'items',    'Critères diagnostiques', true, { kind: 'criteres' }],
+    ['#/item/:num/chiffres',      'rubriques',  'items',    'Données chiffrées',   true,  { kind: 'chiffres' }],
+    ['#/item/:num/physio',        'rubriques',  'items',    'Physiopathologie',    true,  { kind: 'physio' }],
+    ['#/item/:num/parcours',      'rubriques',  'items',    'Prise en charge A → Z', true, { kind: 'parcours' }],
+    ['#/item/:num/examens',       'rubriques',  'items',    'Gestes, imagerie & analyses', true, { kind: 'examens' }],
+    ['#/parcours',                'rubriques',  'items',    'Prise en charge A → Z', true, { kind: 'parcours' }],
+    ['#/examens',                 'rubriques',  'items',    'Gestes, imagerie & analyses', true, { kind: 'examens' }],
+    ['#/semio',                   'rubriques',  'items',    'Sémiologie',          true,  { kind: 'semio' }],
+    ['#/criteres',                'rubriques',  'items',    'Critères diagnostiques', true, { kind: 'criteres' }],
+    ['#/chiffres',                'rubriques',  'items',    'Données chiffrées',   true,  { kind: 'chiffres' }],
+    ['#/physio',                  'rubriques',  'items',    'Physiopathologie',    true,  { kind: 'physio' }],
     ['#/stats',                   'stats',      'stats',    'Stats',               false, {}],
     ['#/settings',                'settings',   'settings', 'Plus',                false, {}],
     ['#/ecg',                     'ecg',        'items',    'Bibliothèque ECG',    true,  { mode: 'library' }],
     ['#/treatments',              'treatments', 'items',    'Traitements',         true,  { mode: 'library' }],
-    ['#/trees',                   'trees',      'items',    'Arbres décisionnels', true,  { mode: 'library' }]
+    ['#/trees',                   'trees',      'items',    'Arbres décisionnels', true,  { mode: 'library' }],
+    ['#/flash',                   'flash',      'items',    'Fiches flash',        true,  {}]
   ];
 
   function itemShort(num) {

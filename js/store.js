@@ -55,6 +55,14 @@
   const KIND_COST = { case: 4 };      // un dossier compte pour 4 cartes dans une session
   const MAX_RUN = 3;                  // pas plus de 3 cartes consécutives du même kind
   const EXAM_SHAPE = { qcm: 18, kfp: 2, tcs: 1, case: 1 };
+  /* Niveaux de progression (par item) : 1 Essentiel (rang A, QCM/QROC/flash faciles), 2 Approfondi
+   * (tout le rang A : difficiles, dossiers, ECG, écho, traitements, questions ouvertes), 3 Expert
+   * (rang B, KFP, TCS). 0 = arbre décisionnel : support de cours, jamais dans les séances. */
+  const TIER_LABELS = { 1: 'Essentiel', 2: 'Approfondi', 3: 'Expert' };
+  const LEVEL_MODES = ['progressif', 'essentiel', 'complet'];
+  const TIER_UNLOCK = 0.6;            // 60 % des cartes du niveau acquises → niveau suivant débloqué
+  const LEECH_FAILS = 3;              // ratée 3 fois → « coriace » : sort des séances auto, reste au cahier d'erreurs
+  const RELEARN_SHARE = 0.34;         // au plus ~1/3 d'une séance pour des cartes ratées récemment
   const CARD_STATES = ['new', 'learning', 'review', 'relearning'];
   const THEMES = ['system', 'light', 'dark'];
 
@@ -158,6 +166,133 @@
   function cardDocKey(cardId) { return 'cards-' + (itemOfId(cardId) || 'misc'); }
   function touched(c) { return !!c && (c.reps > 0 || c.due !== null && c.due !== undefined); }
 
+  /* ---------- niveaux de progression ---------- */
+
+  /* Niveau d'une carte : table précalculée au build (content/tiers.js : seules les cartes ≠ 1 y figurent),
+   * repli sur le registre si la table est absente. */
+  function cardTier(id) {
+    const reg = registry();
+    const key = String(id || '');
+    if (reg && isObj(reg.tiers)) { const t = reg.tiers[key]; return t === undefined ? 1 : int(t); }
+    const kind = kindOfId(key);
+    if (kind === 'tree') return 0;
+    if (kind === 'kfp' || kind === 'tcs') return 3;
+    let rank = null, diff = null;
+    if (reg && typeof reg.card === 'function') {
+      try { const c = reg.card(key); if (c) { rank = c.rank || null; diff = c.data ? Number(c.data.difficulty) : null; } } catch (e) { /* repli */ }
+    }
+    if (rank === 'B') return 3;
+    if ((kind === 'qcm' || kind === 'qroc' || kind === 'flash') && !(diff >= 3)) return 1;
+    return 2;
+  }
+  function levelMode() { const l = state.profile.level; return LEVEL_MODES.indexOf(l) >= 0 ? l : 'progressif'; }
+  function itemTier(num) {
+    const mode = levelMode();
+    if (mode === 'essentiel') return 1;
+    if (mode === 'complet') return 3;
+    const is = state.itemStats[String(num || '')];
+    return clamp(int(is && is.tier) || 1, 1, 3);
+  }
+  function inLevel(id) {
+    const t = cardTier(id);
+    return t >= 1 && t <= itemTier(itemOfId(id));
+  }
+  function isLeech(id) { const e = state.errors[String(id || '')]; return !!e && int(e.count) >= LEECH_FAILS; }
+  function reviewedToday(cs, now) {
+    const S = srs();
+    if (!cs || cs.last === null || cs.last === undefined || !S || typeof S.studyDayKey !== 'function') return false;
+    return S.studyDayKey(cs.last) === S.studyDayKey(now);
+  }
+  function tierTotals(num) {
+    const reg = registry();
+    try {
+      const it = reg && typeof reg.item === 'function' ? reg.item(num) : null;
+      if (it && isObj(it.tierCounts)) return { 1: int(it.tierCounts[1]), 2: int(it.tierCounts[2]), 3: int(it.tierCounts[3]) };
+    } catch (e) { /* repli */ }
+    const t = { 1: 0, 2: 0, 3: 0 };
+    (registryCards(num) || []).forEach(function (c) { const k = cardTier(c.id); if (k >= 1) t[k]++; });
+    return t;
+  }
+  /* Acquise = en révision et pas ratée à la dernière tentative. */
+  function acquired(cs) {
+    if (!cs || !(cs.reps > 0) || cs.state !== 'review') return false;
+    const h = cs.hist || [];
+    return (h.length ? h[h.length - 1][1] : 3) >= 2;
+  }
+  function tierProgress(num) {
+    const key = String(num || '');
+    const totals = tierTotals(key);
+    const seen = { 1: 0, 2: 0, 3: 0 }, acq = { 1: 0, 2: 0, 3: 0 };
+    Object.keys(state.cards).forEach(function (id) {
+      if (itemOfId(id) !== key) return;
+      const t = cardTier(id);
+      if (t < 1) return;
+      const cs = state.cards[id];
+      if (cs.reps > 0) seen[t]++;
+      if (acquired(cs)) acq[t]++;
+    });
+    const tier = itemTier(key);
+    const tiers = [1, 2, 3].map(function (t) {
+      const tot = totals[t];
+      return { tier: t, label: TIER_LABELS[t], total: tot, seen: tot ? Math.min(seen[t], tot) : seen[t], acquired: tot ? Math.min(acq[t], tot) : acq[t], ratio: tot ? Math.min(1, acq[t] / tot) : 0 };
+    });
+    const cur = tiers[tier - 1];
+    return {
+      item: key, tier: tier, label: TIER_LABELS[tier], mode: levelMode(), tiers: tiers, threshold: TIER_UNLOCK,
+      toNext: tier < 3 && cur.total ? Math.max(0, Math.ceil(TIER_UNLOCK * cur.total) - cur.acquired) : 0
+    };
+  }
+  function setItemTier(num, tier) {
+    const key = String(num || '');
+    if (!key) return null;
+    const is = state.itemStats[key] || (state.itemStats[key] = { lastVisited: 0, sessions: 0 });
+    is.tier = clamp(int(tier) || 1, 1, 3);
+    touch(); markDirty('profile'); save();
+    emit('store:change', { path: 'itemStats.' + key + '.tier', reason: 'tier', item: key });
+    return is.tier;
+  }
+  /* Mode progressif : débloque le niveau suivant d'un item dès que 60 % du niveau courant est acquis. */
+  function maybeLevelUp(num) {
+    if (levelMode() !== 'progressif') return null;
+    const key = String(num || '');
+    if (!key) return null;
+    const totals = tierTotals(key);
+    if (!(totals[1] + totals[2] + totals[3] > 0)) return null;   // pas d'info fiable : on ne touche à rien
+    let p = tierProgress(key), up = null;
+    while (p.tier < 3) {
+      const cur = p.tiers[p.tier - 1];
+      if (cur.total > 0 && cur.ratio < TIER_UNLOCK) break;
+      const is = state.itemStats[key] || (state.itemStats[key] = { lastVisited: 0, sessions: 0 });
+      is.tier = p.tier + 1;
+      up = is.tier;
+      p = tierProgress(key);
+    }
+    if (up) emit('store:levelup', { item: key, tier: up, label: TIER_LABELS[up] });
+    return up;
+  }
+  function autoLevelAll() {
+    if (levelMode() !== 'progressif') return;
+    let any = false;
+    uniqStrings(Object.keys(state.cards).map(itemOfId).filter(Boolean)).forEach(function (n) { if (maybeLevelUp(n)) any = true; });
+    if (any) { touch(); markDirty('profile'); save(); }
+  }
+  /* Cartes dues mises de côté (niveau pas encore débloqué) et cartes coriaces — pour l'affichage. */
+  function pausedStats(itemNum) {
+    const key = itemNum === undefined || itemNum === null ? null : String(itemNum);
+    const now = nowMs();
+    let paused = 0, leeches = 0;
+    Object.keys(state.cards).forEach(function (id) {
+      if (key && itemOfId(id) !== key) return;
+      const cs = state.cards[id];
+      if (!(cs.reps > 0)) return;
+      const t = cardTier(id);
+      if (t === 0) return;
+      if (isLeech(id)) { leeches++; return; }
+      if (t > itemTier(itemOfId(id)) && cs.due !== null && cs.due <= now) paused++;
+    });
+    return { paused: paused, leeches: leeches };
+  }
+
   /* Cartes indexées par le registre (null si le registre est absent, [] si rien n'est chargé). */
   function registryCards(item) {
     const reg = registry();
@@ -193,7 +328,7 @@
   /* ---------- état par défaut, normalisation, migrations ---------- */
 
   function defaultProfile() {
-    return { name: '', dailyGoal: 30, newPerDay: 15, retention: 0.9, theme: 'system', sound: false, haptics: true };
+    return { name: '', dailyGoal: 30, newPerDay: 15, retention: 0.9, theme: 'system', sound: false, haptics: true, level: 'progressif' };
   }
   function emptyDaily() { return { reviews: 0, newCards: 0, correct: 0, score: 0, ms: 0, xp: 0 }; }
   function defaultState(ts) {
@@ -206,6 +341,22 @@
       xp: 0, badges: [],
       errors: {}, notes: {}, bookmarks: [], itemStats: {}, sessions: []
     };
+  }
+  function normItemStat(s) {
+    const o = { lastVisited: num(s.lastVisited, 0), sessions: Math.max(0, int(s.sessions)) };
+    const t = int(s.tier);
+    if (t >= 1 && t <= 3) o.tier = t;
+    if (Array.isArray(s.readSections)) o.readSections = uniqStrings(s.readSections.map(String)).slice(0, 64);
+    if (isObj(s.flash)) o.flash = { at: num(s.flash.at, 0), score: clamp(num(s.flash.score, 0), 0, 1), runs: Math.max(0, int(s.flash.runs)) };
+    return o;
+  }
+  function mergeItemStat(a, b) {
+    const sa = normItemStat(a || {}), sb = normItemStat(b || {});
+    const o = { lastVisited: Math.max(sa.lastVisited, sb.lastVisited), sessions: Math.max(sa.sessions, sb.sessions) };
+    if (sa.tier || sb.tier) o.tier = Math.max(sa.tier || 1, sb.tier || 1);
+    if (sa.readSections || sb.readSections) o.readSections = uniqStrings((sa.readSections || []).concat(sb.readSections || []));
+    if (sa.flash || sb.flash) o.flash = (sa.flash && (!sb.flash || sa.flash.at >= sb.flash.at)) ? sa.flash : sb.flash;
+    return o;
   }
   function blankCard() { return { s: 0, d: 0, due: null, last: null, reps: 0, lapses: 0, state: 'new', hist: [] }; }
 
@@ -236,7 +387,8 @@
       retention: clamp(num(p.retention, d.retention), 0.7, 0.99),
       theme: THEMES.indexOf(p.theme) >= 0 ? p.theme : d.theme,
       sound: p.sound === true,
-      haptics: p.haptics !== false
+      haptics: p.haptics !== false,
+      level: LEVEL_MODES.indexOf(p.level) >= 0 ? p.level : d.level
     };
   }
   function normSession(s) {
@@ -290,7 +442,7 @@
     st.bookmarks = uniqStrings(r.bookmarks);
     if (isObj(r.itemStats)) Object.keys(r.itemStats).forEach(function (k) {
       const s = r.itemStats[k];
-      if (isObj(s)) st.itemStats[k] = { lastVisited: num(s.lastVisited, 0), sessions: Math.max(0, int(s.sessions)) };
+      if (isObj(s)) st.itemStats[k] = normItemStat(s);
     });
     st.sessions = trimSessions((Array.isArray(r.sessions) ? r.sessions : []).map(normSession).filter(Boolean));
     return st;
@@ -372,7 +524,7 @@
     out.bookmarks = uniqStrings(A.bookmarks.concat(B.bookmarks));
     uniqStrings(Object.keys(A.itemStats).concat(Object.keys(B.itemStats))).forEach(function (k) {
       const sa = A.itemStats[k] || { lastVisited: 0, sessions: 0 }, sb = B.itemStats[k] || { lastVisited: 0, sessions: 0 };
-      out.itemStats[k] = { lastVisited: Math.max(sa.lastVisited, sb.lastVisited), sessions: Math.max(sa.sessions, sb.sessions) };
+      out.itemStats[k] = mergeItemStat(sa, sb);
     });
     const byId = {};
     A.sessions.concat(B.sessions).forEach(function (s) {
@@ -636,13 +788,18 @@
     }
 
     const newBadges = checkBadges({ item: itemNum, now: now, hadErrors: hadErrors });
+    const levelUp = itemNum ? maybeLevelUp(itemNum) : null;
+    const becameLeech = grade === 1 && !!state.errors[cardId] && int(state.errors[cardId].count) === LEECH_FAILS;
 
     touch();
     markDirty('profile');
     markDirty(cardDocKey(cardId));
     save();
     emit('store:change', { path: 'cards.' + cardId, reason: 'attempt', cardId: cardId, item: itemNum, kind: kind, xpGained: xpGained });
-    return { xpGained: xpGained, newBadges: newBadges, cardState: next, grade: grade, score: score };
+    return {
+      xpGained: xpGained, newBadges: newBadges, cardState: next, grade: grade, score: score,
+      levelUp: levelUp ? { item: itemNum, tier: levelUp, label: TIER_LABELS[levelUp] } : null, leech: becameLeech
+    };
   }
 
   /* ---------- badges (SPEC §6) ---------- */
@@ -697,6 +854,7 @@
         .map(function (id) { return { id: id, item: key, kind: kindOfId(id), rank: null }; });
     }
     list.forEach(function (c) {
+      if ((c.kind || kindOfId(c.id)) === 'tree') return;
       const cs = state.cards[c.id];
       const seen = !!cs && cs.reps > 0;
       let r = 0;
@@ -748,21 +906,46 @@
     return true;
   }
 
-  /* Cartes dues, triées par (rétrievabilité croissante, lapses décroissants). Pool = cartes déjà vues
-   * (state.cards), donc disponible sans charger le contenu. */
+  /* Cartes dues, les plus anciennes d'abord : rotation équitable dans toute la pile. (L'ancien tri par
+   * rétention croissante remettait en tête, à chaque séance, les mêmes cartes ratées.)
+   * Exclues par défaut : arbres (supports de cours), cartes déjà vues aujourd'hui (une carte ratée est
+   * reproposée dans la séance, puis revient les jours suivants), cartes au-dessus du niveau débloqué de
+   * leur item, cartes coriaces (ratées ≥ 3 fois : elles vivent dans le cahier d'erreurs).
+   * filter : {item, items, kinds, rank} + drapeaux {anyLevel, withLeeches, withToday}. */
   function dueCards(at, filter) {
     const now = Number.isFinite(at) ? at : nowMs();
-    const S = srs();
     const f = normFilter(filter);
+    const fo = isObj(filter) ? filter : {};
     const out = [];
     Object.keys(state.cards).forEach(function (id) {
       const cs = state.cards[id];
       if (cs.due === null || cs.due === undefined || cs.due > now) return;
+      const t = cardTier(id);
+      if (t === 0) return;
+      if (!fo.anyLevel && t > itemTier(itemOfId(id))) return;
+      if (!fo.withToday && reviewedToday(cs, now)) return;
+      if (!fo.withLeeches && isLeech(id)) return;
       if (!matchesFilter(cardMeta(id), f)) return;
-      out.push({ id: id, r: S ? S.retrievability(cs, now) : 0, lapses: cs.lapses || 0 });
+      out.push({ id: id, due: cs.due });
     });
-    out.sort(function (a, b) { return a.r - b.r || b.lapses - a.lapses || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
+    out.sort(function (a, b) { return a.due - b.due || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
     return out.map(function (x) { return x.id; });
+  }
+  /* 2 cartes « en révision » pour 1 carte ratée récemment, ratées plafonnées. */
+  function mixRelearn(ids, cap) {
+    const fresh = [], again = [];
+    ids.forEach(function (id) {
+      const cs = state.cards[id];
+      (cs && (cs.state === 'learning' || cs.state === 'relearning') ? again : fresh).push(id);
+    });
+    const a = again.slice(0, Math.max(0, cap));
+    const out = [];
+    let i = 0, j = 0;
+    while (i < fresh.length || j < a.length) {
+      for (let k = 0; k < 2 && i < fresh.length; k++) out.push(fresh[i++]);
+      if (j < a.length) out.push(a[j++]);
+    }
+    return out;
   }
 
   function roundRobin(groups) {
@@ -786,28 +969,114 @@
     return roundRobin(order.map(function (k) { return groups[k]; }));
   }
 
-  /* Cartes jamais vues : rang A d'abord, puis items de plus faible maîtrise, en tourniquet entre items
-   * (et entre kinds au sein d'un item). Nécessite le registre (contenu chargé). */
+  /* Cartes jamais vues, dans le niveau débloqué de chaque item : niveau 1 d'abord, puis les plus faciles,
+   * items de plus faible maîtrise en premier, en tourniquet entre items (et entre kinds dans un item).
+   * Nécessite le registre (contenu chargé). filter : {item, items, kinds, rank, anyLevel}. */
+  function difficultyOf(c) {
+    const d = c && c.ref ? Number(c.ref.difficulty) : NaN;
+    return Number.isFinite(d) ? d : 2;
+  }
+  /* Mélange (Fisher-Yates) : évite de toujours recommencer par les mêmes questions. */
+  function shuffled(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  /* Historique des cartes réellement affichées (toutes séances confondues), persistant.
+   * Sert à ne pas reproposer les mêmes questions / les mêmes chapitres d'une séance à l'autre. */
+  const LS_SERVED = 'cardio.r2c.served';
+  const SERVED_MAX = 1500;
+  let served = null;          // [id…], le plus récent à la fin
+  let servedPos = null;       // Map id → position
+  let servedTimer = null;
+  function loadServed() {
+    if (served) return;
+    served = [];
+    try { const raw = localStorage.getItem(LS_SERVED); const a = raw ? JSON.parse(raw) : []; if (Array.isArray(a)) served = a.map(String).slice(-SERVED_MAX); } catch (e) { /* stockage indisponible */ }
+    servedPos = new Map();
+    served.forEach(function (id, i) { servedPos.set(id, i); });
+  }
+  function markServed(id) {
+    loadServed();
+    id = String(id);
+    if (servedPos.has(id)) { const i = served.lastIndexOf(id); if (i >= 0) served.splice(i, 1); }
+    served.push(id);
+    if (served.length > SERVED_MAX) served = served.slice(-SERVED_MAX);
+    servedPos = new Map();
+    served.forEach(function (x, i) { servedPos.set(x, i); });
+    clearTimeout(servedTimer);
+    servedTimer = setTimeout(function () { try { localStorage.setItem(LS_SERVED, JSON.stringify(served)); } catch (e) { /* ignore */ } }, 400);
+  }
+  /* Ancienneté d'affichage : 0 = jamais vue (ou très ancienne), sinon 1 (ancienne) → ~0 récente. */
+  function servedAge(id) {
+    loadServed();
+    const i = servedPos.get(String(id));
+    if (i === undefined) return Infinity;
+    return served.length - i;           // 1 = la dernière affichée
+  }
+  /* Nombre de cartes de chaque item parmi les `n` derniers affichages. */
+  function recentItemLoad(n) {
+    loadServed();
+    const out = {};
+    served.slice(-(n || 120)).forEach(function (id) { const it = itemOfId(id); out[it] = (out[it] || 0) + 1; });
+    return out;
+  }
+
+  /* Cartes proposées lors des dernières séances (même si elles n'ont pas été faites) :
+   * on les repousse en fin de file pour varier d'une séance à l'autre. */
+  function recentlyServed(n) {
+    const set = new Set();
+    loadServed();
+    served.slice(-(n || 3) * 40).forEach(function (id) { set.add(id); });
+    (state.sessions || []).slice(0, n || 3).forEach(function (s) {
+      (s && Array.isArray(s.cards) ? s.cards : []).forEach(function (id) { set.add(String(id)); });
+    });
+    return set;
+  }
+  function freshFirst(list, recent, idOf) {
+    const a = [], b = [];
+    list.forEach(function (x) { (recent.has(String(idOf(x))) ? b : a).push(x); });
+    return a.concat(b);
+  }
+
   function newCards(filter, limit) {
     const f = normFilter(filter);
+    const fo = isObj(filter) ? filter : {};
     const lim = limit === undefined || limit === null ? Infinity : Math.max(0, num(limit, 0));
     if (lim === 0) return [];
     const pool = registryCards(f.item) || [];
     const perItem = {};
     pool.forEach(function (c) {
       if (!matchesFilter(c, f)) return;
+      const t = cardTier(c.id);
+      if (t === 0) return;
+      if (!fo.anyLevel && t > itemTier(c.item)) return;
       const cs = state.cards[c.id];
       if (cs && cs.reps > 0) return;
-      (perItem[c.item] = perItem[c.item] || []).push(c);
+      (perItem[c.item] = perItem[c.item] || []).push({ id: c.id, item: c.item, kind: c.kind, tier: t, diff: difficultyOf(c) });
     });
-    const mcache = {};
+    const mcache = {}, jitter = {};
     function m(it) { if (mcache[it] === undefined) mcache[it] = mastery(it).all; return mcache[it]; }
-    const items = Object.keys(perItem).sort(function (a, b) { return m(a) - m(b) || (a < b ? -1 : 1); });
+    Object.keys(perItem).forEach(function (it) { jitter[it] = Math.random(); });
+    const recent = recentlyServed(3);
+    Object.keys(perItem).forEach(function (it) {
+      perItem[it] = freshFirst(shuffled(perItem[it]), recent, function (c) { return c.id; });
+    });
+    const load = recentItemLoad(150);
+    // Les chapitres les moins travaillés récemment passent devant, avec un peu de hasard
+    const items = Object.keys(perItem).sort(function (a, b) {
+      return ((load[a] || 0) - (load[b] || 0)) + (m(a) - m(b)) * 4 + (jitter[a] - jitter[b]) * 3;
+    });
     const out = [];
-    ['A', 'B', null].forEach(function (rank) {
+    [1, 2, 3].forEach(function (tier) {
       if (out.length >= lim) return;
       const groups = items.map(function (it) {
-        return byKindRoundRobin(perItem[it].filter(function (c) { return (c.rank === 'A' || c.rank === 'B' ? c.rank : null) === rank; }));
+        const list = perItem[it].filter(function (c) { return c.tier === tier; });
+        list.sort(function (a, b) { return a.diff - b.diff; });
+        return byKindRoundRobin(list);
       });
       roundRobin(groups).forEach(function (id) { if (out.length < lim) out.push(id); });
     });
@@ -892,37 +1161,119 @@
     if (mode === 'rank' && !f.rank) f.rank = 'A';
 
     if (mode === 'errors') {
-      const ids = errorsList().map(function (e) { return e.cardId; }).filter(function (id) { return matchesFilter(cardMeta(id), f); });
+      const ids = errorsList().map(function (e) { return e.cardId; }).filter(function (id) { return cardTier(id) !== 0 && matchesFilter(cardMeta(id), f); });
       return capByCost(ids, size);
     }
     if (mode === 'exam') return buildExam(o, f);
 
-    let list = capByCost(dueCards(now, f), size);
+    // Un type choisi explicitement (« Par type ») passe outre les niveaux ; les autres modes les respectent.
+    const flags = { item: f.item, items: f.items, kinds: f.kinds, rank: f.rank, anyLevel: mode === 'kind' };
+    // Cartes dues : plus anciennes d'abord, sans celles affichées il y a très peu de temps, réparties par
+    // chapitre ; cartes ratées récemment plafonnées (~1/3) ; au plus la moitié de la séance, pour laisser
+    // la place à des questions jamais vues.
+    let dueIds = dueCards(now, flags).filter(function (id) { return servedAge(id) > 25; });
+    const dueByItem = {};
+    dueIds.forEach(function (id) { const it = itemOfId(id); (dueByItem[it] = dueByItem[it] || []).push(id); });
+    dueIds = roundRobin(shuffled(Object.keys(dueByItem)).map(function (k) { return dueByItem[k]; }));
+    const relearnCap = Math.max(2, Math.floor((Number.isFinite(size) ? size : dueIds.length) * RELEARN_SHARE));
+    const dueCap = Number.isFinite(size) ? Math.max(1, Math.ceil(size * 0.5)) : Infinity;
+    let list = capByCost(mixRelearn(dueIds, relearnCap), Math.min(size, dueCap));
     let remaining = size - costOf(list);
     if (remaining > 0) {
       const newToday = int((state.daily[dateKey(now)] || {}).newCards);
-      const allowed = mode === 'smart' ? Math.max(0, int(state.profile.newPerDay) - newToday) : Infinity;
+      const allowed = mode === 'smart'
+        ? Math.max(Number.isFinite(size) ? Math.ceil(size * 0.5) : 20, int(state.profile.newPerDay) - newToday)
+        : Infinity;
       const want = Math.min(allowed, remaining);
       if (want > 0) {
-        const chosen = capByCost(newCards(f, want), remaining);
+        const chosen = capByCost(newCards(flags, want), remaining);
         list = list.concat(chosen);
         remaining -= costOf(chosen);
       }
     }
     if (mode !== 'smart' && remaining > 0) {
-      const S = srs();
+      // Complément : cartes déjà vues, les moins récemment revues d'abord (rotation, jamais les mêmes).
       const inList = {};
       list.forEach(function (id) { inList[id] = true; });
       const extra = [];
       Object.keys(state.cards).forEach(function (id) {
         const cs = state.cards[id];
-        if (inList[id] || !(cs.reps > 0) || !matchesFilter(cardMeta(id), f)) return;
-        extra.push({ id: id, r: S ? S.retrievability(cs, now) : 1 });
+        if (inList[id] || !(cs.reps > 0) || reviewedToday(cs, now) || isLeech(id)) return;
+        const t = cardTier(id);
+        if (t === 0 || (mode !== 'kind' && t > itemTier(itemOfId(id)))) return;
+        if (!matchesFilter(cardMeta(id), f)) return;
+        extra.push({ id: id, last: cs.last || 0 });
       });
-      extra.sort(function (a, b) { return a.r - b.r; });
-      list = list.concat(capByCost(extra.map(function (x) { return x.id; }), remaining));
+      // Les moins récemment revues d'abord, avec un peu de hasard ; celles proposées aux dernières
+      // séances passent en fin de liste (rotation, jamais toujours les mêmes).
+      extra.forEach(function (x) { x.k = x.last + Math.random() * 2 * DAY_MS; });
+      extra.sort(function (a, b) { return a.k - b.k; });
+      const recent = recentlyServed(2);
+      list = list.concat(capByCost(freshFirst(extra, recent, function (x) { return x.id; }).map(function (x) { return x.id; }), remaining));
     }
-    return interleave(list, MAX_RUN);
+    if (mode === 'smart' && remaining > 0) {
+      // Plus de nouvelles cartes possibles ? On complète avec les dues restantes (ratées toujours plafonnées).
+      const inList = new Set(list);
+      const more = mixRelearn(dueCards(now, flags).filter(function (id) { return !inList.has(id); }), relearnCap);
+      const chosen = capByCost(more, remaining);
+      list = list.concat(chosen);
+      remaining -= costOf(chosen);
+    }
+    return interleave(shuffled(list), MAX_RUN);
+  }
+
+  /* buildEndless({item, items, kinds, rank}, count, {exclude:Set, perItem:{}}) → [cardId]
+   * Mode illimité : tire `count` cartes dans TOUS les items chargés (ou le filtre), en tournant
+   * sur les chapitres (le moins servi d'abord), jamais-vues en priorité, puis les moins bien
+   * retenues, et jamais une carte affichée récemment. */
+  function buildEndless(opts, count, ctx) {
+    const o = isObj(opts) ? opts : {};
+    const f = normFilter(o);
+    const exclude = (ctx && ctx.exclude) || new Set();
+    const perItem = (ctx && ctx.perItem) || {};
+    const S = srs();
+    const now = nowMs();
+    const pool = (registryCards(f.item) || []).filter(function (c) {
+      const t = cardTier(c.id);
+      if (t === 0 || (!f.kinds && t > itemTier(c.item)) || isLeech(c.id)) return false;
+      return matchesFilter(c, f) && !exclude.has(c.id);
+    });
+    if (!pool.length) return [];
+    const minAge = Math.min(400, Math.floor(pool.length * 0.6));
+    const byItem = {};
+    pool.forEach(function (c) {
+      const age = servedAge(c.id);
+      const cs = state.cards[c.id];
+      const seen = !!(cs && cs.reps > 0);
+      const r = seen && S ? S.retrievability(cs, now) : 0;
+      // Plus la clé est basse, plus la carte passe tôt
+      let key = seen ? 1 + r : 0;                 // jamais vue d'abord
+      if (age <= minAge) key += 10 + (minAge - age) / minAge;  // vue récemment : en dernier
+      key += Math.random() * 0.8;                  // variété
+      if (c.rank === 'A') key -= 0.15;
+      (byItem[c.item] = byItem[c.item] || []).push({ id: c.id, key: key, kind: c.kind });
+    });
+    Object.keys(byItem).forEach(function (k) { byItem[k].sort(function (a, b) { return a.key - b.key; }); });
+    const out = [];
+    const load = recentItemLoad(60);
+    while (out.length < count) {
+      const items = Object.keys(byItem).filter(function (k) { return byItem[k].length; });
+      if (!items.length) break;
+      // Chapitre le moins servi dans cette séance (et récemment), à égalité au hasard
+      items.sort(function (a, b) {
+        return ((perItem[a] || 0) + (load[a] || 0) * 0.3 + Math.random() * 0.9) - ((perItem[b] || 0) + (load[b] || 0) * 0.3 + Math.random() * 0.9);
+      });
+      const it = items[0];
+      const list = byItem[it];
+      // Évite 2 cartes du même type d'affilée si possible
+      const lastKind = out.length ? cardMeta(out[out.length - 1]).kind : null;
+      let idx = list.findIndex(function (x, i) { return i < 4 && x.kind !== lastKind; });
+      if (idx < 0) idx = 0;
+      const pick = list.splice(idx, 1)[0];
+      out.push(pick.id);
+      perItem[it] = (perItem[it] || 0) + 1;
+    }
+    return out;
   }
 
   /* prepareSession(opts) → Promise<[cardId]> : charge le contenu nécessaire puis construit la session. */
@@ -1027,8 +1378,11 @@
     Object.keys(state.cards).forEach(function (id) {
       const c = state.cards[id];
       if (c.due === null || c.due === undefined) return;
+      const tier = cardTier(id);
+      if (tier === 0 || tier > itemTier(itemOfId(id)) || isLeech(id)) return;
       let i = c.due <= now ? 0 : daysBetween(t, dateKey(c.due));
       if (i < 0) i = 0;
+      if (i === 0 && reviewedToday(c, now)) i = 1;
       if (i < n) counts[i]++;
     });
     return counts.map(function (due, i) { return { date: addDays(t, i), due: due }; });
@@ -1329,17 +1683,26 @@
     todayStats: todayStats, streak: streak, xp: xp, level: level, forecast: forecast, errorsList: errorsList,
     mastery: mastery,
     dueCards: dueCards, newCards: newCards, buildSession: buildSession, prepareSession: prepareSession,
+    buildEndless: buildEndless, markServed: markServed, servedAge: servedAge,
     startSession: startSession, endSession: endSession, session: session,
     setNote: setNote, toggleBookmark: toggleBookmark, visitItem: visitItem,
     exportJSON: exportJSON, importJSON: importJSON, resetAll: resetAll,
     save: save, flush: flush, syncStatus: syncStatus,
     mergeStates: mergeStates, computeStreak: computeStreak,
-    itemOfId: itemOfId, kindOfId: kindOfId, cardMeta: cardMeta, dateKey: dateKey, today: today
+    itemOfId: itemOfId, kindOfId: kindOfId, cardMeta: cardMeta, dateKey: dateKey, today: today,
+    TIER_LABELS: TIER_LABELS, LEVEL_MODES: LEVEL_MODES.slice(), TIER_UNLOCK: TIER_UNLOCK, LEECH_FAILS: LEECH_FAILS,
+    cardTier: cardTier, levelMode: levelMode, itemTier: itemTier, setItemTier: setItemTier, tierProgress: tierProgress,
+    maybeLevelUp: maybeLevelUp, autoLevelAll: autoLevelAll, isLeech: isLeech, pausedStats: pausedStats
   };
 
   store.ready = new Promise(function (resolve) {
     let settled = false;
-    function done() { if (!settled) { settled = true; resolve(store); } }
+    function done() {
+      if (settled) return;
+      settled = true;
+      try { autoLevelAll(); } catch (e) { console.warn('[store] autoLevelAll', e); }
+      resolve(store);
+    }
     const timer = setTimeout(done, CLOUD_READY_TIMEOUT_MS);
     // Lancement différé : laisse la page finir de charger ses scripts avant de toucher au runtime.
     setTimeout(function () {

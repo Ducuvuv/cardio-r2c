@@ -182,14 +182,16 @@
   .tx-toggles{display:flex;gap:8px;flex-wrap:wrap}
   .tx-toggles .chip .ico{display:inline-flex}
   .tx-count{color:var(--muted);font-size:.875rem}
-  .tx-list{display:grid;gap:12px}
-  @media (min-width:900px){.tx-list{grid-template-columns:1fr 1fr}.tx-list--single{grid-template-columns:1fr}}
+  .tx-list{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}
+  .tx-list>.tx,.tx-browser,.tx-page{min-width:0;max-width:100%}
+  .tx .tx__class,.tx .tx__molecules,.tx .tx__list li{overflow-wrap:anywhere}
+  @media (min-width:900px){.tx-list{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.tx-list--single{grid-template-columns:minmax(0,1fr)}}
   .tx{display:flex;flex-direction:column;gap:10px}
   .tx__head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
   .tx__class{font-family:var(--font-display);font-size:1.25rem;line-height:1.2;margin:0}
   .tx__molecules{margin:0;color:var(--ink-2);font-size:.9375rem}
   .tx__molecules b{font-weight:600;color:var(--ink)}
-  .tx__context{align-self:flex-start;white-space:normal;text-transform:none;letter-spacing:0;font-size:.8125rem;line-height:1.3;padding:4px 10px}
+  .tx .tx__context,.pill.tx__context{align-self:flex-start;white-space:normal;max-width:100%;overflow-wrap:anywhere;text-transform:none;letter-spacing:0;font-size:.8125rem;line-height:1.3;padding:4px 10px}
   .tx__groups{display:flex;flex-direction:column;gap:8px}
   .tx__group{border-top:1px solid var(--line);padding-top:8px}
   .tx__group-head{display:flex;align-items:center;gap:8px;min-height:32px}
@@ -227,7 +229,8 @@
   .tx-strat>summary .ico{margin-left:auto;transition:transform .18s cubic-bezier(.2,.7,.2,1);display:inline-flex;color:var(--muted)}
   .tx-strat[open]>summary .ico{transform:rotate(180deg)}
   .tx-strat>summary:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-  .tx-strat__body{padding:0 16px 16px;color:var(--ink-2)}
+  .tx-strat__body{padding:0 16px 16px;color:var(--ink-2);min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tx-strat{min-width:0;max-width:100%}
   .tx-strat__body p{margin:0 0 8px}
   .tx-strat__body ul,.tx-strat__body ol{padding-left:20px;margin:0 0 8px}
   .tx-strat__body table{border-collapse:collapse;width:100%;font-size:.875rem;margin:8px 0}

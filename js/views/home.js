@@ -279,11 +279,13 @@
     const ctas = [];
     if (due > 0) {
       ctas.push(h('a', { class: 'btn btn--primary btn--block', href: '#/review?mode=smart&autostart=1' }, iconEl('play'), 'Réviser maintenant'));
-      ctas.push(h('a', { class: 'btn btn--secondary btn--block', href: '#/review' }, 'Choisir une session'));
+      ctas.push(h('a', { class: 'btn btn--secondary btn--block', href: '#/review?mode=endless&autostart=1' }, iconEl('shuffle'), 'Mode illimité · tous les items'));
+      ctas.push(h('a', { class: 'btn btn--ghost btn--block', href: '#/review' }, 'Choisir une session'));
     } else {
       const hasContent = availableItems.length > 0;
       ctas.push(h('a', { class: 'btn btn--primary btn--block', href: hasContent ? '#/review?mode=smart&autostart=1' : '#/items' }, iconEl('plus'), 'Nouveau : apprendre des cartes'));
-      ctas.push(h('a', { class: 'btn btn--secondary btn--block', href: '#/review' }, 'Choisir une session'));
+      ctas.push(h('a', { class: 'btn btn--secondary btn--block', href: '#/review?mode=endless&autostart=1' }, iconEl('shuffle'), 'Mode illimité · tous les items'));
+      ctas.push(h('a', { class: 'btn btn--ghost btn--block', href: '#/review' }, 'Choisir une session'));
     }
     return h('section', { class: 'card card--raised home__daily' },
       h('div', { class: 'home__daily-row' }, ring, h('div', { class: 'home__daily-text' }, lines)),
@@ -352,21 +354,43 @@
         bar(b.progress, 'bar--badge')));
   }
 
+  /* Cartes coriaces (ratées ≥ 3 fois) : elles ne vivent plus que dans « Mes erreurs ». */
+  function leechCount() {
+    const s = store();
+    if (!s || typeof s.pausedStats !== 'function') return 0;
+    const v = safe(function () { return s.pausedStats(); }, null);
+    return v && Number(v.leeches) > 0 ? Number(v.leeches) : 0;
+  }
+
   function chipsBlock() {
     const chips = [
+      { label: 'Fiches flash', href: '#/flash', ico: 'flash' },
       { label: 'Mes erreurs', href: '#/errors', ico: 'refresh' },
       { label: 'Rang A', href: '#/review?mode=rank&rank=A', ico: 'target' },
       { label: 'Examen blanc', href: '#/review?mode=exam', ico: 'clock' },
       { label: 'ECG du jour', href: '#/ecg?daily=1', ico: 'ecg' },
       { label: 'Arbres', href: '#/trees', ico: 'tree' },
-      { label: 'Traitements', href: '#/treatments', ico: 'pill' }
+      { label: 'Traitements', href: '#/treatments', ico: 'pill' },
+      { label: 'Prise en charge A → Z', href: '#/parcours', ico: 'case' },
+      { label: 'Examens & gestes', href: '#/examens', ico: 'search' },
+      { label: 'Sémiologie', href: '#/semio', ico: 'eye' },
+      { label: 'Critères diagnostiques', href: '#/criteres', ico: 'target' },
+      { label: 'Chiffres', href: '#/chiffres', ico: 'chart' },
+      { label: 'Physiopathologie', href: '#/physio', ico: 'layers' }
     ];
     const errorsCount = Object.keys(state().errors || {}).length;
+    const leeches = leechCount();
     return h('section', { class: 'home__chips-wrap' },
       h('div', { class: 'home__eyebrow' }, 'Accès rapides'),
       h('div', { class: 'home__chips' }, chips.map(function (c) {
-        const count = c.href === '#/errors' && errorsCount ? h('span', { class: 'chip__count' }, String(errorsCount)) : null;
-        return h('a', { class: 'chip home__chip', href: c.href }, iconEl(c.ico), c.label, count);
+        let count = null, title = null;
+        if (c.href === '#/errors') {
+          if (leeches) {
+            title = plural(leeches, 'carte coriace', 'cartes coriaces') + ' (ratée' + (leeches > 1 ? 's' : '') + ' 3 fois) : ' + (leeches > 1 ? 'elles ne reviennent' : 'elle ne revient') + ' plus que dans « Mes erreurs »';
+            count = h('span', { class: 'chip__count', title: title }, String(leeches));
+          } else if (errorsCount) count = h('span', { class: 'chip__count' }, String(errorsCount));
+        }
+        return h('a', { class: 'chip home__chip', href: c.href, title: title, 'aria-label': title ? c.label + ' : ' + title : null }, iconEl(c.ico), c.label, count);
       })));
   }
 

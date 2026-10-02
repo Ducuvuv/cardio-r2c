@@ -234,6 +234,49 @@
     '.hub__err-msg{margin:0}',
     '.hub__soon{margin:10px 0 0}',
     '.hub__filter{margin-bottom:8px}',
+    '.hub__sec-note{font-size:.75rem;color:var(--muted);margin-top:auto}',
+    /* fiche flash : première entrée du hub */
+    '.hub__ff{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:16px;min-height:88px;border-radius:var(--r-m);background:var(--accent-soft);box-shadow:var(--shadow-2);color:inherit;text-decoration:none}',
+    'a.hub__ff:hover{text-decoration:none}',
+    '.hub__ff:active{filter:brightness(.97)}',
+    '.hub__ff-ico{flex:none;display:grid;place-items:center;width:48px;height:48px;border-radius:14px;background:var(--accent);color:var(--accent-ink)}',
+    '.hub__ff-ico svg{width:26px;height:26px;display:block}',
+    '.hub__ff-main{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px}',
+    '.hub__ff-title{font:700 1.125rem/1.25 var(--font-display);color:var(--ink);text-wrap:balance}',
+    '.hub__ff-sub{font-size:.875rem;line-height:1.35;color:var(--ink-2)}',
+    '.hub__ff-score{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;font:700 1.375rem/1 var(--font-display);font-variant-numeric:tabular-nums}',
+    '.hub__ff-score small{font:600 .6875rem/1 var(--font-body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}',
+    '.hub__ff-score.is-ok{color:var(--ok)}.hub__ff-score.is-warn{color:var(--warn)}',
+    '.hub__ff-chev{flex:none;color:var(--accent)}',
+    '.hub__ff-chev svg{width:22px;height:22px;display:block}',
+    '.hub__ff.is-soon{background:var(--surface);box-shadow:var(--shadow-1)}',
+    '.hub__ff.is-soon .hub__ff-ico{background:var(--surface-2);color:var(--muted)}',
+    '.hub__ff.is-soon .hub__ff-chev{color:var(--muted)}',
+    /* niveau de l'item */
+    '.hub__lvl{margin-bottom:16px}',
+    '.hub__lvl-head{display:flex;align-items:center;justify-content:space-between;gap:8px}',
+    '.hub__lvl-head .hub__h2{margin:0}',
+    '.hub__lvl-hint{margin:2px 0 14px;font-size:.8125rem;color:var(--muted)}',
+    '.hub__steps{list-style:none;margin:0 0 14px;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}',
+    '.hub__step{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;text-align:center}',
+    '.hub__step+.hub__step::before{content:"";position:absolute;top:15px;left:calc(-50% + 22px);right:calc(50% + 22px);height:2px;border-radius:2px;background:var(--line)}',
+    '.hub__step.is-done+.hub__step::before{background:var(--ok)}',
+    '.hub__step-dot{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--surface-2);color:var(--muted);font:700 .875rem/1 var(--font-display)}',
+    '.hub__step-dot svg{width:16px;height:16px;display:block}',
+    '.hub__step.is-done .hub__step-dot{background:var(--ok-soft);color:var(--ok)}',
+    '.hub__step.is-current .hub__step-dot{background:var(--accent);color:var(--accent-ink);box-shadow:0 0 0 4px var(--accent-soft)}',
+    '.hub__step-lab{max-width:100%;font-size:.8125rem;font-weight:500;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.hub__step.is-done .hub__step-lab{color:var(--ink-2)}',
+    '.hub__step.is-current .hub__step-lab{color:var(--ink);font-weight:700}',
+    '.hub__lvl-bar{display:grid;gap:6px}',
+    '.hub__lvl-bar-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:.875rem;color:var(--ink-2)}',
+    '.hub__lvl-bar-top b{color:var(--ink);font-variant-numeric:tabular-nums}',
+    '.hub__lvl-next{margin:12px 0 0;font-size:.9375rem}',
+    '.hub__lvl-mode{margin:10px 0 12px;font-size:.9375rem;color:var(--ink-2)}',
+    '.hub__lvl-btns{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}',
+    '.btn.hub__lvl-reset{color:var(--muted);font-weight:500}',
+    '.hub__lvl-paused{display:flex;align-items:center;gap:6px;margin:12px 0 0;font-size:.8125rem;color:var(--muted)}',
+    '.hub__lvl-paused svg{width:16px;height:16px;display:block}',
     '@media (min-width:720px){.hub__grid{grid-template-columns:repeat(3,1fr)}.items__group{grid-template-columns:1fr 1fr}}',
     '@media (min-width:1000px){.hub__grid{grid-template-columns:repeat(4,1fr)}}',
     '@media (prefers-reduced-motion:reduce){.hub__skel span{animation:none}}'
@@ -300,7 +343,14 @@
       if (c.kfp || c.tcs) p.push((c.kfp || 0) + (c.tcs || 0) + ' EDN');
       return p.join(' · ') || 'aucune question';
     } },
-    { key: 'arbres', title: 'Arbres décisionnels', ico: 'tree', route: 'arbres', counts: ['trees'], countLabel: function (c) { return (c.trees || 0) + ' arbre' + (c.trees > 1 ? 's' : ''); } },
+    { key: 'parcours', title: 'Prise en charge A → Z', ico: 'case', route: 'parcours', counts: ['parcours'], noMastery: true, countLabel: function (c) { return (c.parcours || 0) + ' parcours'; } },
+    { key: 'examens', title: 'Gestes, imagerie & analyses', ico: 'search', route: 'examens', counts: ['examens'], noMastery: true, countLabel: function (c) { return (c.examens || 0) + ' fiche' + (c.examens > 1 ? 's' : ''); } },
+    { key: 'semio', title: 'Sémiologie', ico: 'eye', route: 'semio', counts: ['semio'], noMastery: true, countLabel: function (c) { return (c.semio || 0) + ' fiche' + (c.semio > 1 ? 's' : ''); } },
+    { key: 'criteres', title: 'Critères diagnostiques', ico: 'target', route: 'criteres', counts: ['criteres'], noMastery: true, countLabel: function (c) { return (c.criteres || 0) + ' fiche' + (c.criteres > 1 ? 's' : ''); } },
+    { key: 'chiffres', title: 'Données chiffrées', ico: 'chart', route: 'chiffres', counts: ['chiffres'], noMastery: true, countLabel: function (c) { return (c.chiffres || 0) + ' donnée' + (c.chiffres > 1 ? 's' : ''); } },
+    { key: 'physio', title: 'Physiopathologie', ico: 'layers', route: 'physio', counts: ['physio'], noMastery: true, countLabel: function (c) { return (c.physio || 0) + ' fiche' + (c.physio > 1 ? 's' : ''); } },
+    // Support de cours : jamais proposé en séance, donc ni maîtrise ni barre de progression.
+    { key: 'arbres', title: 'Arbres décisionnels', ico: 'tree', route: 'arbres', counts: ['trees'], course: true, countLabel: function (c) { return (c.trees || 0) + ' arbre' + (c.trees > 1 ? 's' : ''); }, note: 'La démarche du Collège, à parcourir' },
     { key: 'traitements', title: 'Traitements', ico: 'pill', route: 'traitements', counts: ['tx'], countLabel: function (c) { return (c.tx || 0) + ' classe' + (c.tx > 1 ? 's' : ''); } },
     { key: 'cas', title: 'Cas cliniques', ico: 'case', route: 'cas', counts: ['cases'], countLabel: function (c) { return (c.cases || 0) + ' dossier' + (c.cases > 1 ? 's' : ''); } },
     { key: 'mnemos', title: 'Mnémos & flashcards', ico: 'flash', route: 'mnemos', counts: ['flash'], countLabel: function (c) { return (c.flash || 0) + ' carte' + (c.flash > 1 ? 's' : ''); } },
@@ -311,18 +361,143 @@
   function sectionCard(it, def) {
     const c = it.counts || {};
     const total = def.counts.reduce(function (n, k) { return n + (Number(c[k]) || 0); }, 0);
-    const km = kindMastery(it.num, def.counts, c);
+    const km = (def.course || def.noMastery) ? null : kindMastery(it.num, def.counts, c);
     const empty = !total && !def.always;
     return h('a', { class: 'hub__sec' + (empty ? ' is-empty' : ''), href: '#/item/' + it.num + '/' + def.route },
       h('div', { class: 'hub__sec-ico', html: icon(def.ico) }),
       h('div', { class: 'hub__sec-title' }, def.title),
-      h('div', { class: 'hub__sec-count' }, def.countLabel(c) + (km.seen ? ' · ' + pct(km.ratio) + ' %' : '')),
-      bar(km.ratio));
+      h('div', { class: 'hub__sec-count' }, def.countLabel(c) + (km && km.seen ? ' · ' + pct(km.ratio) + ' %' : '')),
+      km ? bar(km.ratio) : (def.note ? h('div', { class: 'hub__sec-note' }, def.note) : null));
+  }
+
+  /* ---------- Fiche flash (première entrée) et niveau de l'item ---------- */
+
+  function toast(msg, tone) {
+    const sh = CARDIO.shell;
+    if (sh && typeof sh.toast === 'function') { try { sh.toast(msg, { tone: tone || 'ok' }); } catch (e) { /* ignore */ } }
+  }
+
+  function whenText(at) {
+    const u = util();
+    if (!at || typeof u.fmtDate !== 'function') return '';
+    return safe(function () { return u.fmtDate(at, { relative: true }); }, '');
+  }
+
+  /* Dernier test de la fiche flash (state.itemStats[num].flash) ou null s'il n'y en a pas encore. */
+  function flashStat(num) {
+    const is = (state().itemStats || {})[str(num)];
+    const f = is && is.flash;
+    if (!f || typeof f !== 'object' || !(Number(f.runs) > 0)) return null;
+    return { at: Number(f.at) || 0, score: Math.max(0, Math.min(1, Number(f.score) || 0)), runs: Math.round(Number(f.runs)) };
+  }
+
+  function flashEntry(it) {
+    const has = !!(it.counts && Number(it.counts.ff) > 0);
+    const f = has ? flashStat(it.num) : null;
+    const mastered = f && f.score >= 0.8;
+    let sub;
+    if (!has) sub = 'En préparation pour cet item : la fiche complète est déjà là.';
+    else if (f) {
+      let when = whenText(f.at);
+      if (/^\d/.test(when)) when = 'le ' + when;                  // « le 2 oct. » ; « aujourd'hui », « il y a 3 j » tels quels
+      sub = mastered ? 'Maîtrisée' + (when ? ' · testée ' + when : '') : 'Dernier test' + (when ? ' ' + when : '') + ' · vise 80 %';
+    } else sub = 'Les 7 blocs à connaître avant tout le reste. Commence par là.';
+    return h('a', { class: 'hub__ff' + (has ? '' : ' is-soon'), href: '#/item/' + it.num + '/flash' },
+      h('span', { class: 'hub__ff-ico', 'aria-hidden': 'true', html: icon('flash') }),
+      h('span', { class: 'hub__ff-main' },
+        h('span', { class: 'hub__ff-title' }, 'Fiche flash — l’essentiel en 2 min'),
+        h('span', { class: 'hub__ff-sub' }, sub)),
+      f ? h('span', { class: 'hub__ff-score ' + (mastered ? 'is-ok' : 'is-warn'), title: 'Score du dernier test' }, h('small', {}, 'test'), pct(f.score) + ' %') : null,
+      !has ? h('span', { class: 'pill pill--outline' }, 'bientôt') : null,
+      h('span', { class: 'hub__ff-chev', 'aria-hidden': 'true', html: icon('chevron-right') }));
+  }
+
+  function setTier(num, tier, labels) {
+    const s = store();
+    if (!s || typeof s.setItemTier !== 'function') { toast('Niveau indisponible pour le moment.', 'bad'); return; }
+    const t = safe(function () { return s.setItemTier(num, tier); }, null);
+    if (t === null || t === undefined) return;
+    toast(t === 1 ? 'Retour au niveau Essentiel sur cet item.' : 'Niveau « ' + labels[t] + ' » débloqué sur cet item.', 'ok');
+  }
+
+  function levelBar(label, acquired, total) {
+    return h('div', { class: 'hub__lvl-bar' },
+      h('div', { class: 'hub__lvl-bar-top' },
+        h('span', {}, label),
+        total ? h('span', {}, h('b', {}, acquired + ' / ' + total), total > 1 ? ' cartes acquises' : ' carte acquise') : h('span', {}, 'aucune carte à ce niveau')),
+      bar(total ? acquired / total : 0, 'bar--ok'));
+  }
+
+  function stepper(tier, labels) {
+    return h('ol', { class: 'hub__steps', 'aria-label': 'Niveaux de l’item' }, [1, 2, 3].map(function (t) {
+      const st = t < tier ? 'done' : t === tier ? 'current' : 'locked';
+      const dot = h('span', { class: 'hub__step-dot', 'aria-hidden': 'true' });
+      if (st === 'current') dot.textContent = String(t); else dot.innerHTML = icon(st === 'done' ? 'check' : 'lock');
+      return h('li', { class: 'hub__step is-' + st, 'aria-current': st === 'current' ? 'step' : null },
+        dot,
+        h('span', { class: 'hub__step-lab' }, labels[t]),
+        h('span', { class: 'sr-only' }, st === 'done' ? ' (débloqué)' : st === 'current' ? ' (niveau actuel)' : ' (pas encore débloqué)'));
+    }));
+  }
+
+  /* « Ton niveau sur cet item » : niveaux progressifs du store (1 Essentiel, 2 Approfondi, 3 Expert). */
+  function levelPanel(it) {
+    const s = store();
+    if (!s || typeof s.tierProgress !== 'function') return null;
+    const num = str(it.num);
+    const tp = safe(function () { return s.tierProgress(num); }, null);
+    if (!tp || !Array.isArray(tp.tiers) || tp.tiers.length < 3) return null;
+    const labels = s.TIER_LABELS || { 1: 'Essentiel', 2: 'Approfondi', 3: 'Expert' };
+    const mode = tp.mode || 'progressif';
+    const tier = Math.max(1, Math.min(3, Number(tp.tier) || 1));
+    const cur = tp.tiers[tier - 1] || { acquired: 0, total: 0 };
+    const pausedInfo = typeof s.pausedStats === 'function' ? safe(function () { return s.pausedStats(num); }, null) : null;
+    const paused = pausedInfo ? Number(pausedInfo.paused) || 0 : 0;
+    const body = [];
+
+    if (mode === 'progressif') {
+      body.push(h('p', { class: 'hub__lvl-hint' }, 'Tes séances ne te proposent que les niveaux débloqués.'));
+      body.push(stepper(tier, labels));
+      body.push(levelBar(labels[tier], cur.acquired, cur.total));
+      let next;
+      if (tier >= 3) next = 'Tout est débloqué : rang B, KFP et TCS compris.';
+      else if (!cur.total) next = 'Aucune carte à ce niveau : « ' + labels[tier + 1] + ' » se débloque à ta prochaine carte de cet item.';
+      else if (tp.toNext > 0) next = ['Encore ', h('b', {}, String(tp.toNext)), ' carte' + (tp.toNext > 1 ? 's' : '') + ' à acquérir pour débloquer ', h('b', {}, labels[tier + 1])];
+      else next = 'Seuil atteint : « ' + labels[tier + 1] + ' » se débloque à ta prochaine carte de cet item.';
+      body.push(h('p', { class: 'hub__lvl-next' }, next));
+      const btns = [];
+      if (tier < 3) btns.push(h('button', { type: 'button', class: 'btn btn--secondary btn--sm', on: { click: function () { setTier(num, tier + 1, labels); } } }, 'Passer au niveau suivant'));
+      if (tier > 1) btns.push(h('button', { type: 'button', class: 'btn btn--ghost btn--sm hub__lvl-reset', on: { click: function () { setTier(num, 1, labels); } } }, 'Revenir à l’essentiel'));
+      if (btns.length) body.push(h('div', { class: 'hub__lvl-btns' }, btns));
+    } else {
+      body.push(h('p', { class: 'hub__lvl-mode' },
+        mode === 'essentiel'
+          ? ['Mode ', h('b', {}, '« L’essentiel seulement »'), ' : tes séances ne proposent que le niveau Essentiel (rang A, questions faciles). ']
+          : ['Mode ', h('b', {}, '« Tout le programme »'), ' : rang A et B, KFP et TCS, comme le jour de l’EDN. '],
+        h('a', { href: '#/settings' }, 'Changer de mode')));
+      if (mode === 'essentiel') body.push(levelBar(labels[1], tp.tiers[0].acquired, tp.tiers[0].total));
+      else {
+        const acq = tp.tiers.reduce(function (n, t) { return n + (Number(t.acquired) || 0); }, 0);
+        const tot = tp.tiers.reduce(function (n, t) { return n + (Number(t.total) || 0); }, 0);
+        body.push(levelBar('Tout le programme', acq, tot));
+      }
+    }
+    if (paused > 0) {
+      body.push(h('p', { class: 'hub__lvl-paused' }, h('span', { 'aria-hidden': 'true', html: icon('pause') }),
+        paused > 1 ? paused + ' cartes de niveau supérieur sont en pause' : '1 carte de niveau supérieur est en pause'));
+    }
+    return h('section', { class: 'card hub__lvl', 'aria-labelledby': 'hub-lvl-' + num },
+      h('div', { class: 'hub__lvl-head' },
+        h('h2', { class: 'hub__h2', id: 'hub-lvl-' + num }, 'Ton niveau sur cet item'),
+        mode === 'progressif' ? h('span', { class: 'pill pill--accent' }, labels[tier]) : null),
+      body);
   }
 
   function objectiveDot(num, objId) {
     const reg = registry();
-    const cards = reg && typeof reg.cardsForObjective === 'function' ? safe(function () { return reg.cardsForObjective(num, objId); }, []) : [];
+    // Les arbres sont un support de cours, pas des cartes à réviser : ils ne comptent pas dans la maîtrise.
+    const list = reg && typeof reg.cardsForObjective === 'function' ? safe(function () { return reg.cardsForObjective(num, objId); }, []) : [];
+    const cards = (Array.isArray(list) ? list : []).filter(function (c) { return c && c.kind !== 'tree'; });
     const cs = state().cards || {};
     let sum = 0, seen = 0;
     cards.forEach(function (c) { const sc = cardScore(cs[c.id]); if (sc !== null) { seen++; sum += sc; } });
@@ -447,6 +622,8 @@
       return page;
     }
 
+    page.appendChild(flashEntry(it));
+
     page.appendChild(h('div', { class: 'card hub__mastery' },
       h('div', { class: 'hub__ring', html: ringSvg(m.A, 88, 8, 'var(--rankA)') }, h('div', { class: 'hub__ring-label' }, h('b', {}, pct(m.A) + '%'), h('span', {}, 'rang A'))),
       h('div', { class: 'hub__ring', html: ringSvg(m.B, 88, 8, 'var(--blue)') }, h('div', { class: 'hub__ring-label' }, h('b', {}, pct(m.B) + '%'), h('span', {}, 'rang B'))),
@@ -456,7 +633,10 @@
 
     page.appendChild(h('div', { class: 'hub__ctas' },
       h('a', { class: 'btn btn--primary btn--block', href: '#/review?mode=item&item=' + it.num + '&autostart=1' }, iconEl('play'), 'Réviser cet item'),
-      h('a', { class: 'btn btn--secondary btn--block', href: '#/item/' + it.num + '/cours' }, iconEl('book'), 'Voir la fiche')));
+      h('a', { class: 'btn btn--secondary btn--block', href: '#/item/' + it.num + '/cours' }, iconEl('book'), 'Fiche complète')));
+
+    const lvl = levelPanel(it);
+    if (lvl) page.appendChild(lvl);
 
     page.appendChild(h('div', { class: 'hub__grid' }, SECTION_CARDS.filter(function (d) {
       return !d.onlyIf || Number(c[d.onlyIf]) > 0;
@@ -478,7 +658,6 @@
     loadObjectives(str(it.num), objHost);
 
     page.appendChild(notesBlock(str(it.num)));
-    markVisited(str(it.num));
     return page;
   }
 
@@ -516,6 +695,9 @@
     const root = h('div', { class: 'view-hub' });
     root.dataset.title = it ? 'Item ' + it.num + ' · ' + it.short : 'Item';
     root.appendChild(buildHub(num));
+    // Une seule fois par affichage : buildHub sert aussi au rafraîchissement sur « store:change » et
+    // une écriture dans le store à chaque reconstruction relancerait la reconstruction en boucle.
+    if (it && it.available !== false) markVisited(str(it.num));
     bindRefresh(root, function () { return buildHub(num); });
     return root;
   }

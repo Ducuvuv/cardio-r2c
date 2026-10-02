@@ -27,22 +27,25 @@
   const DEFAULT_SIZE = 20;
   const EXAM_SIZE = 22;
   const MEDIAN_MIN_SAMPLES = 5;
+  const REQUEUE_KINDS = ['qcm', 'qroc', 'flash', 'ecg', 'echo', 'tx'];   // « Encore » → reproposée dans la séance
+  const REQUEUE_GAP = 4;
 
   const KINDS = [
     ['qcm', 'QCM'], ['qroc', 'QROC'], ['open', 'Ouvertes'], ['kfp', 'KFP'], ['tcs', 'TCS'],
-    ['flash', 'Flash'], ['tree', 'Arbres'], ['tx', 'Traitements'], ['case', 'Cas'], ['ecg', 'ECG'], ['echo', 'Écho']
+    ['flash', 'Flash'], ['tx', 'Traitements'], ['case', 'Cas'], ['ecg', 'ECG'], ['echo', 'Écho']
   ];
   const KIND_IDS = KINDS.map((k) => k[0]);
 
   const MODES = [
-    { id: 'smart', title: 'Séance intelligente', desc: 'Les cartes dues, puis des nouvelles, mélangées.', icon: 'play' },
-    { id: 'item', title: 'Cet item', desc: 'Tout un chapitre, du rang A au rang B.', icon: 'book' },
+    { id: 'endless', title: 'Mode illimité', desc: 'Des questions sans fin, sur tous les items, sans répétition.', icon: 'shuffle' },
+    { id: 'smart', title: 'Séance intelligente', desc: 'À revoir + nouvelles, réparties sur tous les chapitres.', icon: 'play' },
+    { id: 'item', title: 'Cet item', desc: 'Un chapitre, à ton niveau actuel sur cet item.', icon: 'book' },
     { id: 'errors', title: 'Mes erreurs', desc: 'Le cahier d’erreurs, les plus fréquentes d’abord.', icon: 'refresh' },
     { id: 'rank', title: 'Rang A seulement', desc: 'Les incontournables de l’EDN.', icon: 'target' },
-    { id: 'kind', title: 'Par type', desc: 'QCM, QROC, flashcards, arbres…', icon: 'filter' },
+    { id: 'kind', title: 'Par type', desc: 'QCM, QROC, flashcards, ECG…', icon: 'filter' },
     { id: 'exam', title: 'Examen blanc', desc: '18 QCM · 2 KFP · 1 TCS · 1 dossier.', icon: 'clock' }
   ];
-  const MODE_LABEL = { smart: 'Séance intelligente', item: 'Cet item', errors: 'Mes erreurs', rank: 'Rang A', kind: 'Par type', exam: 'Examen blanc', single: 'Révision ciblée' };
+  const MODE_LABEL = { endless: 'Mode illimité', smart: 'Séance intelligente', item: 'Cet item', errors: 'Mes erreurs', rank: 'Rang A', kind: 'Par type', exam: 'Examen blanc', single: 'Révision ciblée' };
 
   const GRADE_DEFS = [
     { g: 1, key: 'a', label: 'Encore', cls: 'grade--again' },
@@ -88,6 +91,16 @@
   function icon(name, opts) { return U().iconEl(name, opts); }
   function txt(v) { return v == null ? '' : String(v); }
   function nowMs() { return Date.now(); }
+  /* Mélange de Fisher-Yates, nouvel ordre à chaque présentation (copie, l'entrée n'est pas modifiée).
+   * Indispensable : dans les fichiers de contenu, la bonne réponse est très souvent la première. */
+  function shuffled(arr) {
+    const a = Array.isArray(arr) ? arr.slice() : [];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
   function clamp01(x) { const n = Number(x); return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0; }
 
   const warned = {};
@@ -268,7 +281,7 @@
     '.mode-card[disabled]{opacity:.55;cursor:default}',
     '.mode-card__icon{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--surface-2);color:var(--ink-2)}',
     '.mode-card.is-on .mode-card__icon{background:var(--accent-soft);color:var(--accent)}',
-    '.mode-card__main{flex:1 1 auto;min-width:0}',
+    '.mode-card__main{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}',
     '.mode-card__title{font-weight:600;line-height:1.3}',
     '.mode-card__desc{font-size:.8125rem;color:var(--muted);line-height:1.35}',
     '.mode-card__check{flex:none;color:var(--accent);opacity:0;transition:opacity 160ms}',
@@ -296,7 +309,7 @@
     '.qz-timer-big{font:600 1.125rem/1 var(--font-mono);font-variant-numeric:tabular-nums;color:var(--ink-2)}',
     '.qz-kfp-q{font-size:1.0625rem;font-weight:600;line-height:1.4}',
     '.qz-count{font-size:.75rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}',
-    '.qz-scenario{max-height:40vh;overflow:auto}',
+    '.qz-scenario{overflow-wrap:anywhere}',
     '.qz-sticky-empty{min-height:44px}',
     '.qz-hidden-list{position:relative}',
     '.qz-reveal-btn{margin-top:8px}',
@@ -331,7 +344,7 @@
   function saveRt(rt) {
     if (!rt || !rt.id) return;
     ls().set(LS_PREFIX + rt.id, {
-      id: rt.id, queue: rt.queue, idx: rt.idx, opts: rt.opts, results: rt.results, startedAt: rt.startedAt,
+      id: rt.id, queue: rt.queue, idx: rt.idx, opts: rt.opts, results: rt.results, startedAt: rt.startedAt, requeued: rt.requeued || {},
       masteryBefore: rt.masteryBefore, ended: !!rt.ended, summary: rt.summary || null, savedAt: nowMs()
     });
   }
@@ -386,8 +399,10 @@
       autostart: o.autostart === '1' || o.autostart === true || o.autostart === 'true'
     };
   }
+  const ENDLESS_BATCH = 20;
   function effectiveSize(o) {
     if (o.mode === 'exam') return EXAM_SIZE;
+    if (o.mode === 'endless') return ENDLESS_BATCH;
     return o.size == null ? DEFAULT_SIZE : o.size;
   }
   function reviewUrl(o, over) {
@@ -397,7 +412,7 @@
     if (x.item) p.set('item', x.item);
     if (x.kinds && x.kinds.length) p.set('kind', x.kinds.join(','));
     if (x.rank && x.mode !== 'rank') p.set('rank', x.rank);
-    if (x.size != null && x.mode !== 'exam') p.set('size', x.size === 0 ? 'inf' : String(x.size));
+    if (x.size != null && x.mode !== 'exam' && x.mode !== 'endless') p.set('size', x.size === 0 ? 'inf' : String(x.size));
     if (x.objectives && x.objectives.length) p.set('objective', x.objectives.join(','));
     if (x.autostart) p.set('autostart', '1');
     return '#/review?' + p.toString();
@@ -496,6 +511,7 @@
       kinds: opts.kinds.slice(),
       size: opts.size == null ? DEFAULT_SIZE : opts.size,
       objectives: opts.objectives.slice(),
+      rank: opts.rank,
       itemFixed: !!ctx.fromItem
     };
     if (state.mode === 'item' && !state.item && items.length === 1) state.item = String(items[0].num);
@@ -570,10 +586,29 @@
       return stackEl.childNodes.length ? stackEl : null;
     }
 
+    function endlessBlock() {
+      if (state.mode !== 'endless') return null;
+      const wrap = h('div', { class: 'stack stack--sm' });
+      wrap.appendChild(h('div', { class: 'caption' }, 'Items'));
+      const sel = h('select', { class: 'input', 'aria-label': 'Items', on: { change: (e) => { state.item = e.target.value || null; state.objectives = []; draw(); } } },
+        h('option', { value: '', selected: !state.item }, 'Tous les items (' + items.length + ')'),
+        items.map((it) => h('option', { value: String(it.num), selected: state.item === String(it.num) }, 'Item ' + it.num + ' · ' + it.short)));
+      wrap.appendChild(sel);
+      wrap.appendChild(h('div', { class: 'caption', style: 'margin-top:8px' }, 'Rang'));
+      const rk = h('div', { class: 'chips chips--wrap', role: 'group', 'aria-label': 'Rang' });
+      [['Tous', null], ['Rang A', 'A'], ['Rang B', 'B']].forEach(([label, r]) => {
+        const on = (state.rank || null) === r;
+        rk.appendChild(h('button', { type: 'button', class: ['chip', on && 'is-on'], 'aria-pressed': on, on: { click: () => { state.rank = r; draw(); } } }, label));
+      });
+      wrap.appendChild(rk);
+      wrap.appendChild(h('p', { class: 'secondary muted' }, 'Les questions s’enchaînent sans limite en tournant sur tous les chapitres : d’abord celles jamais vues, puis celles que tu maîtrises le moins. Une question ratée revient une fois un peu plus tard. Quitte quand tu veux avec la croix : tout est enregistré.'));
+      return wrap;
+    }
+
     function kindBlock() {
-      if (state.mode !== 'kind' && !state.kinds.length) return null;
+      if (state.mode !== 'kind' && state.mode !== 'endless' && !state.kinds.length) return null;
       const wrap = h('div', { class: 'stack stack--sm' },
-        h('div', { class: 'caption' }, state.mode === 'kind' ? 'Types de cartes' : 'Types (filtre)'));
+        h('div', { class: 'caption' }, state.mode === 'kind' ? 'Types de cartes' : state.mode === 'endless' ? 'Types de questions (aucun = tous)' : 'Types (filtre)'));
       const chips = h('div', { class: 'chips chips--wrap', role: 'group', 'aria-label': 'Types de cartes' });
       KINDS.forEach(([id, label]) => {
         const on = state.kinds.indexOf(id) >= 0;
@@ -587,13 +622,14 @@
         }, label));
       });
       wrap.appendChild(chips);
-      if (state.mode !== 'kind') {
+      if (state.mode !== 'kind' && state.kinds.length) {
         wrap.appendChild(h('button', { type: 'button', class: 'btn btn--ghost btn--sm', style: 'align-self:flex-start', on: { click: () => { state.kinds = []; draw(); } } }, 'Retirer le filtre'));
       }
       return wrap;
     }
 
     function sizeBlock() {
+      if (state.mode === 'endless') return null;
       if (state.mode === 'exam') {
         return h('p', { class: 'secondary muted' }, 'Examen blanc : ' + EXAM_SIZE + ' cartes, non chronométré mais le temps s’affiche.');
       }
@@ -616,6 +652,7 @@
     }
     function ctaLabel() {
       if (state.mode === 'exam') return 'Lancer l’examen blanc';
+      if (state.mode === 'endless') return 'Lancer le mode illimité';
       if (state.mode === 'errors') return 'Refaire mes erreurs';
       const n = state.size === 0 ? null : state.size;
       return n ? 'Lancer ' + plural(n, 'carte') : 'Lancer toutes les cartes';
@@ -623,7 +660,7 @@
     function currentOpts() {
       return normOpts({
         mode: state.mode, item: state.item, kinds: state.kinds, size: state.size,
-        rank: state.mode === 'rank' ? 'A' : null, objectives: state.objectives
+        rank: state.mode === 'rank' ? 'A' : state.mode === 'endless' ? state.rank : null, objectives: state.objectives
       });
     }
     function launch() {
@@ -636,15 +673,16 @@
 
     function draw() {
       const cta = h('button', { type: 'button', class: 'btn btn--primary btn--block btn--lg', disabled: !canLaunch(), on: { click: launch } }, icon('play'), ctaLabel());
-      stack.replaceChildren(
+      stack.replaceChildren(...[
         summaryLine(),
         h('div', { class: 'stack stack--sm' }, h('div', { class: 'caption' }, 'Mode'), modeCards()),
-        itemBlock(),
+        state.mode === 'endless' ? null : itemBlock(),
+        endlessBlock(),
         kindBlock(),
         sizeBlock(),
         cta,
         h('p', { class: 'secondary muted center hide-phone' }, 'Astuce clavier : ', h('span', { class: 'kbd' }, '1'), '–', h('span', { class: 'kbd' }, '5'), ' pour les options, ', h('span', { class: 'kbd' }, 'Entrée'), ' pour valider.')
-      );
+      ].filter(Boolean));
     }
     draw();
     page.addEventListener('keydown', (e) => {
@@ -752,14 +790,35 @@
       else if (!s || !(s.reps > 0)) fresh.push(c);
       else rest.push(c);
     });
-    due.sort((a, b) => retrievability(cs(a.id)) - retrievability(cs(b.id)));
-    rest.sort((a, b) => retrievability(cs(a.id)) - retrievability(cs(b.id)));
-    const ids = due.concat(fresh, rest).map((c) => c.id);
-    return interleaveKinds(capQueue(ids, effectiveSize(opts)), 3);
+    const mix = (arr) => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+    const jit = new Map();
+    const key = (c) => { if (!jit.has(c.id)) jit.set(c.id, retrievability(cs(c.id)) + Math.random() * 0.15); return jit.get(c.id); };
+    due.sort((a, b) => key(a) - key(b));
+    rest.sort((a, b) => key(a) - key(b));
+    const ids = due.concat(mix(fresh), rest).map((c) => c.id);
+    return interleaveKinds(mix(capQueue(ids, effectiveSize(opts))), 3);
+  }
+
+  /* Mode illimité : tire un nouveau lot, en évitant ce qui a déjà été servi dans la séance. */
+  function endlessBatch(opts, rt) {
+    const st = ST();
+    if (!st || typeof st.buildEndless !== 'function') return [];
+    rt = rt || null;
+    const exclude = new Set(rt ? rt.queue : []);
+    const perItem = {};
+    if (rt) rt.queue.forEach((id) => { const it = itemOfId(id); perItem[it] = (perItem[it] || 0) + 1; });
+    let ids = [];
+    try {
+      ids = st.buildEndless({ item: opts.item, kinds: opts.kinds.length ? opts.kinds : null, rank: opts.rank }, ENDLESS_BATCH, { exclude, perItem }) || [];
+      // Tout le pool a été vu dans cette séance : on repart sur un nouveau tour complet
+      if (!ids.length && rt && rt.queue.length) ids = st.buildEndless({ item: opts.item, kinds: opts.kinds.length ? opts.kinds : null, rank: opts.rank }, ENDLESS_BATCH, { exclude: new Set(rt.queue.slice(-50)), perItem: {} }) || [];
+    } catch (e) { console.error('[quiz] buildEndless a échoué', e); }
+    return ids.filter((id) => registryCard(id));
   }
 
   function buildQueue(opts) {
     let ids = [];
+    if (opts.mode === 'endless') return endlessBatch(opts, null);
     if (opts.objectives.length && opts.item) {
       ids = buildObjectiveQueue(opts);
     } else {
@@ -904,6 +963,10 @@
     // (ex. carte « case » avec advance:false, en attente d'un clic « Suivant ») : si on atterrit
     // ici (nouvelle navigation / rechargement) alors que la file est épuisée, on termine tout de
     // suite plutôt que de laisser runnerSpec() déclencher un double montage (coquille vide).
+    if (!rt.ended && rt.opts.mode === 'endless' && rt.idx >= rt.queue.length - 2) {
+      const more = endlessBatch(rt.opts, rt);
+      if (more.length) { rt.queue = rt.queue.concat(more); saveRt(rt); }
+    }
     if (rt.ended || rt.idx >= rt.queue.length) { endRuntime(rt); return resultsSpec(rt); }
 
     const reg = RG();
@@ -953,8 +1016,9 @@
 
     function headerSpec() {
       const n = Math.min(rt.idx + 1, rt.queue.length);
+      const endless = rt.opts.mode === 'endless';
       return {
-        title: n + ' / ' + rt.queue.length,
+        title: endless ? 'Illimité · ' + n : n + ' / ' + rt.queue.length,
         back: quit,
         actions: [
           { icon: 'note', label: 'Noter cette carte', onClick: openNote },
@@ -967,7 +1031,12 @@
       if (!sh) return;
       const n = Math.min(rt.idx + 1, rt.queue.length);
       if (typeof sh.setHeader === 'function') sh.setHeader(headerSpec());
-      if (typeof sh.progressBar === 'function') sh.progressBar(rt.queue.length ? rt.idx / rt.queue.length : 0, n + ' / ' + rt.queue.length);
+      if (typeof sh.progressBar === 'function') {
+        if (rt.opts.mode === 'endless') {
+          const ok = rt.results.filter((r) => clamp01(r.score) >= 0.99).length;
+          sh.progressBar((rt.idx % 20) / 20, rt.results.length ? ok + ' / ' + rt.results.length + ' justes' : 'Question ' + n);
+        } else sh.progressBar(rt.queue.length ? rt.idx / rt.queue.length : 0, n + ' / ' + rt.queue.length);
+      }
     }
 
     function tick() {
@@ -1024,7 +1093,7 @@
       const sh = SH();
       const done = rt.results.length;
       const msg = done
-        ? 'Quitter la séance ? Les ' + plural(done, 'carte répondue', 'cartes répondues') + ' restent enregistrées.'
+        ? (rt.opts.mode === 'endless' ? 'Arrêter le mode illimité ? ' : 'Quitter la séance ? ') + 'Les ' + plural(done, 'carte répondue', 'cartes répondues') + ' restent enregistrées.'
         : 'Quitter la séance ?';
       const p = sh && typeof sh.confirm === 'function'
         ? sh.confirm(msg, { ok: 'Quitter', cancel: 'Continuer', tone: 'danger' })
@@ -1123,10 +1192,30 @@
       const score = out && out.score != null ? out.score : (res.score != null ? clamp01(res.score) : gradeToScore(res.grade || 3));
       const grade = out && out.grade ? out.grade : (res.grade || suggestGradeRaw(score, ms, card.kind));
       rt.results.push({ cardId: card.id, kind: card.kind, item: card.item, score, grade, ms, xp: out ? out.xpGained || 0 : 0, at: nowMs() });
+      if (rt.opts.mode === 'endless' && score < 0.5 && card.kind !== 'case') {
+        // Ratée : elle revient une fois, une quinzaine de questions plus tard
+        const retries = rt.retries || (rt.retries = {});
+        if (!retries[card.id]) {
+          retries[card.id] = 1;
+          const at = Math.min(rt.queue.length, rt.idx + 1 + 12 + Math.floor(Math.random() * 10));
+          rt.queue.splice(at, 0, card.id);
+        }
+      }
       rt.idx += 1;
+      if (grade === 1 && REQUEUE_KINDS.indexOf(card.kind) >= 0) {
+        rt.requeued = rt.requeued || {};
+        if (!rt.requeued[card.id]) {
+          rt.requeued[card.id] = true;
+          const at = Math.min(rt.queue.length, rt.idx + REQUEUE_GAP);
+          rt.queue.splice(at, 0, card.id);
+          toast('On la revoit dans quelques cartes.', { tone: 'info', ms: 1400 });
+        }
+      }
       saveRt(rt);
       if (out && out.xpGained > 0) toast('+' + out.xpGained + ' XP', { tone: 'ok', ms: 1200 });
       if (out && Array.isArray(out.newBadges) && out.newBadges.length) setTimeout(() => showBadges(out.newBadges), 300);
+      if (out && out.levelUp) setTimeout(() => toast('Niveau « ' + out.levelUp.label + ' » débloqué sur ' + itemShort(out.levelUp.item) + '.', { tone: 'ok', ms: 2800 }), 500);
+      if (out && out.leech) setTimeout(() => toast('Carte coriace : elle part dans « Mes erreurs » pour la travailler à part.', { tone: 'warn', ms: 2800 }), 500);
       if (res.advance === false) {
         action.set({ label: 'Suivant', onClick: renderCurrent, hint: rt.idx >= rt.queue.length ? 'Dernière carte : voir les résultats' : '' });
       } else {
@@ -1210,8 +1299,13 @@
     /* ---- rendu de la carte courante ---- */
     function renderCurrent() {
       if (detached) return;
+      if (rt.opts.mode === 'endless' && rt.idx >= rt.queue.length - 2) {
+        const more = endlessBatch(rt.opts, rt);
+        if (more.length) { rt.queue = rt.queue.concat(more); saveRt(rt); }
+      }
       if (rt.idx >= rt.queue.length) { showResults(rt); return; }
       const id = rt.queue[rt.idx];
+      try { const st0 = ST(); if (st0 && typeof st0.markServed === 'function') st0.markServed(id); } catch (e) { /* ignore */ }
       const card = registryCard(id);
       if (!card) {
         console.warn('[quiz] carte indisponible, ignorée :', id);
@@ -1236,12 +1330,21 @@
         console.error('[quiz] rendu de la carte impossible', id, e);
         el = renderBroken(card, ctx);
       }
+      // Sur écran tactile, aucun champ ne doit prendre le focus tout seul (le navigateur traite aussi
+      // l'attribut autofocus des éléments insérés) : le clavier cacherait l'énoncé.
+      const coarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+      if (coarse && el && el.querySelectorAll) el.querySelectorAll('[autofocus]').forEach((n) => n.removeAttribute('autofocus'));
       stage.replaceChildren(el);
+      // Toujours repartir du haut de la nouvelle carte (conteneur de défilement ET document : sur
+      // téléphone c'est parfois la page entière qui a défilé).
       const v = viewEl();
       if (v) v.scrollTop = 0;
+      try { window.scrollTo(0, 0); if (document.scrollingElement) document.scrollingElement.scrollTop = 0; } catch (e) { /* ignore */ }
       startTimer();
       updateChrome();
-      const focusTarget = stage.querySelector('[autofocus]');
+      // Sur écran tactile, pas de focus automatique dans le champ de réponse : le clavier qui s'ouvre
+      // cacherait l'énoncé. On laisse lire la question, l'utilisateur touche le champ quand il est prêt.
+      const focusTarget = coarse ? null : stage.querySelector('[autofocus]');
       try { (focusTarget || stage).focus({ preventScroll: true }); } catch (e) { /* ignore */ }
     }
 
@@ -1300,7 +1403,7 @@
   function renderQcm(card, ctx) {
     const d = ctx.data;
     const isQru = txt(d.type).toUpperCase() === 'QRU';
-    const opts = Array.isArray(d.options) ? d.options : [];
+    const opts = shuffled(Array.isArray(d.options) ? d.options : []);
     const selected = new Set();
     let validated = false;
     const rows = opts.map((o, i) => optRow(i, o && o.t, () => toggle(i)));
@@ -1397,9 +1500,25 @@
       input.disabled = true;
       const given = norm(input.value);
       const expected = [d.answer].concat(Array.isArray(d.accept) ? d.accept : []).map(norm).filter(Boolean);
-      const exact = !!given && expected.some((a) => given === a || given.indexOf(a) >= 0);
+      // Les fragments courts (« 5 », « 2b », « bb »…) doivent commencer un mot, et un nombre ne doit pas
+      // être suivi d'un autre chiffre : « 5 » ne valide plus « 15 » ni « 50 ».
+      const has = (hay, a) => {
+        if (!a) return false;
+        if (a.length > 3 && !/^\d/.test(a)) return hay.indexOf(a) >= 0;
+        let i = hay.indexOf(a);
+        while (i >= 0) {
+          const before = i === 0 ? ' ' : hay[i - 1];
+          const run = (/^\d+/.exec(hay.slice(i + a.length)) || [''])[0];
+          const startOk = !/[a-z0-9]/.test(before);
+          const endOk = !/\d$/.test(a) || !run || (/ \d+$/.test(a) && /^0+$/.test(run));
+          if (startOk && endOk) return true;
+          i = hay.indexOf(a, i + 1);
+        }
+        return false;
+      };
+      const exact = !!given && expected.some((a) => given === a || has(given, a));
       const keywords = Array.isArray(d.keywords) ? d.keywords : [];
-      const matched = keywords.filter((k) => { const nk = norm(k); return nk && given.indexOf(nk) >= 0; });
+      const matched = keywords.filter((k) => { const nk = norm(k); return nk && has(given, nk); });
       const ratio = exact ? 1 : keywords.length ? matched.length / keywords.length : 0;
       const score = exact || (keywords.length && ratio >= 0.999) ? 1 : ratio > 0 ? 0.5 : 0;
       let tone, line;
@@ -1518,8 +1637,11 @@
       if (qi >= qs.length) { finishAll(); return; }
       const q = qs[qi] || {};
       const max = Math.max(1, Number(q.max) || 1);
-      const options = Array.isArray(q.options) ? q.options : [];
-      const correct = new Set(Array.isArray(q.correct) ? q.correct : []);
+      const rawOptions = Array.isArray(q.options) ? q.options : [];
+      const rawCorrect = Array.isArray(q.correct) ? q.correct : [];
+      const perm = shuffled(rawOptions.map((_, i) => i));
+      const options = perm.map((i) => rawOptions[i]);
+      const correct = new Set(perm.map((orig, pos) => (rawCorrect.indexOf(orig) >= 0 ? pos : -1)).filter((x) => x >= 0));
       const selected = new Set();
       let validated = false;
       count.textContent = 'Question ' + (qi + 1) + ' / ' + qs.length;

@@ -137,6 +137,7 @@
   .tree-sheet__intro{color:var(--ink-2);margin:6px 0 10px}
   .tree-sheet__intro p{margin:0 0 6px}
   .tree-sheet .tabs{margin:12px 0}
+  .walk__hint,.outline__hint{margin:0 0 8px;color:var(--muted);font-size:.875rem;line-height:1.45}
   .walk__crumbs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 12px;font-size:.875rem}
   .crumb{background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:4px 10px;color:var(--ink-2);min-height:32px;font:inherit;font-size:.8125rem;cursor:pointer;max-width:100%;text-align:left}
   .crumb:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
@@ -287,7 +288,8 @@
     const count = h('div', { class: 'walk__count' });
     const stage = h('div', { class: 'walk__stage', 'aria-live': 'polite' });
     const foot = h('div', { class: 'walk__foot' });
-    root.append(crumbs, count, stage, foot);
+    const hint = h('p', { class: 'walk__hint' }, 'Avance dans l\'arbre comme face à un patient : à chaque étape, choisis ce qui correspond ; la conclusion s\'affiche à la fin.');
+    root.append(hint, crumbs, count, stage, foot);
 
     function step(nodeId, node, option) {
       if (typeof opts.onStep === 'function') {
@@ -429,6 +431,7 @@
     const tools = h('div', { class: 'outline__tools' },
       h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: () => details().forEach(d => { d.open = true; }) } }, 'Tout déplier'),
       h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: () => details().forEach(d => { d.open = false; }) } }, 'Tout replier'));
+    wrap.append(h('p', { class: 'outline__hint' }, 'Vue d\'ensemble de la démarche du Collège.'));
     if (details().length) wrap.append(tools);
     wrap.append(ul);
     return wrap;

@@ -47,7 +47,8 @@
       course: { sections: [], essentials: [], numbers: [], mnemonics: [] },
       questions: [], edn: [], trees: [],
       treatments: { data: [], strategies: [] },
-      cases: [], ecg: { data: [], method: '' }, echo: { data: [] }
+      cases: [], ecg: { data: [], method: '' }, echo: { data: [] }, flash: null,
+      extra: { semio: [], criteres: [], chiffres: [], physio: [], parcours: [], examens: [] }
     };
   }
 
@@ -75,6 +76,12 @@
       if (frag.ecg.method) target.ecg.method = frag.ecg.method;
     }
     if (frag.echo) target.echo.data = target.echo.data.concat(arr(frag.echo.data));
+    if (frag.flash && typeof frag.flash === 'object') target.flash = frag.flash;
+    if (frag.extra) {
+      ['semio', 'criteres', 'chiffres', 'physio', 'parcours', 'examens'].forEach(function (k) {
+        target.extra[k] = target.extra[k].concat(arr(frag.extra[k]));
+      });
+    }
     return target;
   }
 

@@ -158,7 +158,16 @@
     '.set-sheet__choices label{display:flex;align-items:center;gap:8px;min-height:44px;cursor:pointer}',
     '.set-sheet__choices input{accent-color:var(--accent);width:18px;height:18px}',
     '.set-file{display:block}.set-file input[type=file]{font:inherit;width:100%;min-height:44px;color:var(--ink-2)}',
-    '.set-sheet__row{display:flex;gap:8px;flex-wrap:wrap}.set-sheet__row .btn{flex:1}'
+    '.set-sheet__row{display:flex;gap:8px;flex-wrap:wrap}.set-sheet__row .btn{flex:1}',
+    '.set-level{display:grid;gap:8px;margin-top:10px}',
+    '.set-level__opt{display:flex;align-items:flex-start;gap:12px;min-height:56px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--surface);cursor:pointer;transition:border-color .16s cubic-bezier(.2,.7,.2,1),background .16s cubic-bezier(.2,.7,.2,1)}',
+    '.set-level__opt:hover{border-color:var(--surface-3)}',
+    '.set-level__opt.is-on{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}',
+    '.set-level__opt input{flex:none;width:20px;height:20px;margin:1px 0 0;accent-color:var(--accent);cursor:pointer}',
+    '.set-level__opt input:focus-visible{outline:2px solid var(--blue);outline-offset:2px}',
+    '.set-level__txt{display:block;min-width:0}',
+    '.set-level__t{display:block;font-weight:600;line-height:1.3}',
+    '.set-level__d{display:block;margin-top:2px;font-size:.8125rem;line-height:1.4;color:var(--ink-2)}'
   ].join('\n');
 
   function ensureStyles() {
@@ -197,6 +206,44 @@
   }
 
   /* ------------------------------------------------------------- (a) profil */
+
+  /* Niveau des séances (store : profile.level ∈ progressif | essentiel | complet). */
+  var LEVELS = [
+    ['progressif', 'Progressif (recommandé)', 'Chaque item débloque le niveau suivant quand tu maîtrises 60 % du niveau en cours.', 'Mode progressif : chaque item avance à ton rythme.'],
+    ['essentiel', 'L’essentiel seulement', 'Rang A, questions faciles, idéal pour démarrer.', 'L’essentiel seulement : rang A, questions faciles.'],
+    ['complet', 'Tout le programme', 'Rang A et B, KFP, TCS, comme le jour de l’EDN.', 'Tout le programme : comme le jour de l’EDN.']
+  ];
+  function currentLevel() {
+    var s = store();
+    var v = null;
+    if (s && typeof s.levelMode === 'function') { try { v = s.levelMode(); } catch (e) { /* repli */ } }
+    if (!v && s && s.state && s.state.profile) v = s.state.profile.level;
+    return LEVELS.some(function (l) { return l[0] === v; }) ? v : 'progressif';
+  }
+  function levelRow() {
+    var cur = currentLevel();
+    var opts = [];
+    var group = h('div', { class: 'set-level', id: 'set-level', role: 'radiogroup', 'aria-labelledby': 'set-level-label' }, LEVELS.map(function (l) {
+      var input = h('input', { type: 'radio', name: 'set-level', id: 'set-level-' + l[0], value: l[0], on: { change: function () {
+        if (!input.checked) return;
+        opts.forEach(function (o) { o.label.classList.toggle('is-on', o.input === input); });
+        if (saveProfile('level', l[0], l[3]) && l[0] === 'progressif') {
+          // Débloque tout de suite les niveaux déjà mérités (sinon, au prochain passage sur chaque item).
+          var s = store();
+          if (s && typeof s.autoLevelAll === 'function') { try { s.autoLevelAll(); } catch (e) { console.warn('[settings] autoLevelAll', e); } }
+        }
+      } } });
+      input.checked = l[0] === cur;
+      var label = h('label', { class: 'set-level__opt' + (l[0] === cur ? ' is-on' : ''), 'for': 'set-level-' + l[0] }, input,
+        h('span', { class: 'set-level__txt' }, h('span', { class: 'set-level__t' }, l[1]), h('span', { class: 'set-level__d' }, l[2])));
+      opts.push({ input: input, label: label });
+      return label;
+    }));
+    return h('div', { class: 'set-row set-row--col' },
+      h('div', {}, h('span', { class: 'set-row__label', id: 'set-level-label' }, 'Niveau'),
+        h('span', { class: 'set-row__desc' }, 'Ce que tes séances te proposent, item par item.')),
+      group);
+  }
 
   function renderProfile() {
     var p = profile();
@@ -245,6 +292,7 @@
     });
 
     return section('Profil', null, h('div', {},
+      levelRow(),
       row('Prénom', 'Pour te saluer sur l’accueil.', nameInput),
       row('Objectif quotidien', 'Cartes à revoir chaque jour pour prolonger ta série.', goal, true),
       row('Nouvelles cartes par jour', 'Au-delà des cartes dues, combien de cartes jamais vues ajouter.', newPer, true),

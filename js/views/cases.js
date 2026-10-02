@@ -349,7 +349,10 @@
 
   // QRM (EDN, 5 options) et QRU (1 bonne réponse).
   function mcqController(q, isQRU) {
-    const opts = Array.isArray(q.options) ? q.options : [];
+    // Ordre des propositions tiré au hasard à chaque affichage : dans le contenu, la bonne réponse
+    // est très souvent la première.
+    const opts = (Array.isArray(q.options) ? q.options : []).slice();
+    for (let i = opts.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = opts[i]; opts[i] = opts[j]; opts[j] = t; }
     const sel = new Set();
     let validated = false;
     let score = null;
