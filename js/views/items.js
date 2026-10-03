@@ -64,6 +64,9 @@
   function state() { const s = store(); return (s && s.state) || {}; }
   function pct(x) { return Math.round(Math.max(0, Math.min(1, Number(x) || 0)) * 100); }
   function str(v) { return v === undefined || v === null ? '' : String(v); }
+  function lbl(it) { return it && it.label ? str(it.label) : str(it && it.num).replace(/^[a-z]+/, ''); }
+  function speOf(it) { return (it && it.spe) || 'cardio'; }
+  function matiere() { return CARDIO.views.matiere || null; }
 
   function mastery(num) {
     const s = store();
@@ -250,6 +253,9 @@
     '.hub__ff-chev{flex:none;color:var(--accent)}',
     '.hub__ff-chev svg{width:22px;height:22px;display:block}',
     '.hub__ff.is-soon{background:var(--surface);box-shadow:var(--shadow-1)}',
+    '.hub__ff--pareto{background:var(--blue-soft)}',
+    '.hub__ff--pareto .hub__ff-ico{background:var(--blue);color:var(--surface)}',
+    '.hub__ff--pareto .hub__ff-chev{color:var(--blue)}',
     '.hub__ff.is-soon .hub__ff-ico{background:var(--surface-2);color:var(--muted)}',
     '.hub__ff.is-soon .hub__ff-chev{color:var(--muted)}',
     /* niveau de l'item */
@@ -296,8 +302,8 @@
     const m = mastery(it.num);
     const soon = it.available === false;
     const c = it.counts || {};
-    return h('a', { class: 'items__row' + (soon ? ' is-soon' : ''), href: '#/item/' + it.num, 'aria-label': 'Item ' + it.num + ' ' + it.title },
-      h('div', { class: 'items__num' }, h('b', {}, String(it.num)), 'item'),
+    return h('a', { class: 'items__row' + (soon ? ' is-soon' : ''), href: '#/item/' + it.num, 'aria-label': 'Item ' + lbl(it) + ' ' + it.title },
+      h('div', { class: 'items__num' }, h('b', {}, lbl(it)), 'item'),
       h('div', { class: 'items__body' },
         h('div', { class: 'items__head' },
           h('span', { class: 'items__short' }, it.short),
@@ -310,20 +316,32 @@
           h('div', { class: 'items__bar' }, h('span', { class: 'pill pill--B' }, 'B'), bar(m.B, 'bar--B'), h('span', {}, pct(m.B) + ' %')))));
   }
 
+  const SPE_LEAD = {
+    all: 'Tous les Collèges, chacun dans l’ordre de son livre.',
+    cardio: 'Tout le Collège de cardiologie, dans l’ordre du livre.',
+    dermato: 'Tout le Collège de dermatologie, dans l’ordre du livre.',
+    pneumo: 'Tout le référentiel de pneumologie, dans l’ordre du livre.'
+  };
+
   function buildList() {
-    const items = allItems();
+    const m = matiere();
+    const spe = m ? m.current() : 'all';
+    const items = allItems().filter(function (it) { return spe === 'all' || speOf(it) === spe; });
     const due = dueByItem();
     const page = h('div', { class: 'page items' });
-    page.appendChild(h('h1', { class: 'items__h1' }, 'Les 22 items'));
+    page.appendChild(h('h1', { class: 'items__h1' }, items.length > 1 ? 'Les ' + items.length + ' items' : 'Les items'));
+    const sw = m ? m.switcher() : null;
+    if (sw) page.appendChild(sw);
     const available = items.filter(function (i) { return i.available !== false; }).length;
     page.appendChild(h('p', { class: 'items__lead' }, items.length
-      ? (available === items.length ? 'Tout le Collège de cardiologie, dans l’ordre du livre.' : available + ' item' + (available > 1 ? 's' : '') + ' disponible' + (available > 1 ? 's' : '') + ' sur ' + items.length + '. Les autres arrivent.')
+      ? (available === items.length ? (SPE_LEAD[spe] || SPE_LEAD.all) : available + ' item' + (available > 1 ? 's' : '') + ' disponible' + (available > 1 ? 's' : '') + ' sur ' + items.length + '. Les autres arrivent.')
       : 'Le catalogue n’est pas encore chargé. Recharge la page si cela persiste.'));
     let currentSection = null, group = null;
     items.forEach(function (it) {
       if (it.section !== currentSection) {
         currentSection = it.section;
-        page.appendChild(h('div', { class: 'items__eyebrow' }, h('b', {}, 'Partie ' + it.section), it.sectionTitle || ''));
+        const cardioPart = speOf(it) === 'cardio';
+        page.appendChild(h('div', { class: 'items__eyebrow' }, cardioPart ? h('b', {}, 'Partie ' + it.section) : null, it.sectionTitle || ''));
         group = h('div', { class: 'items__group' });
         page.appendChild(group);
       }
@@ -409,6 +427,24 @@
         h('span', { class: 'hub__ff-sub' }, sub)),
       f ? h('span', { class: 'hub__ff-score ' + (mastered ? 'is-ok' : 'is-warn'), title: 'Score du dernier test' }, h('small', {}, 'test'), pct(f.score) + ' %') : null,
       !has ? h('span', { class: 'pill pill--outline' }, 'bientôt') : null,
+      h('span', { class: 'hub__ff-chev', 'aria-hidden': 'true', html: icon('chevron-right') }));
+  }
+
+  function paretoEntry(it) {
+    const n = Number((it.counts || {}).par) || 0;
+    const P = CARDIO.views.pareto;
+    const st = n && P && typeof P.stat === 'function' ? safe(function () { return P.stat(it.num); }, null) : null;
+    const ok = st && st.score >= 0.8;
+    const sub = !n ? 'En préparation pour cet item.'
+      : st ? (ok ? 'Maîtrisé · relis-le avant les partiels' : 'Dernier test ' + pct(st.score) + ' % · vise 80 %')
+        : n + ' points, du plus rentable au moins rentable. Commence par là.';
+    return h('a', { class: 'hub__ff hub__ff--pareto' + (n ? '' : ' is-soon'), href: '#/item/' + it.num + '/pareto' },
+      h('span', { class: 'hub__ff-ico', 'aria-hidden': 'true', html: icon('list') }),
+      h('span', { class: 'hub__ff-main' },
+        h('span', { class: 'hub__ff-title' }, 'Récap Pareto — les 20 % qui rapportent 80 %'),
+        h('span', { class: 'hub__ff-sub' }, sub)),
+      st ? h('span', { class: 'hub__ff-score ' + (ok ? 'is-ok' : 'is-warn'), title: 'Score du dernier test' }, h('small', {}, 'test'), pct(st.score) + ' %') : null,
+      !n ? h('span', { class: 'pill pill--outline' }, 'bientôt') : null,
       h('span', { class: 'hub__ff-chev', 'aria-hidden': 'true', html: icon('chevron-right') }));
   }
 
@@ -600,7 +636,7 @@
     if (!it) {
       page.appendChild(h('div', { class: 'card' },
         h('h1', { class: 'hub__h1' }, 'Item introuvable'),
-        h('p', { class: 'items__lead' }, 'L’item ' + num + ' ne fait pas partie du programme de cardiologie.'),
+        h('p', { class: 'items__lead' }, 'L’item ' + str(num).replace(/^[a-z]+/, '') + ' ne fait pas partie du programme.'),
         h('a', { class: 'btn btn--secondary', href: '#/items' }, 'Voir tous les items')));
       return page;
     }
@@ -610,10 +646,12 @@
     const c = it.counts || {};
 
     page.appendChild(h('header', { class: 'hub__header' },
-      h('div', { class: 'hub__kicker' }, 'Item ' + it.num, h('span', {}, '·'), 'Partie ' + it.section + (it.chapter ? ' · chapitre ' + it.chapter : '')),
+      h('div', { class: 'hub__kicker' }, 'Item ' + lbl(it), h('span', {}, '·'),
+        speOf(it) === 'cardio' ? 'Partie ' + it.section + (it.chapter ? ' · chapitre ' + it.chapter : '')
+          : (it.sectionTitle || '') + (it.chapter ? ' · chapitre ' + it.chapter : '')),
       h('h1', { class: 'hub__h1' }, it.short),
       h('p', { class: 'hub__full' }, it.title),
-      it.pages ? h('div', { class: 'hub__pages' }, 'Pages ' + it.pages + ' du Collège') : null));
+      it.pages ? h('div', { class: 'hub__pages' }, 'Pages ' + it.pages + ' du PDF ' + (speOf(it) === 'pneumo' ? 'du référentiel' : 'du Collège')) : null));
 
     if (soon) {
       page.appendChild(h('div', { class: 'card' },
@@ -622,7 +660,9 @@
       return page;
     }
 
-    page.appendChild(flashEntry(it));
+    const cardio = speOf(it) === 'cardio';
+    if (cardio || Number(c.ff) > 0) page.appendChild(flashEntry(it));
+    page.appendChild(paretoEntry(it));
 
     page.appendChild(h('div', { class: 'card hub__mastery' },
       h('div', { class: 'hub__ring', html: ringSvg(m.A, 88, 8, 'var(--rankA)') }, h('div', { class: 'hub__ring-label' }, h('b', {}, pct(m.A) + '%'), h('span', {}, 'rang A'))),
@@ -633,13 +673,15 @@
 
     page.appendChild(h('div', { class: 'hub__ctas' },
       h('a', { class: 'btn btn--primary btn--block', href: '#/review?mode=item&item=' + it.num + '&autostart=1' }, iconEl('play'), 'Réviser cet item'),
-      h('a', { class: 'btn btn--secondary btn--block', href: '#/item/' + it.num + '/cours' }, iconEl('book'), 'Fiche complète')));
+      cardio ? h('a', { class: 'btn btn--secondary btn--block', href: '#/item/' + it.num + '/cours' }, iconEl('book'), 'Fiche complète') : null));
 
     const lvl = levelPanel(it);
     if (lvl) page.appendChild(lvl);
 
+    // Dermato / pneumo : seulement les rubriques qui ont du contenu (questions pour l'instant).
     page.appendChild(h('div', { class: 'hub__grid' }, SECTION_CARDS.filter(function (d) {
-      return !d.onlyIf || Number(c[d.onlyIf]) > 0;
+      if (d.onlyIf && !(Number(c[d.onlyIf]) > 0)) return false;
+      return cardio || d.counts.some(function (k) { return Number(c[k]) > 0; });
     }).map(function (d) { return sectionCard(it, d); })));
 
     const sdd = Array.isArray(it.sdd) ? it.sdd : [];
@@ -693,7 +735,7 @@
     const num = str((params && (params.num || params.item)) || '');
     const it = findItem(num);
     const root = h('div', { class: 'view-hub' });
-    root.dataset.title = it ? 'Item ' + it.num + ' · ' + it.short : 'Item';
+    root.dataset.title = it ? 'Item ' + lbl(it) + ' · ' + it.short : 'Item';
     root.appendChild(buildHub(num));
     // Une seule fois par affichage : buildHub sert aussi au rafraîchissement sur « store:change » et
     // une écriture dans le store à chaque reconstruction relancerait la reconstruction en boucle.

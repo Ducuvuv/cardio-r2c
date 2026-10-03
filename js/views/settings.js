@@ -461,7 +461,7 @@
     var list = h('ul', { class: 'set-items', id: 'set-items' }, items.map(function (it) {
       var avail = it.available !== false;
       return h('li', { dataset: { item: String(it.num) } },
-        h('span', { class: 'set-items__name' }, h('b', {}, String(it.num)), it.short || it.title || '',
+        h('span', { class: 'set-items__name' }, h('b', {}, String(it.label || it.num)), it.short || it.title || '',
           avail ? h('span', { class: 'set-items__state' + (isLoaded(it.num) ? ' is-loaded' : ''), title: isLoaded(it.num) ? 'Chargé' : 'Non chargé' }) : null),
         h('span', { class: 'set-items__counts' }, avail ? countsText(it.counts) : 'indisponible'));
     }));
@@ -493,7 +493,7 @@
         }, Promise.resolve());
       } else if (typeof r.loadAll === 'function') {
         txt.textContent = 'Chargement…';
-        p = Promise.resolve(r.loadAll()).then(function () { fill.style.width = '100%'; txt.textContent = total + ' / ' + total + ' items chargés'; });
+        p = Promise.resolve(r.loadAll({ all: true })).then(function () { fill.style.width = '100%'; txt.textContent = total + ' / ' + total + ' items chargés'; });
       } else {
         p = Promise.reject(new Error('registry.load indisponible'));
       }
@@ -547,8 +547,9 @@
       } catch (e) { builtTxt = built; }
     }
     var nItems = manifestItems().filter(function (it) { return it.available !== false; }).length;
-    var text = 'CardioR2C est construit uniquement à partir du **Collège de cardiologie** (CNEC, « Médecine cardiovasculaire », édition R2C) : ' +
-      'fiches, questions, arbres, traitements, dossiers, ECG et écho en sont des synthèses, chacune référencée à la page du livre, sans aucun ajout extérieur. ' +
+    var text = 'CardioR2C est construit uniquement à partir des Collèges fournis : **cardiologie** (CNEC, « Médecine cardiovasculaire », édition R2C), ' +
+      '**dermatologie** (CEDEF, 8e édition) et **pneumologie** (CEP, référentiel 2023). ' +
+      'Fiches, récaps, questions, arbres, traitements, dossiers, ECG et écho en sont des synthèses, chacune référencée à la page du livre, sans aucun ajout extérieur. ' +
       'Les révisions sont planifiées par l’algorithme de répétition espacée **FSRS** : chaque carte revient juste avant que tu ne l’oublies, selon la rétention cible choisie dans ton profil.';
     var body = h('div', { class: 'set-about' });
     var html = md(text);

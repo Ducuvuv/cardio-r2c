@@ -1397,7 +1397,7 @@
       const R = registry();
       if (!R || typeof R.loadAll !== 'function') { warnOnce('loadall', 'CARDIO.registry.loadAll indisponible.'); return; }
       btn.disabled = true; btn.textContent = 'Chargement…';
-      R.loadAll({ onProgress: (done, total) => { status.textContent = 'Chargement… ' + done + ' / ' + total; } })
+      R.loadAll({ spe: 'cardio', onProgress: (done, total) => { status.textContent = 'Chargement… ' + done + ' / ' + total; } })
         .then((res) => { toast(((res && res.loaded) ? res.loaded.length : 0) + ' items chargés.', 'ok'); onDone(); })
         .catch((e) => { console.error(e); toast('Chargement incomplet.', 'warn'); onDone(); });
     });
@@ -1453,7 +1453,7 @@
       }
 
       const allItems = typeof R.items === 'function' ? R.items() : [];
-      const missing = allItems.filter((it) => it.available !== false && typeof R.isLoaded === 'function' && !R.isLoaded(it.num));
+      const missing = allItems.filter((it) => (it.spe || 'cardio') === 'cardio' && it.available !== false && typeof R.isLoaded === 'function' && !R.isLoaded(it.num));
 
       const families = {};
       all.forEach((x) => familiesOf(x.entry.ecg).forEach((f) => { families[f] = true; }));

@@ -601,7 +601,7 @@
       btn.addEventListener('click', async () => {
         btn.disabled = true; btn.textContent = 'Chargement…';
         try {
-          if (r && typeof r.loadAll === 'function') await r.loadAll();
+          if (r && typeof r.loadAll === 'function') await r.loadAll({ spe: 'cardio' });
           else throw new Error('registry.loadAll indisponible');
           const fresh = renderGlobalPage();
           page.replaceChildren(...Array.from(fresh.childNodes));

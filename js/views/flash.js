@@ -328,7 +328,7 @@
   }
 
   function navEl(num) {
-    const items = allItems();
+    const items = allItems().filter(function (x) { return (x.spe || 'cardio') === 'cardio'; });
     const idx = items.findIndex(function (x) { return str(x.num) === str(num); });
     if (idx < 0 || items.length < 2) return null;
     function link(it, dir) {
@@ -738,7 +738,7 @@
 
   function renderList() {
     ensureStyles();
-    const items = allItems();
+    const items = allItems().filter(function (x) { return (x.spe || 'cardio') === 'cardio'; });
     const seen = seenList();
     const page = h('div', { class: 'page ffl' });
     page.append(h('header', {},

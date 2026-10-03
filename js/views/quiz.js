@@ -37,7 +37,7 @@
   const KIND_IDS = KINDS.map((k) => k[0]);
 
   const MODES = [
-    { id: 'endless', title: 'Mode illimité', desc: 'Des questions sans fin, sur tous les items, sans répétition.', icon: 'shuffle' },
+    { id: 'endless', title: 'Mode illimité', desc: 'Des questions sans fin, sur tous les items de la matière choisie, sans répétition.', icon: 'shuffle' },
     { id: 'smart', title: 'Séance intelligente', desc: 'À revoir + nouvelles, réparties sur tous les chapitres.', icon: 'play' },
     { id: 'item', title: 'Cet item', desc: 'Un chapitre, à ton niveau actuel sur cet item.', icon: 'book' },
     { id: 'errors', title: 'Mes erreurs', desc: 'Le cahier d’erreurs, les plus fréquentes d’abord.', icon: 'refresh' },
@@ -144,13 +144,18 @@
     if (!r || typeof r.item !== 'function') return null;
     try { return r.item(num); } catch (e) { return null; }
   }
+  /* Numéro affiché : « 111 » pour la clé interne d111 (dermato), « 359 bis » pour p359bis (pneumo). */
+  function itemNo(num) {
+    const m = itemMeta(num);
+    return m && m.label ? String(m.label) : String(num).replace(/^[a-z]+/, '');
+  }
   function itemShort(num) {
     const m = itemMeta(num);
-    return m && m.short ? m.short : 'Item ' + num;
+    return m && m.short ? m.short : 'Item ' + itemNo(num);
   }
   function itemLabel(num) {
     const m = itemMeta(num);
-    return m && m.short ? 'Item ' + num + ' · ' + m.short : 'Item ' + num;
+    return m && m.short ? 'Item ' + itemNo(num) + ' · ' + m.short : 'Item ' + itemNo(num);
   }
   function registryCard(id) {
     const r = RG();
@@ -158,7 +163,7 @@
     try { return r.card(id); } catch (e) { return null; }
   }
   function itemOfId(id) {
-    const m = /^(\d+)-/.exec(txt(id));
+    const m = /^([a-z]*\d+(?:bis)?)-/.exec(txt(id));
     return m ? m[1] : '';
   }
 
@@ -503,7 +508,21 @@
     }
 
     const st = ST();
-    const items = (RG() && typeof RG().items === 'function') ? RG().items().filter((it) => it.available !== false) : [];
+    const MAT = C.views.matiere || null;
+    // Items de la matière active (recalculés à chaque dessin : la matière peut changer sur cette page).
+    const itemsNow = () => {
+      const spe = MAT ? MAT.current() : 'all';
+      return (RG() && typeof RG().items === 'function') ? RG().items().filter((it) => it.available !== false && (spe === 'all' || (it.spe || 'cardio') === spe)) : [];
+    };
+    let items = itemsNow();
+    const itemOption = (it) => h('option', { value: String(it.num), selected: state.item === String(it.num) }, 'Item ' + itemNo(it.num) + ' · ' + it.short);
+    const itemOptions = () => {
+      if (!MAT || MAT.current() !== 'all' || !MAT.multi()) return items.map(itemOption);
+      return MAT.list().map((x) => {
+        const list = items.filter((it) => (it.spe || 'cardio') === x.code);
+        return list.length ? h('optgroup', { label: x.title }, list.map(itemOption)) : null;
+      });
+    };
     const errorsCount = st && typeof st.errorsList === 'function' ? st.errorsList().length : 0;
     const state = {
       mode: opts.mode === 'single' ? 'smart' : opts.mode,
@@ -568,7 +587,7 @@
         }
         const sel = h('select', { class: 'input', 'aria-label': 'Choisir un item', on: { change: (e) => { state.item = e.target.value || null; draw(); } } },
           h('option', { value: '', disabled: true, selected: !state.item }, 'Choisis un item…'),
-          items.map((it) => h('option', { value: String(it.num), selected: state.item === String(it.num) }, 'Item ' + it.num + ' · ' + it.short))
+          itemOptions()
         );
         stackEl.appendChild(sel);
         if (state.objectives.length) {
@@ -592,7 +611,7 @@
       wrap.appendChild(h('div', { class: 'caption' }, 'Items'));
       const sel = h('select', { class: 'input', 'aria-label': 'Items', on: { change: (e) => { state.item = e.target.value || null; state.objectives = []; draw(); } } },
         h('option', { value: '', selected: !state.item }, 'Tous les items (' + items.length + ')'),
-        items.map((it) => h('option', { value: String(it.num), selected: state.item === String(it.num) }, 'Item ' + it.num + ' · ' + it.short)));
+        itemOptions());
       wrap.appendChild(sel);
       wrap.appendChild(h('div', { class: 'caption', style: 'margin-top:8px' }, 'Rang'));
       const rk = h('div', { class: 'chips chips--wrap', role: 'group', 'aria-label': 'Rang' });
@@ -672,8 +691,11 @@
     }
 
     function draw() {
+      items = itemsNow();
+      if (state.item && !state.itemFixed && !items.some((it) => String(it.num) === state.item)) { state.item = null; state.objectives = []; }
       const cta = h('button', { type: 'button', class: 'btn btn--primary btn--block btn--lg', disabled: !canLaunch(), on: { click: launch } }, icon('play'), ctaLabel());
       stack.replaceChildren(...[
+        state.itemFixed || !MAT ? null : MAT.switcher({ onChange: () => draw() }),
         summaryLine(),
         h('div', { class: 'stack stack--sm' }, h('div', { class: 'caption' }, 'Mode'), modeCards()),
         state.mode === 'endless' ? null : itemBlock(),
@@ -1516,7 +1538,25 @@
         }
         return false;
       };
-      const exact = !!given && expected.some((a) => given === a || has(given, a));
+      // Réponse attendue ou forme acceptée : un mot entier (pluriel en -s/-x toléré), pour que « Mobitz I » ne
+      // valide pas « Mobitz II » ni « HTA » « HTAP ». Les mots-clés restent des radicaux (« rosuva », « triglycer »).
+      const hasAnswer = (hay, a) => {
+        if (!a) return false;
+        let i = hay.indexOf(a);
+        while (i >= 0) {
+          const before = i === 0 ? ' ' : hay[i - 1];
+          const rest = hay.slice(i + a.length);
+          const run = (/^\d+/.exec(rest) || [''])[0];
+          const startOk = !/[a-z0-9]/.test(before);
+          const endOk = /\d$/.test(a)
+            ? !run || (/ \d+$/.test(a) && /^0+$/.test(run))
+            : !/^[a-z0-9]/.test(rest) || /^[sx](?![a-z0-9])/.test(rest);
+          if (startOk && endOk) return true;
+          i = hay.indexOf(a, i + 1);
+        }
+        return false;
+      };
+      const exact = !!given && expected.some((a) => given === a || hasAnswer(given, a));
       const keywords = Array.isArray(d.keywords) ? d.keywords : [];
       const matched = keywords.filter((k) => { const nk = norm(k); return nk && has(given, nk); });
       const ratio = exact ? 1 : keywords.length ? matched.length / keywords.length : 0;

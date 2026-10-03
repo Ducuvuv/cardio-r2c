@@ -60,6 +60,7 @@
    * (rang B, KFP, TCS). 0 = arbre décisionnel : support de cours, jamais dans les séances. */
   const TIER_LABELS = { 1: 'Essentiel', 2: 'Approfondi', 3: 'Expert' };
   const LEVEL_MODES = ['progressif', 'essentiel', 'complet'];
+  const SPES = ['all', 'cardio', 'dermato', 'pneumo'];
   const TIER_UNLOCK = 0.6;            // 60 % des cartes du niveau acquises → niveau suivant débloqué
   const LEECH_FAILS = 3;              // ratée 3 fois → « coriace » : sort des séances auto, reste au cahier d'erreurs
   const RELEARN_SHARE = 0.34;         // au plus ~1/3 d'une séance pour des cartes ratées récemment
@@ -146,7 +147,7 @@
 
   /* ---------- identifiants de cartes ---------- */
 
-  function itemOfId(id) { const m = /^(\d+)-/.exec(String(id || '')); return m ? m[1] : ''; }
+  function itemOfId(id) { const m = /^([a-z]*\d+(?:bis)?)-/.exec(String(id || '')); return m ? m[1] : ''; }
   function kindOfId(id) {
     const parts = String(id || '').split('-');
     return parts.length >= 3 ? (KIND_OF_SEGMENT[parts[1]] || null) : null;
@@ -186,6 +187,21 @@
     return 2;
   }
   function levelMode() { const l = state.profile.level; return LEVEL_MODES.indexOf(l) >= 0 ? l : 'progressif'; }
+  /* Matière active (profile.spe) : toutes les files (dues, nouvelles, illimité, examen, erreurs, prévisions)
+   * se limitent à ses items tant qu'aucun item n'est demandé explicitement. 'all' = toutes les matières. */
+  function activeSpe() { const s = state.profile.spe; return SPES.indexOf(s) > 0 ? s : 'all'; }
+  function itemsOfSpe(spe) {
+    const reg = registry();
+    const list = reg && reg.manifest && Array.isArray(reg.manifest.items) ? reg.manifest.items : [];
+    return list.filter(function (it) { return (it.spe || 'cardio') === spe; }).map(function (it) { return String(it.num); });
+  }
+  function speScope() {
+    const s = activeSpe();
+    if (s === 'all') return null;
+    const list = itemsOfSpe(s);
+    return list.length ? list : null;
+  }
+  function setSpe(spe) { set('profile.spe', SPES.indexOf(spe) >= 0 ? spe : 'all'); return activeSpe(); }
   function itemTier(num) {
     const mode = levelMode();
     if (mode === 'essentiel') return 1;
@@ -319,8 +335,9 @@
     try {
       const it = reg.item(itemNum);
       if (!it || !isObj(it.counts)) return 0;
+      // Seules les cartes révisables comptent (pas les arbres, fiches flash, récaps Pareto ni rubriques).
       let t = 0;
-      Object.keys(it.counts).forEach(function (k) { t += Math.max(0, int(it.counts[k])); });
+      ['qcm', 'qroc', 'open', 'kfp', 'tcs', 'flash', 'tx', 'cases', 'ecg', 'echo'].forEach(function (k) { t += Math.max(0, int(it.counts[k])); });
       return t;
     } catch (e) { return 0; }
   }
@@ -328,7 +345,7 @@
   /* ---------- état par défaut, normalisation, migrations ---------- */
 
   function defaultProfile() {
-    return { name: '', dailyGoal: 30, newPerDay: 15, retention: 0.9, theme: 'system', sound: false, haptics: true, level: 'progressif' };
+    return { name: '', dailyGoal: 30, newPerDay: 15, retention: 0.9, theme: 'system', sound: false, haptics: true, level: 'progressif', spe: 'all' };
   }
   function emptyDaily() { return { reviews: 0, newCards: 0, correct: 0, score: 0, ms: 0, xp: 0 }; }
   function defaultState(ts) {
@@ -348,6 +365,7 @@
     if (t >= 1 && t <= 3) o.tier = t;
     if (Array.isArray(s.readSections)) o.readSections = uniqStrings(s.readSections.map(String)).slice(0, 64);
     if (isObj(s.flash)) o.flash = { at: num(s.flash.at, 0), score: clamp(num(s.flash.score, 0), 0, 1), runs: Math.max(0, int(s.flash.runs)) };
+    if (isObj(s.pareto)) o.pareto = { at: num(s.pareto.at, 0), score: clamp(num(s.pareto.score, 0), 0, 1), runs: Math.max(0, int(s.pareto.runs)) };
     return o;
   }
   function mergeItemStat(a, b) {
@@ -356,6 +374,7 @@
     if (sa.tier || sb.tier) o.tier = Math.max(sa.tier || 1, sb.tier || 1);
     if (sa.readSections || sb.readSections) o.readSections = uniqStrings((sa.readSections || []).concat(sb.readSections || []));
     if (sa.flash || sb.flash) o.flash = (sa.flash && (!sb.flash || sa.flash.at >= sb.flash.at)) ? sa.flash : sb.flash;
+    if (sa.pareto || sb.pareto) o.pareto = (sa.pareto && (!sb.pareto || sa.pareto.at >= sb.pareto.at)) ? sa.pareto : sb.pareto;
     return o;
   }
   function blankCard() { return { s: 0, d: 0, due: null, last: null, reps: 0, lapses: 0, state: 'new', hist: [] }; }
@@ -388,7 +407,8 @@
       theme: THEMES.indexOf(p.theme) >= 0 ? p.theme : d.theme,
       sound: p.sound === true,
       haptics: p.haptics !== false,
-      level: LEVEL_MODES.indexOf(p.level) >= 0 ? p.level : d.level
+      level: LEVEL_MODES.indexOf(p.level) >= 0 ? p.level : d.level,
+      spe: SPES.indexOf(p.spe) >= 0 ? p.spe : d.spe
     };
   }
   function normSession(s) {
@@ -891,9 +911,12 @@
   }
   function normFilter(f) {
     const o = isObj(f) ? f : {};
+    const item = o.item === undefined || o.item === null || o.item === '' ? null : String(o.item);
+    let items = Array.isArray(o.items) && o.items.length ? o.items.map(String) : null;
+    if (!item && !items && !o.allSpe) items = speScope();
     return {
-      item: o.item === undefined || o.item === null || o.item === '' ? null : String(o.item),
-      items: Array.isArray(o.items) && o.items.length ? o.items.map(String) : null,
+      item: item,
+      items: items,
       kinds: normKinds(o.kinds || o.kind),
       rank: o.rank === 'A' || o.rank === 'B' ? o.rank : null
     };
@@ -1375,9 +1398,12 @@
     const t = dateKey(now);
     const counts = [];
     for (let i = 0; i < n; i++) counts.push(0);
+    const scope = speScope();
+    const inScope = scope ? new Set(scope) : null;
     Object.keys(state.cards).forEach(function (id) {
       const c = state.cards[id];
       if (c.due === null || c.due === undefined) return;
+      if (inScope && !inScope.has(itemOfId(id))) return;
       const tier = cardTier(id);
       if (tier === 0 || tier > itemTier(itemOfId(id)) || isLeech(id)) return;
       let i = c.due <= now ? 0 : daysBetween(t, dateKey(c.due));
@@ -1692,7 +1718,8 @@
     itemOfId: itemOfId, kindOfId: kindOfId, cardMeta: cardMeta, dateKey: dateKey, today: today,
     TIER_LABELS: TIER_LABELS, LEVEL_MODES: LEVEL_MODES.slice(), TIER_UNLOCK: TIER_UNLOCK, LEECH_FAILS: LEECH_FAILS,
     cardTier: cardTier, levelMode: levelMode, itemTier: itemTier, setItemTier: setItemTier, tierProgress: tierProgress,
-    maybeLevelUp: maybeLevelUp, autoLevelAll: autoLevelAll, isLeech: isLeech, pausedStats: pausedStats
+    maybeLevelUp: maybeLevelUp, autoLevelAll: autoLevelAll, isLeech: isLeech, pausedStats: pausedStats,
+    SPES: SPES, activeSpe: activeSpe, setSpe: setSpe, itemsOfSpe: itemsOfSpe
   };
 
   store.ready = new Promise(function (resolve) {

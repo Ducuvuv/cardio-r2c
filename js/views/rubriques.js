@@ -437,7 +437,7 @@
       const btn = h('button', { type: 'button', class: 'btn btn--primary btn--block' }, 'Charger les ' + items.length + ' items');
       btn.addEventListener('click', async () => {
         btn.disabled = true; btn.textContent = 'Chargement…';
-        try { await reg.loadAll(); } catch (e) { console.warn(e); }
+        try { await reg.loadAll({ spe: 'cardio' }); } catch (e) { console.warn(e); }
         page.replaceChildren(...Array.from(renderGlobal(kind).childNodes));
       });
       page.append(h('div', { class: 'card', style: 'margin-bottom:12px' },

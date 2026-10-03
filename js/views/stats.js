@@ -99,13 +99,13 @@
     if (r && typeof r.card === 'function') {
       try { var c = r.card(id); if (c && c.kind) return c.kind; } catch (e) { /* item non chargé */ }
     }
-    var m = /^\d+-([a-z]+)-/.exec(String(id));
+    var m = /^[a-z]*\d+(?:bis)?-([a-z]+)-/.exec(String(id));
     var k = m ? m[1] : '';
     if (k === 'qru') return 'qcm';
     if (k === 'ess' || k === 'num' || k === 'mn') return 'flash';
     return KINDS.indexOf(k) >= 0 ? k : 'qcm';
   }
-  function itemOfCard(id) { var m = /^(\d+)-/.exec(String(id)); return m ? m[1] : null; }
+  function itemOfCard(id) { var m = /^([a-z]*\d+(?:bis)?)-/.exec(String(id)); return m ? m[1] : null; }
 
   function isDue(cs, now) {
     if (!cs || cs.state === 'new' || !cs.due) return false;
@@ -184,7 +184,10 @@
     var r = registry();
     var list = r && typeof r.items === 'function' ? safe(function () { return r.items(); }, null) : null;
     if (!list || !list.length) list = (r && r.manifest && r.manifest.items) || [];
-    return list.filter(function (it) { return it && it.available !== false; });
+    // Matière active seulement (sélecteur de l'accueil) : la liste reste lisible avec plusieurs Collèges.
+    var mat = CARDIO.views && CARDIO.views.matiere;
+    var spe = mat ? mat.current() : 'all';
+    return list.filter(function (it) { return it && it.available !== false && (spe === 'all' || (it.spe || 'cardio') === spe); });
   }
 
   /** Agrégats sur les N derniers jours de state.daily. */
@@ -355,9 +358,9 @@
   function masteryRow(r) {
     var go = function () { navigate('#/item/' + r.num); };
     return h('button', { class: 'st-mrow', type: 'button', dataset: { item: r.num }, on: { click: go } },
-      h('span', { class: 'st-mrow__num' }, r.num),
+      h('span', { class: 'st-mrow__num' }, (r.it && r.it.label ? String(r.it.label) : r.num)),
       h('span', { class: 'st-mrow__body' },
-        h('span', { class: 'st-mrow__title' }, r.it.short || r.it.title || ('Item ' + r.num)),
+        h('span', { class: 'st-mrow__title' }, r.it.short || r.it.title || ('Item ' + (r.it && r.it.label ? String(r.it.label) : r.num))),
         h('span', { class: 'st-mrow__bars' }, masteryBar('A', r.m.A), masteryBar('B', r.m.B))),
       h('span', { class: 'st-mrow__due' + (r.due ? ' is-due' : '') },
         h('strong', {}, String(r.due)), r.due > 1 ? 'dues' : 'due'));
@@ -552,7 +555,7 @@
       { id: 'night-owl', t: 'Oiseau de nuit', c: 'Révise après 23 h.', i: 'clock' }
     ];
     manifestItems().forEach(function (it) {
-      defs.push({ id: 'item-mastered-' + it.num, t: 'Item ' + it.num + ' maîtrisé',
+      defs.push({ id: 'item-mastered-' + it.num, t: 'Item ' + (it.label || it.num) + ' maîtrisé',
         c: (it.short || it.title) + ' : rang A ≥ 90 % avec 80 % des cartes vues.', i: 'star' });
     });
     return defs;

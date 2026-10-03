@@ -58,6 +58,7 @@
     ['#/items',                   'items',      'items',    'Items',               false, {}],
     ['#/item/:num',               'items',      'items',    'Item',                true,  { mode: 'hub' }],
     ['#/item/:num/flash',         'flash',      'items',    'Fiche flash',         true,  {}],
+    ['#/item/:num/pareto',        'pareto',     'items',    'Récap Pareto',        true,  {}],
     ['#/item/:num/cours',         'course',     'items',    'Fiche',               true,  { section: 'cours' }],
     ['#/item/:num/mnemos',        'course',     'items',    'Mnémos',              true,  { section: 'mnemos' }],
     ['#/item/:num/qcm',           'quiz',       'items',    'Questions',           true,  { mode: 'item' }],
@@ -84,7 +85,8 @@
     ['#/ecg',                     'ecg',        'items',    'Bibliothèque ECG',    true,  { mode: 'library' }],
     ['#/treatments',              'treatments', 'items',    'Traitements',         true,  { mode: 'library' }],
     ['#/trees',                   'trees',      'items',    'Arbres décisionnels', true,  { mode: 'library' }],
-    ['#/flash',                   'flash',      'items',    'Fiches flash',        true,  {}]
+    ['#/flash',                   'flash',      'items',    'Fiches flash',        true,  {}],
+    ['#/pareto',                  'pareto',     'items',    'Récaps Pareto',       true,  {}]
   ];
 
   function itemShort(num) {
@@ -95,10 +97,14 @@
     } catch (e) { return null; }
   }
 
+  function itemLabel(num) {
+    try { const r = C.registry; return r && typeof r.label === 'function' ? r.label(num) : String(num); } catch (e) { return String(num); }
+  }
+
   function defaultTitle(def, params) {
     if (!params || !params.num) return def.title;
     const short = itemShort(params.num);
-    if (def.pattern === '#/item/:num') return short || ('Item ' + params.num);
+    if (def.pattern === '#/item/:num') return short || ('Item ' + itemLabel(params.num));
     return short ? short + ' · ' + def.title : def.title;
   }
 

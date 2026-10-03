@@ -12,15 +12,19 @@
   // on conserve alors le manifest déjà posé sur un objet registry provisoire.
   const previous = CARDIO.registry || {};
 
-  const SECTION_ORDER = ['I', 'II', 'III', 'IV', 'V', 'VI'];
+  const SECTION_ORDER = ['I', 'II', 'III', 'IV', 'V', 'VI', 'D', 'P'];
   const SECTION_TITLES = {
     I: 'Athérome, facteurs de risque, coronaropathie, artériopathie',
     II: 'Maladies des valves',
     III: 'Rythmologie',
     IV: 'Insuffisance cardiaque',
     V: 'Maladie thromboembolique veineuse',
-    VI: 'Divers'
+    VI: 'Divers',
+    D: 'Dermatologie',
+    P: 'Pneumologie'
   };
+  /* Matières (manifest.specialties) ; un manifest ancien ne contient que la cardiologie. */
+  const SPECIALTY_DEFAULT = [{ code: 'cardio', title: 'Cardiologie', short: 'Cardio' }];
   const LOAD_TIMEOUT_MS = 15000;
 
   /* Segment d'id → kind (SPEC §2.6). L'id d'une carte est « <num>-<seg>-<n> ». */
@@ -47,7 +51,7 @@
       course: { sections: [], essentials: [], numbers: [], mnemonics: [] },
       questions: [], edn: [], trees: [],
       treatments: { data: [], strategies: [] },
-      cases: [], ecg: { data: [], method: '' }, echo: { data: [] }, flash: null,
+      cases: [], ecg: { data: [], method: '' }, echo: { data: [] }, flash: null, pareto: null,
       extra: { semio: [], criteres: [], chiffres: [], physio: [], parcours: [], examens: [] }
     };
   }
@@ -77,6 +81,7 @@
     }
     if (frag.echo) target.echo.data = target.echo.data.concat(arr(frag.echo.data));
     if (frag.flash && typeof frag.flash === 'object') target.flash = frag.flash;
+    if (frag.pareto && typeof frag.pareto === 'object') target.pareto = frag.pareto;
     if (frag.extra) {
       ['semio', 'criteres', 'chiffres', 'physio', 'parcours', 'examens'].forEach(function (k) {
         target.extra[k] = target.extra[k].concat(arr(frag.extra[k]));
@@ -144,6 +149,34 @@
     return null;
   }
 
+  /* Numéro affiché (« 111 », « 359 bis ») : la clé interne d'un item dermato / pneumo est préfixée (d111, p75). */
+  function label(num) {
+    const it = item(num);
+    return it && it.label ? str(it.label) : str(num).replace(/^[a-z]+/, '');
+  }
+  function speOf(num) {
+    const it = item(num);
+    if (it && it.spe) return it.spe;
+    const k = str(num);
+    return k[0] === 'd' ? 'dermato' : k[0] === 'p' ? 'pneumo' : 'cardio';
+  }
+  function specialties() {
+    const m = registry.manifest;
+    return m && Array.isArray(m.specialties) && m.specialties.length ? m.specialties : SPECIALTY_DEFAULT;
+  }
+  function speTitle(code) {
+    const s = specialties().find(function (x) { return x.code === code; });
+    return s ? s.title : (code === 'all' ? 'Toutes les matières' : str(code));
+  }
+  /* Items d'une matière ('all' ou vide = toutes). */
+  function itemsOf(spe) {
+    return items().filter(function (it) { return !spe || spe === 'all' || (it.spe || 'cardio') === spe; });
+  }
+  function activeSpe() {
+    const st = CARDIO.store;
+    try { return st && typeof st.activeSpe === 'function' ? st.activeSpe() : 'all'; } catch (e) { return 'all'; }
+  }
+
   function countsOf(c) {
     const q = c.questions;
     return {
@@ -154,7 +187,8 @@
       tcs: c.edn.filter(function (x) { return x.type === 'TCS'; }).length,
       flash: c.course.essentials.length + c.course.numbers.length + c.course.mnemonics.length,
       trees: c.trees.length, tx: c.treatments.data.length, cases: c.cases.length,
-      ecg: c.ecg.data.length, echo: c.echo.data.length
+      ecg: c.ecg.data.length, echo: c.echo.data.length,
+      par: c.pareto && Array.isArray(c.pareto.points) ? c.pareto.points.length : 0
     };
   }
 
@@ -221,12 +255,19 @@
     return entry.promise;
   }
 
-  /* Charge tous les items disponibles, par lots de 3 (séquentiels) pour garder le téléphone fluide.
+  /* Charge les items disponibles, par lots de 3 (séquentiels) pour garder le téléphone fluide.
+   * Par défaut ceux de la matière active ; opts.items (liste de clés), opts.spe ('cardio'…) ou opts.all.
    * Résout avec {loaded:[num…], failed:[{num, error}…]} ; ne rejette jamais. */
   function loadAll(opts) {
     const o = opts || {};
     const batch = o.batch || 3;
-    const list = items().filter(function (it) { return it.available !== false; }).map(function (it) { return str(it.num); });
+    const spe = o.all ? 'all' : (o.spe || activeSpe());
+    let pool = itemsOf(spe);
+    if (Array.isArray(o.items)) {
+      const want = new Set(o.items.map(str));
+      pool = items().filter(function (it) { return want.has(str(it.num)); });
+    }
+    const list = pool.filter(function (it) { return it.available !== false; }).map(function (it) { return str(it.num); });
     const result = { loaded: [], failed: [] };
     let i = 0;
     function step() {
@@ -393,14 +434,14 @@
       return terms.every(function (t) { return n.indexOf(t) >= 0; });
     }
     items().forEach(function (it) {
-      if (matches(it.short + ' ' + it.title + ' ' + it.num)) {
-        out.push({ type: 'item', item: str(it.num), id: str(it.num), title: 'Item ' + it.num + ' · ' + it.short,
+      if (matches(it.short + ' ' + it.title + ' ' + (it.label || it.num) + ' ' + speTitle(it.spe || 'cardio'))) {
+        out.push({ type: 'item', item: str(it.num), id: str(it.num), title: 'Item ' + (it.label || it.num) + ' · ' + it.short,
           text: it.title, route: '#/item/' + it.num, rank: null });
       }
     });
     Object.keys(contents).forEach(function (num) {
       const c = contents[num];
-      const label = c.meta ? c.meta.short : 'Item ' + num;
+      const label = c.meta ? c.meta.short : 'Item ' + num.replace(/^[a-z]+/, '');
       c.course.sections.forEach(function (s) {
         if (out.length < limit && matches(s.title)) {
           out.push({ type: 'section', item: num, id: s.id, title: s.title, text: label + ' · fiche',
@@ -437,6 +478,11 @@
     sections: sections,
     sectionTitle: sectionTitle,
     item: item,
+    label: label,
+    speOf: speOf,
+    specialties: specialties,
+    speTitle: speTitle,
+    itemsOf: itemsOf,
     load: load,
     loadAll: loadAll,
     isLoaded: isLoaded,

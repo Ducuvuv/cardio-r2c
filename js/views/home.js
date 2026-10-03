@@ -76,6 +76,10 @@
   }
 
   function pct(x) { return Math.round(Math.max(0, Math.min(1, Number(x) || 0)) * 100); }
+  function matiere() { return CARDIO.views.matiere || null; }
+  function activeSpe() { const m = matiere(); return m ? m.current() : 'all'; }
+  function scopeLabel() { const m = matiere(); return m ? m.scopeLabel() : 'tous les items'; }
+  function itemLabel(it) { return it && it.label ? String(it.label) : String(it && it.num); }
 
   /* ---------- Lecture du store (chaque appel est protégé) ---------- */
 
@@ -142,6 +146,18 @@
       const c = cards[id];
       return c && c.due && c.due <= now && c.state !== 'new';
     });
+  }
+
+  /* Cartes dues par matière (pastilles du sélecteur). */
+  function dueBySpe() {
+    const s = store(), m = matiere();
+    if (!s || typeof s.dueCards !== 'function' || !m || !m.multi()) return {};
+    const out = { all: safe(function () { return s.dueCards(Date.now(), { allSpe: true }).length; }, 0) };
+    m.list().forEach(function (x) {
+      const items = typeof s.itemsOfSpe === 'function' ? s.itemsOfSpe(x.code) : [];
+      out[x.code] = items.length ? safe(function () { return s.dueCards(Date.now(), { items: items }).length; }, 0) : 0;
+    });
+    return out;
   }
 
   /* Prévision des cartes dues sur n jours → [{date:'YYYY-MM-DD', count}] */
@@ -217,7 +233,7 @@
       if (!m.seen) return;
       if (!bestItem || m.A > bestItem.A) bestItem = { num: it.num, short: it.short, A: m.A };
     });
-    if (bestItem) candidates.push({ id: 'item-mastered-' + bestItem.num, label: bestItem.short + ' maîtrisé', desc: 'Maîtrise le rang A de l’item ' + bestItem.num + ' à 90 %.', progress: Math.min(1, bestItem.A / 0.9), prio: 3 });
+    if (bestItem) candidates.push({ id: 'item-mastered-' + bestItem.num, label: bestItem.short + ' maîtrisé', desc: 'Maîtrise le rang A de l’item ' + String(bestItem.num).replace(/^[a-z]+/, '') + ' à 90 %.', progress: Math.min(1, bestItem.A / 0.9), prio: 3 });
     if (!has('all-A-90')) candidates.push({ id: 'all-A-90', label: 'Tout le rang A à 90 %', desc: 'Maîtrise le rang A de tous les items.', progress: 0, prio: 5 });
     if (!candidates.length) return null;
     // Le plus avancé d'abord, à progression égale le plus accessible.
@@ -279,12 +295,12 @@
     const ctas = [];
     if (due > 0) {
       ctas.push(h('a', { class: 'btn btn--primary btn--block', href: '#/review?mode=smart&autostart=1' }, iconEl('play'), 'Réviser maintenant'));
-      ctas.push(h('a', { class: 'btn btn--secondary btn--block', href: '#/review?mode=endless&autostart=1' }, iconEl('shuffle'), 'Mode illimité · tous les items'));
+      ctas.push(h('a', { class: 'btn btn--secondary btn--block', href: '#/review?mode=endless&autostart=1' }, iconEl('shuffle'), 'Mode illimité · ' + scopeLabel()));
       ctas.push(h('a', { class: 'btn btn--ghost btn--block', href: '#/review' }, 'Choisir une session'));
     } else {
       const hasContent = availableItems.length > 0;
       ctas.push(h('a', { class: 'btn btn--primary btn--block', href: hasContent ? '#/review?mode=smart&autostart=1' : '#/items' }, iconEl('plus'), 'Nouveau : apprendre des cartes'));
-      ctas.push(h('a', { class: 'btn btn--secondary btn--block', href: '#/review?mode=endless&autostart=1' }, iconEl('shuffle'), 'Mode illimité · tous les items'));
+      ctas.push(h('a', { class: 'btn btn--secondary btn--block', href: '#/review?mode=endless&autostart=1' }, iconEl('shuffle'), 'Mode illimité · ' + scopeLabel()));
       ctas.push(h('a', { class: 'btn btn--ghost btn--block', href: '#/review' }, 'Choisir une session'));
     }
     return h('section', { class: 'card card--raised home__daily' },
@@ -324,7 +340,7 @@
     const rows = list.map(function (x) {
       return h('a', { class: 'home__weak', href: '#/item/' + x.it.num },
         h('div', { class: 'home__weak-head' },
-          h('span', { class: 'home__weak-num' }, String(x.it.num)),
+          h('span', { class: 'home__weak-num' }, itemLabel(x.it)),
           h('span', { class: 'home__weak-title' }, x.it.short),
           h('span', { class: 'home__weak-pct' }, pct(x.m.all) + ' %')),
         h('div', { class: 'home__weak-bars' },
@@ -363,21 +379,25 @@
   }
 
   function chipsBlock() {
+    const spe = activeSpe();
+    const cardioOnly = spe !== 'all' && spe !== 'cardio';
     const chips = [
-      { label: 'Fiches flash', href: '#/flash', ico: 'flash' },
+      { label: 'Récaps Pareto', href: '#/pareto', ico: 'list' },
+      { label: 'QROC', href: '#/review?mode=smart&kind=qroc&autostart=1', ico: 'edit' },
+      { label: 'Fiches flash', href: '#/flash', ico: 'flash', cardio: true },
       { label: 'Mes erreurs', href: '#/errors', ico: 'refresh' },
       { label: 'Rang A', href: '#/review?mode=rank&rank=A', ico: 'target' },
       { label: 'Examen blanc', href: '#/review?mode=exam', ico: 'clock' },
-      { label: 'ECG du jour', href: '#/ecg?daily=1', ico: 'ecg' },
-      { label: 'Arbres', href: '#/trees', ico: 'tree' },
-      { label: 'Traitements', href: '#/treatments', ico: 'pill' },
-      { label: 'Prise en charge A → Z', href: '#/parcours', ico: 'case' },
-      { label: 'Examens & gestes', href: '#/examens', ico: 'search' },
-      { label: 'Sémiologie', href: '#/semio', ico: 'eye' },
-      { label: 'Critères diagnostiques', href: '#/criteres', ico: 'target' },
-      { label: 'Chiffres', href: '#/chiffres', ico: 'chart' },
-      { label: 'Physiopathologie', href: '#/physio', ico: 'layers' }
-    ];
+      { label: 'ECG du jour', href: '#/ecg?daily=1', ico: 'ecg', cardio: true },
+      { label: 'Arbres', href: '#/trees', ico: 'tree', cardio: true },
+      { label: 'Traitements', href: '#/treatments', ico: 'pill', cardio: true },
+      { label: 'Prise en charge A → Z', href: '#/parcours', ico: 'case', cardio: true },
+      { label: 'Examens & gestes', href: '#/examens', ico: 'search', cardio: true },
+      { label: 'Sémiologie', href: '#/semio', ico: 'eye', cardio: true },
+      { label: 'Critères diagnostiques', href: '#/criteres', ico: 'target', cardio: true },
+      { label: 'Chiffres', href: '#/chiffres', ico: 'chart', cardio: true },
+      { label: 'Physiopathologie', href: '#/physio', ico: 'layers', cardio: true }
+    ].filter(function (c) { return !(cardioOnly && c.cardio); });
     const errorsCount = Object.keys(state().errors || {}).length;
     const leeches = leechCount();
     return h('section', { class: 'home__chips-wrap' },
@@ -500,13 +520,17 @@
   function build() {
     const reg = registry();
     const allItems = reg && typeof reg.items === 'function' ? safe(function () { return reg.items(); }, []) : [];
-    const availableItems = allItems.filter(function (it) { return it.available !== false; });
+    const spe = activeSpe();
+    const availableItems = allItems.filter(function (it) { return it.available !== false && (spe === 'all' || (it.spe || 'cardio') === spe); });
     const today = todayStats();
     const goal = Math.max(1, Number(profile().dailyGoal) || 30);
     const due = dueIds();
 
     const page = h('div', { class: 'page home' });
     page.appendChild(greeting());
+    const m = matiere();
+    const sw = m ? m.switcher({ counts: dueBySpe() }) : null;
+    if (sw) page.appendChild(sw);
     page.appendChild(dailyBlock(today, goal, due.length, availableItems));
     page.appendChild(streakXpBlock());
     page.appendChild(chipsBlock());
