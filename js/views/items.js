@@ -256,6 +256,9 @@
     '.hub__ff--pareto{background:var(--blue-soft)}',
     '.hub__ff--pareto .hub__ff-ico{background:var(--blue);color:var(--surface)}',
     '.hub__ff--pareto .hub__ff-chev{color:var(--blue)}',
+    '.hub__ff--fiche{background:var(--ok-soft)}',
+    '.hub__ff--fiche .hub__ff-ico{background:var(--ok);color:var(--surface)}',
+    '.hub__ff--fiche .hub__ff-chev{color:var(--ok)}',
     '.hub__ff.is-soon .hub__ff-ico{background:var(--surface-2);color:var(--muted)}',
     '.hub__ff.is-soon .hub__ff-chev{color:var(--muted)}',
     /* niveau de l'item */
@@ -445,6 +448,25 @@
         h('span', { class: 'hub__ff-sub' }, sub)),
       st ? h('span', { class: 'hub__ff-score ' + (ok ? 'is-ok' : 'is-warn'), title: 'Score du dernier test' }, h('small', {}, 'test'), pct(st.score) + ' %') : null,
       !n ? h('span', { class: 'pill pill--outline' }, 'bientôt') : null,
+      h('span', { class: 'hub__ff-chev', 'aria-hidden': 'true', html: icon('chevron-right') }));
+  }
+
+  /* « Fiche 80 % » (dermato / pneumo) : la fiche de cours de l'item, avec la progression de lecture. */
+  function ficheEntry(it) {
+    const n = Number((it.counts || {}).sec) || 0;
+    const is = (state().itemStats || {})[str(it.num)];
+    const readIds = is && Array.isArray(is.readSections) ? is.readSections : [];
+    const read = Math.min(n, readIds.filter(function (id) { return String(id).indexOf(str(it.num) + '-sec-') === 0; }).length);
+    const done = n > 0 && read >= n;
+    const sub = done ? 'Lue en entier · relis-la avant les partiels'
+      : read ? read + ' / ' + n + ' sections lues'
+        : n + ' sections : tout ce qu’il faut pour maîtriser 80 % de l’item.';
+    return h('a', { class: 'hub__ff hub__ff--fiche', href: '#/item/' + it.num + '/cours' },
+      h('span', { class: 'hub__ff-ico', 'aria-hidden': 'true', html: icon('book') }),
+      h('span', { class: 'hub__ff-main' },
+        h('span', { class: 'hub__ff-title' }, 'Fiche 80 % — maîtriser l’item'),
+        h('span', { class: 'hub__ff-sub' }, sub)),
+      done ? h('span', { class: 'hub__ff-score is-ok', title: 'Toutes les sections lues' }, h('small', {}, 'lue'), '✓') : null,
       h('span', { class: 'hub__ff-chev', 'aria-hidden': 'true', html: icon('chevron-right') }));
   }
 
@@ -663,6 +685,7 @@
     const cardio = speOf(it) === 'cardio';
     if (cardio || Number(c.ff) > 0) page.appendChild(flashEntry(it));
     page.appendChild(paretoEntry(it));
+    if (!cardio && Number(c.sec) > 0) page.appendChild(ficheEntry(it));
 
     page.appendChild(h('div', { class: 'card hub__mastery' },
       h('div', { class: 'hub__ring', html: ringSvg(m.A, 88, 8, 'var(--rankA)') }, h('div', { class: 'hub__ring-label' }, h('b', {}, pct(m.A) + '%'), h('span', {}, 'rang A'))),
@@ -673,7 +696,7 @@
 
     page.appendChild(h('div', { class: 'hub__ctas' },
       h('a', { class: 'btn btn--primary btn--block', href: '#/review?mode=item&item=' + it.num + '&autostart=1' }, iconEl('play'), 'Réviser cet item'),
-      cardio ? h('a', { class: 'btn btn--secondary btn--block', href: '#/item/' + it.num + '/cours' }, iconEl('book'), 'Fiche complète') : null));
+      cardio || Number(c.sec) > 0 ? h('a', { class: 'btn btn--secondary btn--block', href: '#/item/' + it.num + '/cours' }, iconEl('book'), cardio ? 'Fiche complète' : 'Fiche 80 %') : null));
 
     const lvl = levelPanel(it);
     if (lvl) page.appendChild(lvl);

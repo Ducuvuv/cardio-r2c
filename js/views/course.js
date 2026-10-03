@@ -143,6 +143,7 @@
     '.fiche__sec.is-read .fiche__sum-read{display:inline-flex}',
     '.fiche__chev{color:var(--muted);transition:transform .2s cubic-bezier(.2,.7,.2,1)}',
     '.fiche__sec[open] .fiche__chev{transform:rotate(180deg)}',
+    '.fiche__sec > summary::after{content:none;display:none}',
     '.fiche__sec-body{padding:0 16px 16px}',
     '.fiche__sec-body .md>:first-child{margin-top:0}',
     '.fiche__sub{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:16px 0 6px}',
@@ -338,7 +339,7 @@
     fiche.appendChild(bar);
 
     fiche.appendChild(h('header', { class: 'fiche__head' },
-      h('div', { class: 'fiche__kicker' }, 'Item ' + (meta.num || num) + ' · fiche de cours'),
+      h('div', { class: 'fiche__kicker' }, 'Item ' + (meta.label || String(meta.num || num).replace(/^[a-z]+/, '')) + ' · ' + (meta.spe && meta.spe !== 'cardio' ? 'fiche 80 %' : 'fiche de cours')),
       h('h1', { class: 'fiche__h1' }, meta.title || meta.short || 'Item ' + num),
       meta.pages ? h('div', { class: 'fiche__pages' }, 'Collège, pages ' + meta.pages) : null));
 
@@ -417,7 +418,7 @@
 
     if (!num || (reg && meta === null && reg.manifest)) {
       root.appendChild(h('div', { class: 'page fiche' }, h('div', { class: 'fiche__err' },
-        h('p', {}, 'Cet item ne fait pas partie du programme de cardiologie.'),
+        h('p', {}, 'Cet item ne fait pas partie du programme.'),
         h('a', { class: 'btn btn--secondary btn--sm', href: '#/items' }, 'Voir tous les items'))));
       return root;
     }
