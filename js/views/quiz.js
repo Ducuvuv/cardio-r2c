@@ -1848,6 +1848,24 @@
     try { const o = reg.objective(card.item, card.objective); return o && o.title ? o.title : null; } catch (e) { return null; }
   }
 
+  /* Recto d'une carte « L'essentiel » : une vraie question, pour savoir quoi répondre.
+   * 1. question rédigée (d.q) ; 2. texte à trous : les mots en gras sont masqués ;
+   * 3. intitulé avant « : » / « → » / « = » posé en question ; 4. première moitié de la phrase. */
+  function essentialCue(d) {
+    const raw = txt(d.text);
+    if (txt(d.q).trim()) return { q: txt(d.q), how: 'Réponds de tête, puis retourne la carte.' };
+    if (/\*\*[^*]+\*\*/.test(raw)) {
+      return { q: stripMd(raw.replace(/\*\*([^*]+)\*\*/g, ' [ … ] ')).replace(/\s+([,.;:])/g, '$1'),
+        how: 'Retrouve les mots masqués [ … ], puis retourne la carte.' };
+    }
+    const plain = stripMd(raw);
+    const m = /^(.{6,110}?)\s(?::|→|=)\s/.exec(plain);
+    if (m) return { q: m[1].replace(/[\s,;]+$/, '') + ' ?', how: 'Qu’en sais-tu ? Réponds de tête, puis retourne la carte.' };
+    const words = plain.split(' ');
+    const cut = Math.max(3, Math.ceil(words.length / 2));
+    return { q: words.slice(0, cut).join(' ') + (words.length > cut ? '…' : ''), how: 'Complète la phrase de tête, puis retourne la carte.' };
+  }
+
   function renderFlash(card, ctx) {
     const d = ctx.data;
     const fk = flashKind(card.id);
@@ -1855,18 +1873,20 @@
     const hint = h('span', { class: 'flash__hint' }, icon('eye', { size: 18 }), 'Touche la carte ou appuie sur Entrée pour révéler');
     let front, back;
     if (fk === 'num') {
-      front = h('div', { class: 'flash__face' }, h('span', { class: 'caption' }, 'Chiffre clé · ' + itemShort(card.item)), h('div', { class: 'flash__label' }, txt(d.label)), hint);
+      front = h('div', { class: 'flash__face' }, h('span', { class: 'caption' }, 'Chiffre clé · ' + itemShort(card.item)), h('div', { class: 'flash__label' }, txt(d.q || d.label)),
+        h('p', { class: 'muted' }, 'Donne la valeur exacte, avec son unité.'), hint);
       back = h('div', { class: 'flash__face' }, h('span', { class: 'caption' }, 'Chiffre clé · ' + itemShort(card.item)), h('div', { class: 'flash__label muted' }, txt(d.label)), h('div', { class: 'flash__value' }, txt(d.value)), srcEl(d.src));
     } else if (fk === 'mn') {
-      front = h('div', { class: 'flash__face' }, h('span', { class: 'caption' }, 'Mnémo · ' + itemShort(card.item)), h('div', { class: 'flash__label' }, txt(d.title)), h('p', { class: 'muted' }, 'Quel moyen mnémotechnique, et que recouvre-t-il ?'), hint);
+      front = h('div', { class: 'flash__face' }, h('span', { class: 'caption' }, 'Mnémo · ' + itemShort(card.item)), h('div', { class: 'flash__label' }, txt(d.title)),
+        d.mnemonic ? h('div', { class: 'mnemo__key' }, txt(d.mnemonic)) : null,
+        h('p', { class: 'muted' }, 'Que recouvre chaque lettre ou chaque élément ? Récite-les de tête.'), hint);
       back = h('div', { class: 'flash__face' }, h('span', { class: 'caption' }, 'Mnémo · ' + itemShort(card.item)), h('div', { class: 'flash__label muted' }, txt(d.title)), h('div', { class: 'mnemo__key' }, txt(d.mnemonic)), md(d.expansion), srcEl(d.src));
     } else {
-      const words = stripMd(d.text).split(' ');
-      const cue = words.slice(0, Math.min(5, Math.max(2, Math.floor(words.length / 3)))).join(' ') + (words.length > 5 ? '…' : '');
+      const cue = essentialCue(d);
       const obj = objectiveTitle(card);
       front = h('div', { class: 'flash__face' }, h('span', { class: 'caption' }, 'L’essentiel · ' + itemShort(card.item)),
         obj ? h('div', { class: 'secondary muted' }, obj) : null,
-        h('div', { class: 'flash__text' }, cue), h('p', { class: 'muted' }, 'Complète ce point clé de tête.'), hint);
+        h('div', { class: 'flash__text' }, cue.q), h('p', { class: 'muted' }, cue.how), hint);
       back = h('div', { class: 'flash__face' }, h('span', { class: 'caption' }, 'L’essentiel · ' + itemShort(card.item)), md(d.text, 'flash__text'), srcEl(d.src));
     }
     const face = h('div', {}, front);
