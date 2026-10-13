@@ -86,7 +86,9 @@
     ['#/treatments',              'treatments', 'items',    'Traitements',         true,  { mode: 'library' }],
     ['#/trees',                   'trees',      'items',    'Arbres décisionnels', true,  { mode: 'library' }],
     ['#/flash',                   'flash',      'items',    'Fiches flash',        true,  {}],
-    ['#/pareto',                  'pareto',     'items',    'Récaps Pareto',       true,  {}]
+    ['#/pareto',                  'pareto',     'items',    'Récaps Pareto',       true,  {}],
+    ['#/algos',                   'algos',      'items',    'Algos de stage',      true,  {}],
+    ['#/algos/:id',               'algos',      'items',    'Algo',                true,  {}]
   ];
 
   function itemShort(num) {

@@ -685,6 +685,17 @@
     const cardio = speOf(it) === 'cardio';
     if (cardio || Number(c.ff) > 0) page.appendChild(flashEntry(it));
     page.appendChild(paretoEntry(it));
+    try {
+      const al = window.CARDIO.views.algos && window.CARDIO.views.algos.forItem ? window.CARDIO.views.algos.forItem(it.num) : [];
+      if (al.length) {
+        page.appendChild(h('a', { class: 'hub__ff hub__ff--pareto', href: al.length === 1 ? '#/algos/' + encodeURIComponent(al[0].id) : '#/algos' },
+          h('span', { class: 'hub__ff-ico', 'aria-hidden': 'true', html: icon('tree') }),
+          h('span', { class: 'hub__ff-main' },
+            h('span', { class: 'hub__ff-title' }, al.length === 1 ? 'Algo de stage' : 'Algos de stage (' + al.length + ')'),
+            h('span', { class: 'hub__ff-sub' }, al.map(function (a) { return a.title; }).join(' · '))),
+          h('span', { class: 'hub__ff-chev', 'aria-hidden': 'true', html: icon('chevron-right') })));
+      }
+    } catch (e) { /* algos indisponibles */ }
     if (!cardio && Number(c.sec) > 0) page.appendChild(ficheEntry(it));
 
     page.appendChild(h('div', { class: 'card hub__mastery' },

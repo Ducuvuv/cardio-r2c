@@ -382,6 +382,7 @@
     const spe = activeSpe();
     const cardioOnly = spe !== 'all' && spe !== 'cardio';
     const chips = [
+      { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
       { label: 'Récaps Pareto', href: '#/pareto', ico: 'list' },
       { label: 'QROC', href: '#/review?mode=smart&kind=qroc&autostart=1', ico: 'edit' },
       { label: 'Fiches flash', href: '#/flash', ico: 'flash', cardio: true },
