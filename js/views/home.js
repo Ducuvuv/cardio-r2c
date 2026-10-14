@@ -383,6 +383,7 @@
     const cardioOnly = spe !== 'all' && spe !== 'cardio';
     const chips = [
       { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
+      { label: 'Parasito-myco', href: '#/parasito', ico: 'list', parasito: true },
       { label: 'Récaps Pareto', href: '#/pareto', ico: 'list' },
       { label: 'QROC', href: '#/review?mode=smart&kind=qroc&autostart=1', ico: 'edit' },
       { label: 'Fiches flash', href: '#/flash', ico: 'flash', cardio: true },
@@ -398,7 +399,10 @@
       { label: 'Critères diagnostiques', href: '#/criteres', ico: 'target', cardio: true },
       { label: 'Chiffres', href: '#/chiffres', ico: 'chart', cardio: true },
       { label: 'Physiopathologie', href: '#/physio', ico: 'layers', cardio: true }
-    ].filter(function (c) { return !(cardioOnly && c.cardio); });
+    ].filter(function (c) {
+      if (c.parasito) { const v = CARDIO.views && CARDIO.views.parasito; return !!(v && v.available && v.available()); }
+      return !(cardioOnly && c.cardio);
+    });
     const errorsCount = Object.keys(state().errors || {}).length;
     const leeches = leechCount();
     return h('section', { class: 'home__chips-wrap' },

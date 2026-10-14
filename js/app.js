@@ -88,7 +88,9 @@
     ['#/flash',                   'flash',      'items',    'Fiches flash',        true,  {}],
     ['#/pareto',                  'pareto',     'items',    'Récaps Pareto',       true,  {}],
     ['#/algos',                   'algos',      'items',    'Algos de stage',      true,  {}],
-    ['#/algos/:id',               'algos',      'items',    'Algo',                true,  {}]
+    ['#/algos/:id',               'algos',      'items',    'Algo',                true,  {}],
+    ['#/parasito',                'parasito',   'items',    'Parasito-myco',       true,  {}],
+    ['#/parasito/:id',            'parasito',   'items',    'Fiche parasito',      true,  {}]
   ];
 
   function itemShort(num) {
