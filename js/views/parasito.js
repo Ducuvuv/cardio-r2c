@@ -3,8 +3,10 @@
  * parasitologie-mycologie (docs/PARASITO.md). Version privée seulement (content/parasito.js n'est pas publié
  * sur GitHub Pages).
  *   #/parasito        liste par groupe (protozoaires, helminthes, ectoparasites, mycologie)
- *   #/parasito/:id    la fiche ; « Lire » ou « Me tester » (mots-clés en gras masqués, révélés au toucher).
- * Contenu : CARDIO.registry.parasito = [{id, title, agent, group, items, pages, hook, sections:[{h, points}]}],
+ *   #/parasito/:id    la fiche ; « Comprendre » (version rédigée et expliquée, première lecture), « Fiche »
+ *                     (points télégraphiques) ou « Me tester » (mots-clés en gras masqués, révélés au toucher).
+ * Contenu : CARDIO.registry.parasito = [{id, title, agent, group, items, pages, hook, sections:[{h, points}],
+ *           explain?: {intro, sections:[{h, text, retenir}]}}],
  *           CARDIO.registry.parasitoNoA = ['Ankylostomoses', …] (sections sans rouge).
  * Statut : localStorage « cardio.parasito » = {id: {seen, ok, at}} (confort par appareil).
  */
@@ -58,7 +60,13 @@
       '.pz-sec strong{color:var(--ink)}',
       '.pz-hide{cursor:pointer;border-radius:4px;background:var(--surface-3);color:transparent!important;box-shadow:inset 0 -2px 0 var(--muted)}',
       '.pz-toc{display:flex;gap:6px;flex-wrap:wrap}',
-      '.pz-toc a{font-size:.8125rem}'
+      '.pz-toc a{font-size:.8125rem}',
+      '.pz-intro{font-size:1rem;line-height:1.5}',
+      '.pz-text p{margin:.5em 0;line-height:1.55}',
+      '.pz-retenir{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--bad-soft)}',
+      '.pz-retenir .caption{color:var(--bad)}',
+      '.pz-retenir ul{margin:4px 0 0;padding-left:1.1em}',
+      '.pz-retenir li{margin:.2em 0;font-weight:600}'
     ].join('\n');
     const st = document.createElement('style');
     st.textContent = css;
@@ -112,14 +120,32 @@
     const body = h('div', { class: 'stack' });
     const after = h('div', { class: 'stack' });
     const seg = h('div', { class: 'seg seg--block', role: 'tablist' });
-    const bRead = h('button', { type: 'button', class: 'seg__btn is-on', on: { click: function () { setMode(false); } } }, 'Lire');
-    const bTest = h('button', { type: 'button', class: 'seg__btn', on: { click: function () { setMode(true); } } }, 'Me tester');
-    seg.append(bRead, bTest);
+    const hasX = !!(p.explain && Array.isArray(p.explain.sections) && p.explain.sections.length);
+    const btns = {};
+    [['explain', 'Comprendre'], ['read', 'Fiche'], ['test', 'Me tester']].forEach(function (m) {
+      if (m[0] === 'explain' && !hasX) return;
+      btns[m[0]] = h('button', { type: 'button', class: 'seg__btn', on: { click: function () { setMode(m[0]); } } }, m[1]);
+      seg.appendChild(btns[m[0]]);
+    });
 
-    function setMode(t) {
-      bRead.classList.toggle('is-on', !t);
-      bTest.classList.toggle('is-on', t);
-      draw(t);
+    function setMode(m) {
+      Object.keys(btns).forEach(function (k) { btns[k].classList.toggle('is-on', k === m); });
+      if (toc) toc.hidden = m === 'explain';
+      if (m === 'explain') drawExplain(); else draw(m === 'test');
+    }
+    function drawExplain() {
+      const x = p.explain;
+      body.replaceChildren();
+      if (x.intro) body.appendChild(h('p', { class: 'pz-intro' }, inlineMd(x.intro)));
+      x.sections.forEach(function (s) {
+        const paras = str(s.text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean);
+        body.appendChild(h('section', { class: 'pz-sec' }, h('h3', {}, str(s.h)),
+          h('div', { class: 'pz-text' }, paras.map(function (t) { return h('p', {}, inlineMd(t)); })),
+          Array.isArray(s.retenir) && s.retenir.length ? h('div', { class: 'pz-retenir' }, h('span', { class: 'caption' }, 'À retenir'),
+            h('ul', {}, s.retenir.map(function (r) { return h('li', {}, inlineMd(r)); }))) : null));
+      });
+      mark(p.id, { seen: true });
+      after.replaceChildren(h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: function () { setMode('test'); window.scrollTo(0, 0); } } }, 'J’ai lu : me tester sur la fiche'), footer());
     }
     function draw(test) {
       const hidden = [];
@@ -169,6 +195,9 @@
           : h('a', { class: 'btn btn--secondary btn--block', href: '#/parasito' }, 'Toutes les fiches'));
     }
 
+    const toc = (p.sections || []).length > 3 ? h('div', { class: 'pz-toc' }, (p.sections || []).map(function (s, i) {
+      return h('a', { class: 'pill pill--kind', href: 'javascript:void 0', on: { click: function (e) { e.preventDefault(); const el = document.getElementById('pz-s' + i); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } } }, str(s.h));
+    })) : null;
     const g = GROUPS.find(function (x) { return x[0] === p.group; });
     page.append(
       h('div', {},
@@ -176,11 +205,8 @@
         h('h2', { style: 'margin:4px 0 0' }, str(p.title)),
         p.agent ? h('p', { class: 'pz-card__agent', style: 'margin-top:2px' }, str(p.agent)) : null),
       p.hook ? h('div', { class: 'pz-hook' }, str(p.hook)) : null,
-      (p.sections || []).length > 3 ? h('div', { class: 'pz-toc' }, (p.sections || []).map(function (s, i) {
-        return h('a', { class: 'pill pill--kind', href: 'javascript:void 0', on: { click: function (e) { e.preventDefault(); const el = document.getElementById('pz-s' + i); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } } }, str(s.h));
-      })) : null,
-      seg, body, after);
-    draw(false);
+      seg, toc, body, after);
+    setMode(hasX ? 'explain' : 'read');
     root.appendChild(page);
   }
 
