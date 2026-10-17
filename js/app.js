@@ -90,7 +90,8 @@
     ['#/algos',                   'algos',      'items',    'Algos de stage',      true,  {}],
     ['#/algos/:id',               'algos',      'items',    'Algo',                true,  {}],
     ['#/parasito',                'parasito',   'items',    'Parasito-myco',       true,  {}],
-    ['#/parasito/:id',            'parasito',   'items',    'Fiche parasito',      true,  {}]
+    ['#/parasito/:id',            'parasito',   'items',    'Fiche parasito',      true,  {}],
+    ['#/parasito/:id/cartes',     'parasito',   'items',    'Cartes parasito',     true,  { train: true }]
   ];
 
   function itemShort(num) {
