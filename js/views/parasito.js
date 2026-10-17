@@ -70,10 +70,9 @@
       '.pz-retenir ul{margin:4px 0 0;padding-left:1.1em}',
       '.pz-retenir li{margin:.2em 0;font-weight:600}',
       '.pz-train{display:grid;gap:4px;padding:12px 14px;border-radius:var(--r-m);background:var(--surface);box-shadow:var(--shadow-1);border-left:4px solid var(--bad);color:inherit;text-decoration:none}',
-      '.pz-train:hover{text-decoration:none;box-shadow:var(--shadow-2)}',
       '.pz-train__t{font:700 1rem/1.25 var(--font-display)}',
       '.pz-train__s{font-size:.8125rem;color:var(--muted)}',
-      '.pz-train .btn{justify-self:start;margin-top:4px}',
+      '.pz-train__btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}',
       '.pz-card-q{padding:14px 16px;border-radius:var(--r-m);background:var(--surface);box-shadow:var(--shadow-1)}',
       '.pz-q{font:600 1.0625rem/1.4 var(--font-display);margin-top:6px}',
       '.pz-a{padding:12px 14px;border-radius:var(--r-m);background:var(--surface-2);line-height:1.45}',
@@ -230,15 +229,26 @@
   const DAY = 86400000;
   function loadSrs() { try { return JSON.parse(localStorage.getItem(LS_SRS) || '{}') || {}; } catch (e) { return {}; } }
   function saveSrs(st) { try { localStorage.setItem(LS_SRS, JSON.stringify(st)); } catch (e) { /* stockage indisponible */ } }
+  /* Flashcards et QROC entrelacés proportionnellement, pour qu'une session mélange toujours les deux. */
   function cardsOf(p) {
     const c = p.cards || {};
-    return (c.flash || []).map(function (x) { return Object.assign({ kind: 'flash', fiche: p }, x); })
-      .concat((c.qroc || []).map(function (x) { return Object.assign({ kind: 'qroc', fiche: p }, x); }));
+    const f = (c.flash || []).map(function (x) { return Object.assign({ kind: 'flash', fiche: p }, x); });
+    const q = (c.qroc || []).map(function (x) { return Object.assign({ kind: 'qroc', fiche: p }, x); });
+    const out = [];
+    let i = 0, j = 0;
+    while (i < f.length || j < q.length) {
+      if (j >= q.length || (i < f.length && i / f.length <= j / q.length)) out.push(f[i++]);
+      else out.push(q[j++]);
+    }
+    return out;
   }
-  function allCards(scope) { return (scope ? [scope] : list()).reduce(function (a, p) { return a.concat(cardsOf(p)); }, []); }
-  function counts(scope) {
+  function allCards(scope, type) {
+    const all = (scope ? [scope] : list()).reduce(function (a, p) { return a.concat(cardsOf(p)); }, []);
+    return type === 'qroc' || type === 'flash' ? all.filter(function (c) { return c.kind === type; }) : all;
+  }
+  function counts(scope, type) {
     const st = loadSrs(), now = Date.now();
-    const cards = allCards(scope);
+    const cards = allCards(scope, type);
     let due = 0, fresh = 0, known = 0;
     cards.forEach(function (c) {
       const s = st[c.id];
@@ -248,9 +258,9 @@
     return { due: due, fresh: fresh, known: known, total: cards.length };
   }
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
-  function buildSession(scope, size) {
+  function buildSession(scope, size, type) {
     const st = loadSrs(), now = Date.now();
-    const cards = allCards(scope);
+    const cards = allCards(scope, type);
     const due = cards.filter(function (c) { return st[c.id] && st[c.id].d <= now; }).sort(function (a, b) { return st[a.id].d - st[b.id].d; });
     const fresh = cards.filter(function (c) { return !st[c.id]; });
     return shuffle(due.slice(0, size).concat(fresh.slice(0, Math.max(0, size - due.length))));
@@ -276,24 +286,27 @@
   function trainBlock(scope) {
     const n = counts(scope);
     if (!n.total) return null;
-    const todo = Math.min(20, n.due + n.fresh);
-    const href = '#/parasito/' + encodeURIComponent(scope ? scope.id : 'toutes') + '/cartes';
-    return h('a', { class: 'pz-train', href: href },
+    const nf = allCards(scope, 'flash').length, nq = allCards(scope, 'qroc').length;
+    const base = '#/parasito/' + encodeURIComponent(scope ? scope.id : 'toutes') + '/cartes';
+    return h('div', { class: 'pz-train' },
       h('div', { class: 'pz-train__t' }, scope ? 'S’entraîner sur cette fiche' : 'Réviser les cartes parasito'),
-      h('div', { class: 'pz-train__s' }, (n.due ? n.due + ' à revoir · ' : '') + n.fresh + ' nouvelles · ' + n.known + ' / ' + n.total + ' bien sues'),
-      h('span', { class: 'btn btn--primary btn--sm' }, todo ? 'Lancer ' + todo + ' cartes' : 'Tout est à jour'));
+      h('div', { class: 'pz-train__s' }, nf + ' flashcards · ' + nq + ' QROC — ' + (n.due ? n.due + ' à revoir · ' : '') + n.fresh + ' nouvelles · ' + n.known + ' bien sues'),
+      h('div', { class: 'pz-train__btns' },
+        h('a', { class: 'btn btn--primary btn--sm', href: base }, 'Mixte'),
+        nq ? h('a', { class: 'btn btn--outline btn--sm', href: base + '?type=qroc' }, 'QROC') : null,
+        nf ? h('a', { class: 'btn btn--outline btn--sm', href: base + '?type=flash' }, 'Flashcards') : null));
   }
 
-  function renderTrain(scope, root) {
+  function renderTrain(scope, root, type) {
     const page = h('div', { class: 'page stack' });
-    const queue = buildSession(scope, 20);
+    const queue = buildSession(scope, 20, type);
     const total = queue.length;
     let done = 0, good = 0;
     const missed = {};
     const head = h('div', { class: 'cluster' });
     const stage = h('div', { class: 'stack' });
     const back = scope ? '#/parasito/' + encodeURIComponent(scope.id) : '#/parasito';
-    page.append(h('div', {}, h('div', { class: 'caption' }, 'Cartes parasito · rang A'), h('h2', { style: 'margin:4px 0 0' }, scope ? str(scope.title) : 'Toutes les fiches')), head, stage);
+    page.append(h('div', {}, h('div', { class: 'caption' }, (type === 'qroc' ? 'QROC' : type === 'flash' ? 'Flashcards' : 'Flashcards + QROC') + ' parasito · rang A'), h('h2', { style: 'margin:4px 0 0' }, scope ? str(scope.title) : 'Toutes les fiches')), head, stage);
     root.appendChild(page);
     if (!total) {
       stage.append(h('div', { class: 'empty' }, h('div', { class: 'empty__title' }, 'Rien à revoir pour l’instant'), 'Reviens plus tard : les cartes reviennent quand il faut.'),
@@ -350,24 +363,24 @@
     }
     function finish() {
       head.replaceChildren();
-      const n = counts(scope);
+      const n = counts(scope, type);
       stage.replaceChildren(
         h('div', { class: 'feedback feedback--ok' }, 'Session terminée : ' + good + ' / ' + total + ' sues du premier coup.'),
         h('p', { class: 'secondary' }, n.known + ' / ' + n.total + ' cartes bien sues' + (n.fresh ? ' · ' + n.fresh + ' nouvelles restantes' : '') + '.'),
-        h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: function () { root.replaceChildren(); renderTrain(scope, root); } } }, 'Encore une session'),
+        h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: function () { root.replaceChildren(); renderTrain(scope, root, type); } } }, 'Encore une session'),
         h('a', { class: 'btn btn--secondary btn--block', href: back }, scope ? 'Retour à la fiche' : 'Retour aux fiches'));
     }
     next();
   }
 
-  function render(params) {
+  function render(params, query) {
     ensureStyles();
     const root = h('div', { class: 'view-parasito' });
     const id = str(params && params.id);
     if (params && params.train) {
       const scope = id === 'toutes' ? null : list().find(function (x) { return x.id === id; });
       root.dataset.title = 'Cartes parasito';
-      renderTrain(scope || null, root);
+      renderTrain(scope || null, root, query && query.type);
       return root;
     }
     if (id) {
