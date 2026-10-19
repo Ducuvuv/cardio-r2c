@@ -77,7 +77,9 @@
       '.pz-q{font:600 1.0625rem/1.4 var(--font-display);margin-top:6px}',
       '.pz-a{padding:12px 14px;border-radius:var(--r-m);background:var(--surface-2);line-height:1.45}',
       '.view-parasito .input{width:100%;padding:12px;border-radius:10px;border:2px solid var(--line);background:var(--surface);color:var(--ink);font-size:1rem}',
-      '.grades .is-hint{outline:2px solid currentColor;outline-offset:1px}'
+      '.grades .is-hint{outline:2px solid currentColor;outline-offset:1px}',
+      '.pz-expl{padding:10px 12px;border-radius:var(--r-m);border-left:4px solid var(--blue);background:var(--blue-soft);line-height:1.45}',
+      '.pz-expl p{margin:.35em 0}'
     ].join('\n');
     const st = document.createElement('style');
     st.textContent = css;
@@ -263,6 +265,7 @@
     const cards = allCards(scope, type);
     const due = cards.filter(function (c) { return st[c.id] && st[c.id].d <= now; }).sort(function (a, b) { return st[a.id].d - st[b.id].d; });
     const fresh = cards.filter(function (c) { return !st[c.id]; });
+    fresh.sort(function (a, b) { return (a.rank === 'B' ? 1 : 0) - (b.rank === 'B' ? 1 : 0); });
     return shuffle(due.slice(0, size).concat(fresh.slice(0, Math.max(0, size - due.length))));
   }
   function grade(id, ok) {
@@ -270,6 +273,32 @@
     const b = ok ? Math.min(STEPS.length - 1, (cur.b || 0) + 1) : 0;
     st[id] = { b: b, d: ok ? Date.now() + STEPS[b] * DAY : Date.now() + 10 * 60000 };
     saveSrs(st);
+  }
+  /* Indice : nombre d'éléments attendus + première lettre de chaque mot-clé ; chiffres remplacés par « ? ». */
+  function hintText(c) {
+    const src = str(c.a);
+    let terms = [];
+    if (c.kind === 'qroc') terms = [src];
+    else { const re = /\*\*(.+?)\*\*/g; let m; while ((m = re.exec(src))) terms.push(m[1]); }
+    if (!terms.length) terms = [src.split(/[;:(]/)[0]];
+    const KEEP = { de: 1, du: 1, des: 1, la: 1, le: 1, les: 1, l: 1, d: 1, à: 1, a: 1, au: 1, aux: 1, et: 1, ou: 1, en: 1, par: 1, sur: 1, '+': 1, '/': 1, '-': 1, '×': 1 };
+    if (terms.length === 1 && /^(oui|non)\b/i.test(terms[0].replace(/\*\*/g, '').trim())) return 'Réponse fermée : oui ou non, puis la nuance.';
+    const masked = terms.slice(0, 6).map(function (t) {
+      t = t.replace(/\*\*/g, '').trim();
+      return t.split(/\s+/).map(function (w) {
+        if (KEEP[w.toLowerCase()]) return w;
+        if (/\d/.test(w)) return w.replace(/\d+(?:[.,]\d+)?/g, '?').replace(/[A-Za-zÀ-ÿ]{2,}/g, function (x) { return /^(mg|g|kg|µg|ml|mL|l|L|h|j|min|mmHg|mmol|µmol|UI|MUI|cm|mm|ans?|mois|sem|semaines?|jours?|heures?|fois|cp|G)$/.test(x) ? x : x.charAt(0) + '…'; });
+        if (!/[A-Za-zÀ-ÿ]/.test(w) || /^(mg|g|kg|µg|ml|mL|l|L|h|j|min|mmHg|mmol|µmol|UI|MUI|cm|mm|ans?|mois|sem|semaines?|jours?|heures?|fois|cp|G)[/.,;:)]*$/.test(w)) return w;
+        return w.charAt(0) + '…';
+      }).join(' ');
+    });
+    return (terms.length > 1 ? terms.length + ' éléments clés : ' : '') + masked.join(' · ');
+  }
+  /* Correction enrichie : c.e = explication (paragraphes markdown : pourquoi, lien, astuce, piège). */
+  function explBox(c, cls) {
+    if (!c.e) return null;
+    const paras = str(c.e).split(/\n\s*\n|\n/).map(function (t) { return t.trim(); }).filter(Boolean);
+    return h('div', { class: cls }, h('span', { class: 'caption' }, 'Pour bien comprendre'), paras.map(function (t) { return h('p', {}, inlineMd(t)); }));
   }
   function normAns(v) {
     return str(v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9%]+/g, ' ').trim();
@@ -335,7 +364,12 @@
           missed[c.id] ? h('span', { class: 'pill pill--warn' }, 'deuxième passage') : null),
         h('div', { class: 'pz-q' }, inlineMd(c.q)));
       const ans = h('div', { class: 'stack' });
-      stage.replaceChildren(card, ans);
+      const hintBox = h('div', { class: 'secondary', style: 'display:none;padding:8px 10px;border-radius:10px;background:var(--surface-2)' });
+      const hintBtn = h('button', { type: 'button', class: 'btn btn--outline btn--sm', style: 'justify-self:start', on: { click: function () {
+        hintBox.textContent = '💡 ' + hintText(c); hintBox.style.display = ''; hintBtn.remove();
+      } } }, 'Indice');
+      card.append(hintBox);
+      stage.replaceChildren(card, hintBtn, ans);
       function gradeBtns(hint) {
         return h('div', { class: 'grades', style: 'grid-template-columns:1fr 1fr' },
           h('button', { type: 'button', class: 'btn grade--again' + (hint === false ? ' is-hint' : ''), on: { click: function () { answer(c, false); } } }, 'À revoir'),
@@ -343,7 +377,8 @@
       }
       if (c.kind === 'flash') {
         ans.appendChild(h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: function () {
-          ans.replaceChildren(h('div', { class: 'pz-a' }, inlineMd(c.a)), gradeBtns());
+          hintBtn.remove();
+          ans.replaceChildren(h('div', { class: 'pz-a' }, inlineMd(c.a)), explBox(c, 'pz-expl'), gradeBtns());
         } } }, 'Voir la réponse'));
         return;
       }
@@ -351,10 +386,12 @@
       function check() {
         const v = input.value.trim();
         const ok = looksRight(v, c);
+        hintBtn.remove();
         ans.replaceChildren(
           h('div', { class: 'feedback ' + (ok ? 'feedback--ok' : 'feedback--warn') }, ok ? 'Correct !' : (v ? 'Compare avec la réponse attendue' : 'Réponse attendue')),
           h('div', { class: 'pz-a' }, h('strong', {}, str(c.a)), c.x ? h('div', { class: 'secondary', style: 'margin-top:4px' }, inlineMd(c.x)) : null),
           v ? h('p', { class: 'secondary muted' }, 'Ta réponse : ' + v) : null,
+          explBox(c, 'pz-expl'),
           gradeBtns(v ? ok : undefined));
       }
       input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); check(); } });
