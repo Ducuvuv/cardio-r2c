@@ -384,6 +384,7 @@
     const chips = [
       { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
       { label: 'Parasito-myco', href: '#/parasito', ico: 'list', parasito: true },
+      { label: 'Traitements · 3 Collèges', href: '#/ttt', ico: 'pill' },
       { label: 'Examens en pneumo', href: '#/points/pneumo-examens', ico: 'search' },
       { label: 'Récaps Pareto', href: '#/pareto', ico: 'list' },
       { label: 'QROC', href: '#/review?mode=smart&kind=qroc&autostart=1', ico: 'edit' },

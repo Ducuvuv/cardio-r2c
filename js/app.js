@@ -94,7 +94,10 @@
     ['#/parasito/:id/cartes',     'parasito',   'items',    'Cartes parasito',     true,  { train: true }],
     ['#/points',                  'points',     'items',    'Points cours',        true,  {}],
     ['#/points/:id',              'points',     'items',    'Point cours',         true,  {}],
-    ['#/points/:id/:exam',        'points',     'items',    'Point cours',         true,  {}]
+    ['#/points/:id/:exam',        'points',     'items',    'Point cours',         true,  {}],
+    ['#/ttt',                     'ttt',        'items',    'Traitements',         true,  {}],
+    ['#/ttt/:id',                 'ttt',        'items',    'Traitement',          true,  {}],
+    ['#/ttt/:id/cartes',          'ttt',        'items',    'Cartes traitements',  true,  { train: true }]
   ];
 
   function itemShort(num) {
