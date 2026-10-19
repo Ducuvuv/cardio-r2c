@@ -182,5 +182,85 @@
   "license": "CC BY-SA 4.0",
   "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
   "source": "https://commons.wikimedia.org/wiki/File%3AWiggers_Diagram_2.svg"
+ },
+ {
+  "file": "dermato-erysipele.jpg",
+  "title": "%C3%89rysip%C3%A8le_jambe-_Leg_erysipelas.jpg",
+  "author": "Grook Da Oger",
+  "license": "CC BY-SA 3.0",
+  "licenseUrl": "",
+  "source": "https://commons.wikimedia.org/wiki/File:%C3%89rysip%C3%A8le_jambe-_Leg_erysipelas.jpg"
+ },
+ {
+  "file": "dermato-herpes-labial.jpg",
+  "title": "Herpes_labialis.jpg",
+  "author": "Metju12",
+  "license": "domaine public",
+  "licenseUrl": "",
+  "source": "https://commons.wikimedia.org/wiki/File:Herpes_labialis.jpg"
+ },
+ {
+  "file": "dermato-melanome-asymetrique.jpg",
+  "title": "Asymmetrical_melanoma.jpg",
+  "author": "National Cancer Institute",
+  "license": "domaine public",
+  "licenseUrl": "",
+  "source": "https://commons.wikimedia.org/wiki/File:Asymmetrical_melanoma.jpg"
+ },
+ {
+  "file": "dermato-urticaire.jpg",
+  "title": "Hives_urticaria.jpg",
+  "author": "Psixtras",
+  "license": "CC0",
+  "licenseUrl": "",
+  "source": "https://commons.wikimedia.org/wiki/File:Hives_urticaria.jpg"
+ },
+ {
+  "file": "dermato-pemphigoide-bulleuse.jpg",
+  "title": "Bullous_pemphigoid_new_image.jpg",
+  "author": "Mohammad2018",
+  "license": "CC BY-SA 4.0",
+  "licenseUrl": "",
+  "source": "https://commons.wikimedia.org/wiki/File:Bullous_pemphigoid_new_image.jpg"
+ },
+ {
+  "file": "parasito-oxyure-oeufs.png",
+  "title": "Enterobius_vermicularis.png",
+  "author": "CDC DPDx",
+  "license": "domaine public",
+  "licenseUrl": "",
+  "source": "https://commons.wikimedia.org/wiki/File:Enterobius_vermicularis.png"
+ },
+ {
+  "file": "pneumo-pneumothorax-rx.jpg",
+  "title": "X-ray_subtle_pneumothorax_in_inspiration_-_annotated.jpg",
+  "author": "Mikael Häggström",
+  "license": "CC0",
+  "licenseUrl": "",
+  "source": "https://commons.wikimedia.org/wiki/File:X-ray_subtle_pneumothorax_in_inspiration_-_annotated.jpg"
+ },
+ {
+  "file": "pneumo-pleuresie-gauche-rx.jpg",
+  "title": "Left-sided_Pleural_Effusion.jpg",
+  "author": "Clinical_C",
+  "license": "CC BY-SA 2.5",
+  "licenseUrl": "",
+  "source": "https://commons.wikimedia.org/wiki/File:Left-sided_Pleural_Effusion.jpg"
+ },
+ {
+  "file": "pneumo-pneumonie-lobaire-rx.jpg",
+  "title": "X-ray_of_lobar_pneumonia.jpg",
+  "author": "Mikael Häggström",
+  "license": "CC0",
+  "licenseUrl": "",
+  "source": "https://commons.wikimedia.org/wiki/File:X-ray_of_lobar_pneumonia.jpg"
+ },
+ {
+  "file": "pneumo-pleuresie-bilaterale-rx.jpg",
+  "title": "Bilateral_Pleural_Effusion.jpg",
+  "author": "Sara Nabih",
+  "license": "CC BY-SA 4.0",
+  "licenseUrl": "",
+  "source": "https://commons.wikimedia.org/wiki/File:Bilateral_Pleural_Effusion.jpg"
  }
 ]

@@ -47,6 +47,7 @@
     if (styled) return;
     styled = true;
     const css = [
+      '.card-fig{margin:10px 0 0}', '.card-fig img{display:block;max-width:100%%;max-height:300px;margin:0 auto;border-radius:10px;background:#000}', '.card-fig figcaption{font-size:.6875rem;color:var(--muted);text-align:center;margin-top:4px}',
       '.pz-list{display:grid;gap:10px}',
       '.pz-card{display:block;padding:14px 16px;border-radius:var(--r-m);background:var(--surface);box-shadow:var(--shadow-1);color:inherit;text-decoration:none}',
       '.pz-card:hover{box-shadow:var(--shadow-2);text-decoration:none}',
@@ -362,7 +363,9 @@
           h('span', { class: 'pill ' + (c.kind === 'qroc' ? 'pill--info' : 'pill--kind') }, c.kind === 'qroc' ? 'QROC' : 'Flashcard'),
           !scope ? h('span', { class: 'secondary muted' }, str(c.fiche.title)) : null,
           missed[c.id] ? h('span', { class: 'pill pill--warn' }, 'deuxième passage') : null),
-        h('div', { class: 'pz-q' }, inlineMd(c.q)));
+        h('div', { class: 'pz-q' }, inlineMd(c.q)),
+        c.img ? h('figure', { class: 'card-fig' }, h('a', { href: c.img, target: '_blank', rel: 'noopener' }, h('img', { src: c.img, alt: 'Image de la question', loading: 'lazy' })),
+          h('figcaption', {}, str(c.credit || ''), c.src ? h('a', { href: c.src, target: '_blank', rel: 'noopener' }, ' · source') : null)) : null);
       const ans = h('div', { class: 'stack' });
       const hintBox = h('div', { class: 'secondary', style: 'display:none;padding:8px 10px;border-radius:10px;background:var(--surface-2)' });
       const hintBtn = h('button', { type: 'button', class: 'btn btn--outline btn--sm', style: 'justify-self:start', on: { click: function () {
