@@ -1392,6 +1392,37 @@
     if (!text) return null;
     return h('div', { class: 'pitfall' }, h('span', { class: 'caption' }, 'Piège'), md(text));
   }
+  /* Correction enrichie (d.deep) : « Pourquoi / À relier / Astuce / Piège » (docs/CARDIO_QUALITY.md). */
+  function deepEl(text) {
+    if (!text) return null;
+    const lines = txt(text).split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    return h('div', { class: 'explain qz-deep', style: 'border-left:4px solid var(--blue);background:var(--blue-soft)' },
+      h('span', { class: 'caption' }, 'Pour bien comprendre'), lines.map((l) => md(l)));
+  }
+  /* Indice : QROC → premières lettres / chiffres masqués ; QRM → nombre de bonnes réponses. */
+  function hintText(d) {
+    const type = txt(d.type).toUpperCase();
+    if (type === 'QRM') {
+      const n = (Array.isArray(d.options) ? d.options : []).filter((o) => o && o.ok).length;
+      return n ? n + ' bonne' + (n > 1 ? 's' : '') + ' réponse' + (n > 1 ? 's' : '') + ' sur ' + d.options.length : '';
+    }
+    if (type === 'QRU') return 'Une seule bonne réponse : élimine d’abord les propositions absolues ou hors sujet.';
+    const KEEP = { de: 1, du: 1, des: 1, la: 1, le: 1, les: 1, l: 1, d: 1, à: 1, a: 1, au: 1, aux: 1, et: 1, ou: 1, en: 1, par: 1, sur: 1, '+': 1, '/': 1, '-': 1 };
+    const UNIT = /^(mg|g|kg|µg|ml|mL|l|L|h|j|min|mmHg|mmol|µmol|UI|cm|mm|ans?|mois|sem|semaines?|jours?|heures?|fois|bpm|ms|%|G|g\/L|mmol\/L|µg\/L|mm\/s|mV)[/.,;:)]*$/;
+    return txt(d.answer).split(/\s+/).filter(Boolean).map((w) => {
+      if (KEEP[w.toLowerCase()] || UNIT.test(w) || !/[A-Za-zÀ-ÿ0-9]/.test(w)) return w;
+      if (/\d/.test(w)) return w.replace(/\d+(?:[.,]\d+)?/g, '?');
+      return w.charAt(0) + '…';
+    }).join(' ');
+  }
+  function hintBtn(d, host) {
+    const t = hintText(d);
+    if (!t) return null;
+    const box = h('div', { class: 'secondary', style: 'display:none;padding:8px 10px;border-radius:10px;background:var(--surface-2)' });
+    const btn = h('button', { type: 'button', class: 'btn btn--outline btn--sm', style: 'align-self:flex-start', on: { click: () => { box.textContent = '💡 ' + t; box.style.display = ''; btn.remove(); } } }, 'Indice');
+    host.push(box);
+    return btn;
+  }
   function srcEl(src) {
     return src ? h('div', { class: 'src' }, txt(src)) : null;
   }
@@ -1446,10 +1477,13 @@
 
     const slot = h('div', { class: 'qz-slot', 'aria-live': 'polite' });
     const after = h('div', { class: 'stack', hidden: true });
+    const hintBoxes = [];
+    const qHint = hintBtn(d, hintBoxes);
     const el = h('div', { class: 'stack' },
       h('div', { class: 'card qz-card' },
         h('span', { class: 'caption' }, isQru ? 'Une seule réponse' : 'Une ou plusieurs réponses'),
-        md(d.stem, 'qz-stem')),
+        md(d.stem, 'qz-stem'), hintBoxes[0] || null),
+      qHint,
       h('div', { class: 'opts', role: 'group', 'aria-label': 'Propositions' }, rows.map((r) => r.btn)),
       slot, after);
 
@@ -1480,7 +1514,8 @@
       haptic();
       slot.replaceChildren(feedbackEl(tone, line, sub));
       const grades = ctx.gradeBar({ score, ms, onGrade: (g) => ctx.finish({ score, grade: g, ms, details: { type: d.type, discordances: disc, difficulty: d.difficulty, selected: Array.from(selected) } }) });
-      after.replaceChildren(explainEl('Explication', d.explanation), trapEl(d.trap), srcEl(d.src), grades);
+      if (qHint) qHint.remove();
+      after.replaceChildren(explainEl('Explication', d.explanation), deepEl(d.deep), trapEl(d.trap), srcEl(d.src), grades);
       after.hidden = false;
       scrollIntoView(slot);
     }
@@ -1510,8 +1545,11 @@
     });
     const slot = h('div', { class: 'qz-slot', 'aria-live': 'polite' });
     const after = h('div', { class: 'stack', hidden: true });
+    const hintBoxes = [];
+    const qHint = hintBtn(d, hintBoxes);
     const el = h('div', { class: 'stack' },
-      h('div', { class: 'card qz-card' }, h('span', { class: 'caption' }, 'Réponse courte'), md(d.question, 'qz-stem')),
+      h('div', { class: 'card qz-card' }, h('span', { class: 'caption' }, 'Réponse courte'), md(d.question, 'qz-stem'), hintBoxes[0] || null),
+      qHint,
       h('div', { class: 'field' }, input, h('span', { class: 'field__hint' }, 'Réponds en quelques mots, puis compare.')),
       slot, after);
 
@@ -1583,7 +1621,8 @@
         score, ms, title: 'Ta réponse était…',
         onGrade: (g) => ctx.finish({ score: gradeToScore(g), grade: g, ms, details: { given: input.value.slice(0, 200), matched: matched.length, keywords: keywords.length, exact } })
       });
-      after.replaceChildren(answer, kw, explainEl('Explication', d.explanation), srcEl(d.src), grades);
+      if (qHint) qHint.remove();
+      after.replaceChildren(answer, kw, explainEl('Explication', d.explanation), deepEl(d.deep), srcEl(d.src), grades);
       after.hidden = false;
       scrollIntoView(slot);
     }
