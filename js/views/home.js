@@ -401,7 +401,14 @@
       { label: 'Critères diagnostiques', href: '#/criteres', ico: 'target', cardio: true },
       { label: 'Chiffres', href: '#/chiffres', ico: 'chart', cardio: true },
       { label: 'Physiopathologie', href: '#/physio', ico: 'layers', cardio: true }
-    ].filter(function (c) {
+    ].concat([
+      { label: 'QCM', href: '#/review?mode=smart&kind=qcm&autostart=1', ico: 'list', simple: true },
+      { label: 'Flashcards', href: '#/review?mode=smart&kind=flash&autostart=1', ico: 'flash', simple: true }
+    ]).filter(function (c) {
+      const simple = (function () { try { return localStorage.getItem('cardio.simple') !== '0'; } catch (e) { return true; } })();
+      const KEEP = { 'QROC': 1, 'QCM': 1, 'Flashcards': 1, 'Mes erreurs': 1, 'Rang A': 1, 'Parasito-myco': 1 };
+      if (simple && !KEEP[c.label]) return false;
+      if (!simple && c.simple) return false;
       if (c.parasito) { const v = CARDIO.views && CARDIO.views.parasito; return !!(v && v.available && v.available()); }
       return !(cardioOnly && c.cardio);
     });

@@ -921,7 +921,14 @@
       rank: o.rank === 'A' || o.rank === 'B' ? o.rank : null
     };
   }
+  /* Mode simple (Aymen, 2026-10-21) : l'app se limite aux cours + QCM + QROC + flashcards.
+   * Désactivable : localStorage « cardio.simple » = « 0 ». */
+  function simpleMode() {
+    try { return localStorage.getItem('cardio.simple') !== '0'; } catch (e) { return true; }
+  }
+  const SIMPLE_KINDS = ['qcm', 'qroc', 'flash'];
   function matchesFilter(meta, f) {
+    if (simpleMode() && SIMPLE_KINDS.indexOf(meta.kind) < 0) return false;
     if (f.item && String(meta.item) !== f.item) return false;
     if (f.items && f.items.indexOf(String(meta.item)) < 0) return false;
     if (f.kinds && f.kinds.indexOf(meta.kind) < 0) return false;

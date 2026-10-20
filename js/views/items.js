@@ -683,9 +683,10 @@
     }
 
     const cardio = speOf(it) === 'cardio';
-    if (cardio || Number(c.ff) > 0) page.appendChild(flashEntry(it));
-    page.appendChild(paretoEntry(it));
-    try {
+    const simple = (function () { try { return localStorage.getItem('cardio.simple') !== '0'; } catch (e) { return true; } })();
+    if (!simple && (cardio || Number(c.ff) > 0)) page.appendChild(flashEntry(it));
+    if (!simple) page.appendChild(paretoEntry(it));
+    if (!simple) try {
       const al = window.CARDIO.views.algos && window.CARDIO.views.algos.forItem ? window.CARDIO.views.algos.forItem(it.num) : [];
       if (al.length) {
         page.appendChild(h('a', { class: 'hub__ff hub__ff--pareto', href: al.length === 1 ? '#/algos/' + encodeURIComponent(al[0].id) : '#/algos' },
@@ -714,6 +715,7 @@
 
     // Dermato / pneumo : seulement les rubriques qui ont du contenu (questions pour l'instant).
     page.appendChild(h('div', { class: 'hub__grid' }, SECTION_CARDS.filter(function (d) {
+      if (simple && ['cours', 'qcm', 'mnemos'].indexOf(d.key) < 0) return false;
       if (d.onlyIf && !(Number(c[d.onlyIf]) > 0)) return false;
       return cardio || d.counts.some(function (k) { return Number(c[k]) > 0; });
     }).map(function (d) { return sectionCard(it, d); })));
