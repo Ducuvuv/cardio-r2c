@@ -4,6 +4,7 @@
  * snapshot/restore, global error handler. Loaded last.
  */
 (function () {
+  try { if (localStorage.getItem('cardio.bed') === '1') document.documentElement.style.fontSize = '112.5%'; } catch (e) { /* ignore */ }
   'use strict';
 
   const C = (window.CARDIO = window.CARDIO || {});
@@ -95,6 +96,8 @@
     ['#/points',                  'points',     'items',    'Points cours',        true,  {}],
     ['#/points/:id',              'points',     'items',    'Point cours',         true,  {}],
     ['#/points/:id/:exam',        'points',     'items',    'Point cours',         true,  {}],
+    ['#/observation',             'observation', 'items',   'Observation',         true,  {}],
+    ['#/observation/:id',         'observation', 'items',   'Observation',         true,  {}],
     ['#/ttt',                     'ttt',        'items',    'Traitements',         true,  {}],
     ['#/ttt/:id',                 'ttt',        'items',    'Traitement',          true,  {}],
     ['#/ttt/:id/cartes',          'ttt',        'items',    'Cartes traitements',  true,  { train: true }]

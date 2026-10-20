@@ -382,6 +382,7 @@
     const spe = activeSpe();
     const cardioOnly = spe !== 'all' && spe !== 'cardio';
     const chips = [
+      { label: 'Observation', href: '#/observation', ico: 'case', obs: true },
       { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
       { label: 'Parasito-myco', href: '#/parasito', ico: 'list', parasito: true },
       { label: 'Traitements · 3 Collèges', href: '#/ttt', ico: 'pill' },
@@ -406,7 +407,8 @@
       { label: 'Flashcards', href: '#/review?mode=smart&kind=flash&autostart=1', ico: 'flash', simple: true }
     ]).filter(function (c) {
       const simple = (function () { try { return localStorage.getItem('cardio.simple') !== '0'; } catch (e) { return true; } })();
-      const KEEP = { 'QROC': 1, 'QCM': 1, 'Flashcards': 1, 'Mes erreurs': 1, 'Rang A': 1, 'Parasito-myco': 1 };
+      const KEEP = { 'Observation': 1, 'QROC': 1, 'QCM': 1, 'Flashcards': 1, 'Mes erreurs': 1, 'Rang A': 1, 'Parasito-myco': 1 };
+      if (c.obs) { const v = CARDIO.views && CARDIO.views.observation; if (!(v && v.available && v.available())) return false; }
       if (simple && !KEEP[c.label]) return false;
       if (!simple && c.simple) return false;
       if (c.parasito) { const v = CARDIO.views && CARDIO.views.parasito; return !!(v && v.available && v.available()); }

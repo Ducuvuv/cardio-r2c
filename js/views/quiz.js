@@ -1536,6 +1536,7 @@
 
   function renderQroc(card, ctx) {
     const d = ctx.data;
+    const bed = (function () { try { return localStorage.getItem('cardio.bed') === '1'; } catch (e) { return false; } })();
     const norm = (s) => (U().normalize ? U().normalize(s) : txt(s).toLowerCase().trim());
     let validated = false;
     const input = h('input', {
@@ -1550,7 +1551,8 @@
     const el = h('div', { class: 'stack' },
       h('div', { class: 'card qz-card' }, h('span', { class: 'caption' }, 'Réponse courte'), md(d.question, 'qz-stem'), hintBoxes[0] || null),
       qHint,
-      h('div', { class: 'field' }, input, h('span', { class: 'field__hint' }, 'Réponds en quelques mots, puis compare.')),
+      bed ? h('p', { class: 'secondary muted' }, 'Réponds de tête, puis révèle la réponse et note-toi honnêtement.')
+        : h('div', { class: 'field' }, input, h('span', { class: 'field__hint' }, 'Réponds en quelques mots, puis compare.')),
       slot, after);
 
     function validate() {
@@ -1600,7 +1602,8 @@
       const ratio = exact ? 1 : keywords.length ? matched.length / keywords.length : 0;
       const score = exact || (keywords.length && ratio >= 0.999) ? 1 : ratio > 0 ? 0.5 : 0;
       let tone, line;
-      if (!given) { tone = 'info'; line = 'Pas de réponse — lis la correction.'; }
+      if (!given && bed) { tone = 'info'; line = 'Compare avec ta réponse de tête.'; }
+      else if (!given) { tone = 'info'; line = 'Pas de réponse — lis la correction.'; }
       else if (exact) { tone = 'ok'; line = 'Juste.'; }
       else if (score === 1) { tone = 'ok'; line = 'Tous les mots-clés sont là.'; }
       else if (score === 0.5) { tone = 'warn'; line = 'Presque : ' + matched.length + ' / ' + keywords.length + ' mots-clés.'; }
@@ -1627,7 +1630,7 @@
       scrollIntoView(slot);
     }
 
-    ctx.action.set({ label: 'Valider', onClick: validate, hint: 'Entrée pour valider' });
+    ctx.action.set(bed ? { label: 'Voir la réponse', onClick: validate, hint: '' } : { label: 'Valider', onClick: validate, hint: 'Entrée pour valider' });
     return el;
   }
 

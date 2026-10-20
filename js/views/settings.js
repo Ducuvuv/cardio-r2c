@@ -285,6 +285,12 @@
       saveProfile('theme', theme, 'Thème ' + ({ system: 'système', light: 'clair', dark: 'sombre' })[theme] + ' activé.');
     }
 
+    var bedOn = (function () { try { return localStorage.getItem('cardio.bed') === '1'; } catch (e) { return false; } })();
+    var bed = switchCtl('set-bed', bedOn, function (on) {
+      try { localStorage.setItem('cardio.bed', on ? '1' : '0'); } catch (e) { /* ignore */ }
+      document.documentElement.style.fontSize = on ? '112.5%' : '';
+      saveProfile('bed', on, on ? 'Mode lit activé : QROC sans clavier, texte agrandi.' : 'Mode lit désactivé.');
+    });
     var sound = switchCtl('set-sound', p.sound, function (on) { saveProfile('sound', on, on ? 'Sons activés.' : 'Sons désactivés.'); });
     var hapt = switchCtl('set-haptics', p.haptics, function (on) {
       saveProfile('haptics', on, on ? 'Vibrations activées.' : 'Vibrations désactivées.');
@@ -298,6 +304,7 @@
       row('Nouvelles cartes par jour', 'Au-delà des cartes dues, combien de cartes jamais vues ajouter.', newPer, true),
       row('Rétention cible', 'Probabilité de te souvenir d’une carte au moment où elle revient : plus elle est haute, plus les révisions sont rapprochées.', ret, true),
       row('Thème', null, seg),
+      row('Mode lit', 'Réviser allongé, d’une main : QROC sans clavier (tu réponds de tête puis tu révèles) et texte agrandi. Associe-le au thème sombre le soir.', bed),
       row('Sons', 'Petit son à la validation.', sound),
       row('Vibrations', 'Retour haptique sur téléphone.', hapt)
     ));
