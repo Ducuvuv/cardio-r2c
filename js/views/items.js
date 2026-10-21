@@ -384,6 +384,15 @@
     const total = def.counts.reduce(function (n, k) { return n + (Number(c[k]) || 0); }, 0);
     const km = (def.course || def.noMastery) ? null : kindMastery(it.num, def.counts, c);
     const empty = !total && !def.always;
+    // Traitements cardio v2 (views/ttt2.js) : toutes les situations de l'item, rien d'isolé ; pneumo/dermato inchangés
+    const t2 = def.key === 'traitements' && speOf(it) === 'cardio' && CARDIO.views.ttt2 && typeof CARDIO.views.ttt2.count === 'function'
+      ? safe(function () { return CARDIO.views.ttt2.count(it.num); }, 0) : 0;
+    if (t2) {
+      return h('a', { class: 'hub__sec', href: '#/ttt2/item/' + encodeURIComponent(it.num) },
+        h('div', { class: 'hub__sec-ico', html: icon(def.ico) }),
+        h('div', { class: 'hub__sec-title' }, def.title),
+        h('div', { class: 'hub__sec-count' }, t2 + ' situation' + (t2 > 1 ? 's' : '') + ' · ordonnances complètes'));
+    }
     return h('a', { class: 'hub__sec' + (empty ? ' is-empty' : ''), href: '#/item/' + it.num + '/' + def.route },
       h('div', { class: 'hub__sec-ico', html: icon(def.ico) }),
       h('div', { class: 'hub__sec-title' }, def.title),
@@ -715,7 +724,7 @@
 
     // Dermato / pneumo : seulement les rubriques qui ont du contenu (questions pour l'instant).
     page.appendChild(h('div', { class: 'hub__grid' }, SECTION_CARDS.filter(function (d) {
-      if (simple && ['cours', 'qcm', 'mnemos'].indexOf(d.key) < 0) return false;
+      if (simple && ['cours', 'qcm', 'mnemos', 'traitements'].indexOf(d.key) < 0) return false;
       if (d.onlyIf && !(Number(c[d.onlyIf]) > 0)) return false;
       return cardio || d.counts.some(function (k) { return Number(c[k]) > 0; });
     }).map(function (d) { return sectionCard(it, d); })));

@@ -60,7 +60,7 @@
     ['#/item/:num',               'items',      'items',    'Item',                true,  { mode: 'hub' }],
     ['#/item/:num/flash',         'flash',      'items',    'Fiche flash',         true,  {}],
     ['#/item/:num/pareto',        'pareto',     'items',    'Récap Pareto',        true,  {}],
-    ['#/item/:num/cours',         'course',     'items',    'Fiche',               true,  { section: 'cours' }],
+    ['#/item/:num/cours',         'fiche2',     'items',    'Fiche',               true,  { section: 'cours' }],   // v2 si CARDIO.registry.fiche2[num], sinon (ou ?v=1) views/course.js
     ['#/item/:num/mnemos',        'course',     'items',    'Mnémos',              true,  { section: 'mnemos' }],
     ['#/item/:num/qcm',           'quiz',       'items',    'Questions',           true,  { mode: 'item' }],
     ['#/item/:num/arbres',        'trees',      'items',    'Arbres décisionnels', true,  {}],
@@ -100,7 +100,12 @@
     ['#/observation/:id',         'observation', 'items',   'Observation',         true,  {}],
     ['#/ttt',                     'ttt',        'items',    'Traitements',         true,  {}],
     ['#/ttt/:id',                 'ttt',        'items',    'Traitement',          true,  {}],
-    ['#/ttt/:id/cartes',          'ttt',        'items',    'Cartes traitements',  true,  { train: true }]
+    ['#/ttt/:id/cartes',          'ttt',        'items',    'Cartes traitements',  true,  { train: true }],
+    ['#/ttt2',                    'ttt2',       'items',    'Traitements cardio',  true,  {}],
+    ['#/ttt2/item/:num',          'ttt2',       'items',    'Traitements',         true,  { kind: 'item' }],
+    ['#/ttt2/item/:num/cartes',   'ttt2',       'items',    'Cartes traitements',  true,  { kind: 'item', train: true }],
+    ['#/ttt2/s/:id',              'ttt2',       'items',    'Situation',           true,  { kind: 'situation' }],
+    ['#/ttt2/c/:id',              'ttt2',       'items',    'Classe',              true,  { kind: 'classe' }]
   ];
 
   function itemShort(num) {

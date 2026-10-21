@@ -381,11 +381,13 @@
   function chipsBlock() {
     const spe = activeSpe();
     const cardioOnly = spe !== 'all' && spe !== 'cardio';
+    // Traitements cardio v2 (views/ttt2.js) quand le contenu est chargé ; pneumo/dermato restent sur #/ttt
+    const ttt2 = !!(CARDIO.views && CARDIO.views.ttt2 && safe(function () { return CARDIO.views.ttt2.available(); }, false));
     const chips = [
       { label: 'Observation', href: '#/observation', ico: 'case', obs: true },
       { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
       { label: 'Parasito-myco', href: '#/parasito', ico: 'list', parasito: true },
-      { label: 'Traitements · 3 Collèges', href: '#/ttt', ico: 'pill' },
+      { label: 'Traitements · 3 Collèges', href: ttt2 && spe === 'cardio' ? '#/ttt2' : '#/ttt', ico: 'pill' },
       { label: 'Examens en pneumo', href: '#/points/pneumo-examens', ico: 'search' },
       { label: 'Récaps Pareto', href: '#/pareto', ico: 'list' },
       { label: 'QROC', href: '#/review?mode=smart&kind=qroc&autostart=1', ico: 'edit' },
@@ -395,7 +397,7 @@
       { label: 'Examen blanc', href: '#/review?mode=exam', ico: 'clock' },
       { label: 'ECG du jour', href: '#/ecg?daily=1', ico: 'ecg', cardio: true },
       { label: 'Arbres', href: '#/trees', ico: 'tree', cardio: true },
-      { label: 'Traitements', href: '#/treatments', ico: 'pill', cardio: true },
+      { label: ttt2 ? 'Traitements cardio' : 'Traitements', href: ttt2 ? '#/ttt2' : '#/treatments', ico: 'pill', cardio: true },
       { label: 'Prise en charge A → Z', href: '#/parcours', ico: 'case', cardio: true },
       { label: 'Examens & gestes', href: '#/examens', ico: 'search', cardio: true },
       { label: 'Sémiologie', href: '#/semio', ico: 'eye', cardio: true },
@@ -407,7 +409,7 @@
       { label: 'Flashcards', href: '#/review?mode=smart&kind=flash&autostart=1', ico: 'flash', simple: true }
     ]).filter(function (c) {
       const simple = (function () { try { return localStorage.getItem('cardio.simple') !== '0'; } catch (e) { return true; } })();
-      const KEEP = { 'Observation': 1, 'QROC': 1, 'QCM': 1, 'Flashcards': 1, 'Mes erreurs': 1, 'Rang A': 1, 'Parasito-myco': 1 };
+      const KEEP = { 'Traitements cardio': 1, 'Observation': 1, 'QROC': 1, 'QCM': 1, 'Flashcards': 1, 'Mes erreurs': 1, 'Rang A': 1, 'Parasito-myco': 1 };
       if (c.obs) { const v = CARDIO.views && CARDIO.views.observation; if (!(v && v.available && v.available())) return false; }
       if (simple && !KEEP[c.label]) return false;
       if (!simple && c.simple) return false;

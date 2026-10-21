@@ -278,6 +278,9 @@
       } } }, s[1]);
     }));
     page.append(seg, h('p', { class: 'secondary' }, 'Toutes les classes de traitements et les gestes du Collège de ' + SPE_LABEL[tab].toLowerCase() + ', rangs A et B : indications, posologies, contre-indications, effets indésirables, surveillance, pièges. Chaque fiche a ses flashcards et ses QROC.'));
+    if (tab === 'cardio' && CARDIO.views.ttt2 && CARDIO.views.ttt2.available()) {
+      page.appendChild(h('a', { class: 'btn btn--primary btn--block', href: '#/ttt2' }, 'Nouvelle version : chaque traitement dans sa situation'));
+    }
     const fiches = list().filter(function (p) { return p.spe === tab; });
     if (!fiches.length) { page.appendChild(h('div', { class: 'empty' }, 'Pas encore de fiches pour ce Collège.')); return page; }
     const tb = trainBlock({ spe: tab });
