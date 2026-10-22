@@ -359,10 +359,6 @@
     body.appendChild(h('h2', { class: 'fiche__h2' }, 'Chiffres clés', h('small', {}, numbers.length ? numbers.length + ' valeurs' : '')));
     body.appendChild(numbersTable(numbers));
 
-    /* L'essentiel */
-    body.appendChild(h('h2', { class: 'fiche__h2' }, 'L’essentiel', h('small', {}, essentials.length ? essentials.length + ' lignes' : '')));
-    body.appendChild(essentialsList(essentials));
-
     /* Mnémos */
     const mnTitle = h('h2', { class: 'fiche__h2', id: 'fiche-mnemos', tabindex: '-1' }, 'Moyens mnémotechniques', h('small', {}, mnemonics.length ? mnemonics.length + ' astuces' : ''));
     body.appendChild(mnTitle);
@@ -372,6 +368,10 @@
         h('a', { class: 'btn btn--primary btn--block', href: '#/review?mode=kind&kind=flash&item=' + num + '&autostart=1' }, iconEl('flash'), 'Réviser en flashcards (' + flashCount + ')')));
     }
     body.appendChild(mnemonicsGrid(mnemonics));
+
+    /* Points essentiels : récapitulatif en fin de fiche */
+    body.appendChild(h('h2', { class: 'fiche__h2' }, 'Les points essentiels', h('small', {}, essentials.length ? essentials.length + ' lignes' : '')));
+    body.appendChild(essentialsList(essentials));
 
     /* Bas de page : tester tout l'item */
     body.appendChild(h('div', { class: 'fiche__cta' },

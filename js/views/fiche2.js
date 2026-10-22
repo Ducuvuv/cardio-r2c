@@ -243,6 +243,13 @@
     const ess = Array.isArray(f.essentials) ? f.essentials : [];
     const nB = secs.filter(sectionHasB).length;
     const nA = secs.filter(function (s) { return s.rank !== 'B'; }).length;
+    // Points essentiels : récapitulatif placé en fin de fiche, après toutes les parties
+    const essHtml = ess.length ? '<section class="f2-ess" aria-labelledby="f2-ess-h"><h2 class="f2-h2" id="f2-ess-h">' + icon('flash') + '<span>Les points essentiels</span></h2>' +
+      '<ul class="f2-ess__list">' + ess.map(function (x) {
+        const t = typeof x === 'object' && x ? x.text : x;
+        const r = typeof x === 'object' && x && x.rank === 'B' ? 'B' : 'A';
+        return '<li' + rkAttr(r) + '>' + icon('check') + '<span>' + inline(t) + pillB(r, 'A') + '</span></li>';
+      }).join('') + '</ul></section>' : '';
     return '<header class="f2-head">' +
       '<div class="f2-kicker">Item ' + esc(itemLabel(num)) + ' · cours</div>' +
       '<h1 class="f2-title">' + inline(f.title) + '</h1>' +
@@ -257,12 +264,6 @@
           const t = typeof x === 'object' && x ? x.text : x;
           return '<li><span class="f2-film__n" aria-hidden="true">' + (i + 1) + '</span><span>' + inline(t) + '</span></li>';
         }).join('') + '</ol></section>' : '') +
-      (ess.length ? '<section class="f2-ess" aria-labelledby="f2-ess-h"><h2 class="f2-h2" id="f2-ess-h">' + icon('flash') + '<span>L’essentiel</span></h2>' +
-        '<ul class="f2-ess__list">' + ess.map(function (x) {
-          const t = typeof x === 'object' && x ? x.text : x;
-          const r = typeof x === 'object' && x && x.rank === 'B' ? 'B' : 'A';
-          return '<li' + rkAttr(r) + '>' + icon('check') + '<span>' + inline(t) + pillB(r, 'A') + '</span></li>';
-        }).join('') + '</ul></section>' : '') +
       '<div class="f2-bar" role="group" aria-label="Filtrer par rang">' +
       '<button type="button" class="chip f2-chip-f" data-rank-f="all" aria-pressed="false">Tout</button>' +
       '<button type="button" class="chip f2-chip-f" data-rank-f="A" aria-pressed="false">Rang A</button>' +
@@ -278,6 +279,7 @@
       }).join('') + '</ol></details>' +
       '<div class="f2-secs">' + secs.map(function (s, i) { return sectionHtml(num, s, i, !!read[s.id]); }).join('') +
       '<p class="f2-empty" hidden>Rien à afficher avec ce filtre.</p></div>' +
+      essHtml +
       '<section class="f2-next" aria-label="Et maintenant">' +
       '<a class="btn btn--primary btn--block btn--lg" href="#/review?mode=item&item=' + encodeURIComponent(num) + '&autostart=1">' + icon('play') + '<span>Tester tout l’item</span></a>' +
       '<a class="btn btn--secondary btn--block" href="#/item/' + encodeURIComponent(num) + '/mnemos">' + icon('star') + '<span>Moyens mnémotechniques</span></a>' +
