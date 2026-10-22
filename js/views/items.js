@@ -66,6 +66,16 @@
   function str(v) { return v === undefined || v === null ? '' : String(v); }
   function lbl(it) { return it && it.label ? str(it.label) : str(it && it.num).replace(/^[a-z]+/, ''); }
   function speOf(it) { return (it && it.spe) || 'cardio'; }
+  /* Cours v2 (views/fiche2.js) disponible pour l'item, toutes matières : #/item/:num/cours l'ouvre (v1 en lien). */
+  function hasF2(num) {
+    const v = CARDIO.views.fiche2;
+    try { return !!(v && typeof v.available === 'function' && v.available(num)); } catch (e) { return false; }
+  }
+  /* Nombre de situations de traitements v2 de l'item (0 si aucune), toutes matières. */
+  function t2Count(num) {
+    const v = CARDIO.views.ttt2;
+    try { return v && typeof v.count === 'function' ? v.count(num) || 0 : 0; } catch (e) { return 0; }
+  }
   function matiere() { return CARDIO.views.matiere || null; }
 
   function mastery(num) {
@@ -384,9 +394,9 @@
     const total = def.counts.reduce(function (n, k) { return n + (Number(c[k]) || 0); }, 0);
     const km = (def.course || def.noMastery) ? null : kindMastery(it.num, def.counts, c);
     const empty = !total && !def.always;
-    // Traitements cardio v2 (views/ttt2.js) : toutes les situations de l'item, rien d'isolé ; pneumo/dermato inchangés
-    const t2 = def.key === 'traitements' && speOf(it) === 'cardio' && CARDIO.views.ttt2 && typeof CARDIO.views.ttt2.count === 'function'
-      ? safe(function () { return CARDIO.views.ttt2.count(it.num); }, 0) : 0;
+    // Traitements v2 (views/ttt2.js) : toutes les situations de l'item, rien d'isolé (cardio, et dermato / pneumo
+    // dès que l'item a ses situations) ; sinon l'ancienne rubrique de l'item
+    const t2 = def.key === 'traitements' ? t2Count(it.num) : 0;
     if (t2) {
       return h('a', { class: 'hub__sec', href: '#/ttt2/item/' + encodeURIComponent(it.num) },
         h('div', { class: 'hub__sec-ico', html: icon(def.ico) }),
@@ -462,6 +472,20 @@
 
   /* « Fiche 80 % » (dermato / pneumo) : la fiche de cours de l'item, avec la progression de lecture. */
   function ficheEntry(it) {
+    // Cours v2 disponible : #/item/:num/cours l'ouvre (la fiche 80 % reste en lien dans la v2)
+    const f2 = CARDIO.views.fiche2;
+    if (hasF2(it.num)) {
+      const st = f2 && typeof f2.stats === 'function' ? safe(function () { return f2.stats(it.num); }, null) : null;
+      const n2 = st ? st.n : 0, r2 = st ? st.done : 0;
+      const ok2 = n2 > 0 && r2 >= n2;
+      return h('a', { class: 'hub__ff hub__ff--fiche', href: '#/item/' + it.num + '/cours' },
+        h('span', { class: 'hub__ff-ico', 'aria-hidden': 'true', html: icon('book') }),
+        h('span', { class: 'hub__ff-main' },
+          h('span', { class: 'hub__ff-title' }, 'Cours — la fiche logique de l’item'),
+          h('span', { class: 'hub__ff-sub' }, ok2 ? 'Revue en entier · relis-la avant les partiels' : r2 ? r2 + ' / ' + n2 + ' parties revues' : n2 + ' parties, dans l’ordre du raisonnement de stage.')),
+        ok2 ? h('span', { class: 'hub__ff-score is-ok', title: 'Toutes les parties revues' }, h('small', {}, 'lue'), '✓') : null,
+        h('span', { class: 'hub__ff-chev', 'aria-hidden': 'true', html: icon('chevron-right') }));
+    }
     const n = Number((it.counts || {}).sec) || 0;
     const is = (state().itemStats || {})[str(it.num)];
     const readIds = is && Array.isArray(is.readSections) ? is.readSections : [];
@@ -706,7 +730,7 @@
           h('span', { class: 'hub__ff-chev', 'aria-hidden': 'true', html: icon('chevron-right') })));
       }
     } catch (e) { /* algos indisponibles */ }
-    if (!cardio && Number(c.sec) > 0) page.appendChild(ficheEntry(it));
+    if (!cardio && (Number(c.sec) > 0 || hasF2(it.num))) page.appendChild(ficheEntry(it));
 
     page.appendChild(h('div', { class: 'card hub__mastery' },
       h('div', { class: 'hub__ring', html: ringSvg(m.A, 88, 8, 'var(--rankA)') }, h('div', { class: 'hub__ring-label' }, h('b', {}, pct(m.A) + '%'), h('span', {}, 'rang A'))),
@@ -717,7 +741,7 @@
 
     page.appendChild(h('div', { class: 'hub__ctas' },
       h('a', { class: 'btn btn--primary btn--block', href: '#/review?mode=item&item=' + it.num + '&autostart=1' }, iconEl('play'), 'Réviser cet item'),
-      cardio || Number(c.sec) > 0 ? h('a', { class: 'btn btn--secondary btn--block', href: '#/item/' + it.num + '/cours' }, iconEl('book'), cardio ? 'Fiche complète' : 'Fiche 80 %') : null));
+      cardio || Number(c.sec) > 0 || hasF2(it.num) ? h('a', { class: 'btn btn--secondary btn--block', href: '#/item/' + it.num + '/cours' }, iconEl('book'), cardio ? 'Fiche complète' : hasF2(it.num) ? 'Cours' : 'Fiche 80 %') : null));
 
     const lvl = levelPanel(it);
     if (lvl) page.appendChild(lvl);
@@ -726,6 +750,8 @@
     page.appendChild(h('div', { class: 'hub__grid' }, SECTION_CARDS.filter(function (d) {
       if (simple && ['cours', 'qcm', 'mnemos', 'traitements'].indexOf(d.key) < 0) return false;
       if (d.onlyIf && !(Number(c[d.onlyIf]) > 0)) return false;
+      if (!cardio && d.key === 'cours' && hasF2(it.num)) return true;
+      if (!cardio && d.key === 'traitements' && t2Count(it.num) > 0) return true;
       return cardio || d.counts.some(function (k) { return Number(c[k]) > 0; });
     }).map(function (d) { return sectionCard(it, d); })));
 

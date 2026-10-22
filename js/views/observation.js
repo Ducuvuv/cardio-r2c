@@ -13,6 +13,9 @@
  *           why, if, flag, rank, src}]}]. Un motif présent en v2 remplace la v1 (même id) : « Apprendre » devient un
  *           parcours linéaire étape par étape (Précédent / Suivant, étape en cours mémorisée dans « cardio.obs2.pos ») ;
  *           la « Consultation » suit le même ordre. Les motifs non migrés gardent la v1.
+ * Matière : chaque motif porte `spe` (défaut cardio ; v1 remplacée par la v2 seulement si même id ET même matière).
+ *           La liste ne montre que les motifs de la matière active (CARDIO.views.matiere.current(), « all » = toutes,
+ *           groupées par matière) avec le sélecteur partagé ; « Motif suivant » reste dans la matière du motif.
  */
 (function () {
   'use strict';
@@ -34,9 +37,22 @@
     if (!v2.length) return v1;
     const by = {};
     v2.forEach(function (o) { by[o.id] = Object.assign({ v: 2 }, o); });
-    const out = v1.map(function (o) { const n = by[o.id]; if (n) delete by[o.id]; return n || o; });
+    const out = v1.map(function (o) { const n = by[o.id]; if (n && speOf(n) === speOf(o)) { delete by[o.id]; return n; } return o; });
     v2.forEach(function (o) { if (by[o.id]) out.push(by[o.id]); });
     return out;
+  }
+  const SPE_ORDER = ['cardio', 'dermato', 'pneumo'];
+  function speOf(o) { return (o && o.spe) || 'cardio'; }
+  function mat() { return CARDIO.views.matiere || null; }
+  function curSpe() { const m = mat(); try { return m ? m.current() : 'all'; } catch (e) { return 'all'; } }
+  function speShort(code) { const m = mat(); try { return m ? m.short(code) : code; } catch (e) { return code; } }
+  /** Motifs de la matière active (toutes si « all »), groupés par matière (cardio, dermato, pneumo). */
+  function scoped(spe) {
+    const sp = spe || curSpe();
+    const all = list().filter(function (o) { return sp === 'all' || speOf(o) === sp; });
+    return SPE_ORDER.concat(['?']).reduce(function (acc, code) {
+      return acc.concat(all.filter(function (o) { return code === '?' ? SPE_ORDER.indexOf(speOf(o)) < 0 : speOf(o) === code; }));
+    }, []);
   }
   function isV2(o) { return !!o && Number(o.v) === 2; }
   const LS_POS = 'cardio.obs2.pos';
@@ -141,21 +157,37 @@
   }
 
   /* ---------- liste ---------- */
-  function buildList() {
+  function card(o, sc) {
+    const s = sc[o.id];
+    return h('a', { class: 'ob-card', href: '#/observation/' + encodeURIComponent(o.id) },
+      h('div', { class: 'ob-card__emo' }, str(o.emoji || '🩺')),
+      h('div', { class: 'ob-card__t' }, str(o.title)),
+      h('div', { class: 'ob-card__s' }, nQuestions(o) + ' questions' + (s ? ' · record ' + s.best + ' %' : ' · nouveau')),
+      h('div', { class: 'ob-card__stars' }, starStr(s ? stars(s.best) : 0)));
+  }
+  function buildList(root) {
     const page = h('div', { class: 'page stack' });
     const sc = load();
+    const m = mat();
+    if (m && typeof m.switcher === 'function') {
+      try {
+        const sw = m.switcher({ onChange: function () { if (root) root.replaceChildren(buildList(root)); } });
+        if (sw) page.appendChild(sw);
+      } catch (e) { /* sans sélecteur */ }
+    }
     page.appendChild(h('p', { class: 'secondary' }, 'Comme à l’hôpital : pour chaque motif, toutes les questions à poser, ce qu’il faut chercher à l’examen et la synthèse à présenter. Apprends, puis joue la consultation pour battre ton record.'));
+    const shown = scoped();
     if (!list().length) { page.appendChild(h('div', { class: 'empty' }, 'Les observations arrivent bientôt.')); return page; }
-    const total = list().length, done = list().filter(function (o) { return sc[o.id] && sc[o.id].best >= 90; }).length;
+    if (!shown.length) { page.appendChild(h('div', { class: 'empty' }, h('div', { class: 'empty__title' }, 'Pas encore d’observation pour cette matière'), 'Elles arrivent bientôt. Choisis une autre matière en attendant.')); return page; }
+    const total = shown.length, done = shown.filter(function (o) { return sc[o.id] && sc[o.id].best >= 90; }).length;
     page.appendChild(h('div', { class: 'cluster' }, h('span', { class: 'pill pill--ok' }, done + ' / ' + total + ' maîtrisées (≥ 90 %)')));
-    page.appendChild(h('div', { class: 'ob-grid' }, list().map(function (o) {
-      const s = sc[o.id];
-      return h('a', { class: 'ob-card', href: '#/observation/' + encodeURIComponent(o.id) },
-        h('div', { class: 'ob-card__emo' }, str(o.emoji || '🩺')),
-        h('div', { class: 'ob-card__t' }, str(o.title)),
-        h('div', { class: 'ob-card__s' }, nQuestions(o) + ' questions' + (s ? ' · record ' + s.best + ' %' : ' · nouveau')),
-        h('div', { class: 'ob-card__stars' }, starStr(s ? stars(s.best) : 0)));
-    })));
+    const spes = shown.map(speOf).filter(function (x, i, a) { return a.indexOf(x) === i; });
+    if (spes.length < 2) { page.appendChild(h('div', { class: 'ob-grid' }, shown.map(function (o) { return card(o, sc); }))); return page; }
+    spes.forEach(function (code) {
+      const group = shown.filter(function (o) { return speOf(o) === code; });
+      page.appendChild(h('div', { class: 'section-head' }, h('h2', {}, speShort(code))));
+      page.appendChild(h('div', { class: 'ob-grid' }, group.map(function (o) { return card(o, sc); })));
+    });
     return page;
   }
 
@@ -327,7 +359,7 @@
     step();
   }
   function nextLink(o) {
-    const all = list();
+    const all = scoped(speOf(o));
     const i = all.findIndex(function (x) { return x.id === o.id; });
     const nx = i >= 0 && i + 1 < all.length ? all[i + 1] : null;
     return nx ? h('a', { class: 'btn btn--outline btn--block', href: '#/observation/' + encodeURIComponent(nx.id) }, 'Motif suivant : ' + str(nx.emoji || '') + ' ' + str(nx.title))
@@ -349,7 +381,7 @@
     const best = (load()[o.id] || {}).best;
     page.append(
       h('div', { class: 'ob-hero' }, h('div', { class: 'ob-hero__emo' }, str(o.emoji || '🩺')),
-        h('div', {}, h('div', { class: 'caption' }, 'Observation · cardio' + (best != null ? ' · record ' + best + ' %' : '')), h('h2', { style: 'margin:2px 0 0' }, str(o.title)))),
+        h('div', {}, h('div', { class: 'caption' }, 'Observation · ' + speOf(o) + (best != null ? ' · record ' + best + ' %' : '')), h('h2', { style: 'margin:2px 0 0' }, str(o.title)))),
       o.hook ? h('div', { class: 'ob-hook' }, md(o.hook)) : null,
       o.intro ? h('p', { style: 'margin:0;line-height:1.5' }, md(o.intro)) : null,
       Array.isArray(o.items) && o.items.length ? h('div', { class: 'cluster' }, o.items.map(function (it) { return h('a', { class: 'pill pill--kind', href: '#/item/' + encodeURIComponent(it) }, 'Item ' + itemLabel(it)); })) : null,
@@ -370,9 +402,13 @@
       return root;
     }
     root.dataset.title = 'Observation';
-    root.appendChild(buildList());
+    root.appendChild(buildList(root));
     return root;
   }
 
-  CARDIO.views.observation = { render: render, available: function () { return list().length > 0; } };
+  CARDIO.views.observation = {
+    render: render,
+    /** Au moins un motif (de la matière `spe` si elle est donnée). */
+    available: function (spe) { return (spe && spe !== 'all' ? scoped(spe) : list()).length > 0; }
+  };
 })();

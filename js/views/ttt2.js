@@ -8,7 +8,10 @@
  *   #/ttt2/s/:id                une situation : quand, étapes, ordonnance, surveillance, sortie, pièges, classes liées
  *   #/ttt2/c/:id                une fiche classe (contenu v1) puis « Dans quelles situations ? »
  * Filtre Tout / Rang A / Rang B (clé partagée avec la fiche v2 : « cardio.r2c.fiche.rank »).
- * Contenu : CARDIO.registry.ttt2 = {items:[{item,title,situations,flash,qroc}], situations:{id:…}, classes:{id:…}}
+ * Matière : la liste (#/ttt2) ne montre que les items et classes de la matière active (CARDIO.views.matiere.current(),
+ * profil store.activeSpe ; « all » = toutes, groupées par matière) avec le sélecteur de matière partagé ; ?spe=dermato
+ * choisit la matière (lien depuis views/ttt.js). Les pages item / situation / classe s'ouvrent quelle que soit la matière.
+ * Contenu : CARDIO.registry.ttt2 = {items:[{item,spe,title,situations,flash,qroc}], situations:{id:…}, classes:{id:{…,spe}}}
  *           (app/content/ttt2.js, tools/_patches/_build_ttt2.py).
  * Statut : localStorage « cardio.ttt2.srs » = {cardId: {b, d}} (répétition espacée, même moteur que views/ttt.js),
  *          « cardio.ttt2.tab » (onglet de la liste).
@@ -58,6 +61,23 @@
   function itemLabel(num) {
     try { const r = CARDIO.registry; return r && typeof r.label === 'function' ? r.label(num) : str(num); } catch (e) { return str(num); }
   }
+  /* ---------- matière ---------- */
+  const SPE_ORDER = ['cardio', 'dermato', 'pneumo'];
+  const SPE_NAME = { cardio: 'cardiologie', dermato: 'dermatologie', pneumo: 'pneumologie' };
+  function mat() { return CARDIO.views.matiere || null; }
+  function speOfItem(num) {
+    try { const r = CARDIO.registry; if (r && typeof r.speOf === 'function') return r.speOf(num); } catch (e) { /* repli */ }
+    const k = str(num);
+    return k[0] === 'd' ? 'dermato' : k[0] === 'p' ? 'pneumo' : 'cardio';
+  }
+  function itemSpe(it) { return (it && it.spe) || speOfItem(it && it.item); }
+  function clsSpe(c) { return (c && c.spe) || 'cardio'; }
+  function curSpe() { const m = mat(); try { return m ? m.current() : 'all'; } catch (e) { return 'all'; } }
+  function inScope(spe, x) { return spe === 'all' || x === spe; }
+  function speShort(code) { const m = mat(); try { return m ? m.short(code) : code; } catch (e) { return code; } }
+  /** Matières présentes dans les items (ordre cardio, dermato, pneumo). */
+  function spesWith(list, f) { return SPE_ORDER.filter(function (sp) { return list.some(function (x) { return f(x) === sp; }); }); }
+
   function rk(x) { return x && x.rank === 'B' ? 'B' : 'A'; }
   function rkAttr(r, hasB) { return ' data-rk="' + r + '"' + (r === 'A' && hasB ? ' data-hasb="1"' : ''); }
   function pillB(r) { return r === 'B' ? ' <span class="pill pill--B t2-b" title="Rang B">B</span>' : ''; }
@@ -341,7 +361,7 @@
       const mine = rows.filter(isMine);
       const others = rows.filter(function (o) { return !isMine(o); });
       return '<article class="t2-use" data-filterable' + rkAttr(r, sitHasB(s)) + '>' +
-        '<p class="t2-use__kicker">Item ' + esc(itemLabel(s.item)) + '</p>' +
+        '<p class="t2-use__kicker">' + (speOfItem(s.item) !== clsSpe(c) ? esc(speShort(speOfItem(s.item))) + ' · ' : '') + 'Item ' + esc(itemLabel(s.item)) + '</p>' +
         '<h3 class="t2-use__t">' + inline(s.title) + pillB(r) + '</h3>' +
         (s.quand ? '<p class="t2-use__q">' + inline(s.quand) + '</p>' : '') +
         (mine.length ? '<div class="t2-use__mine"><p class="t2-use__h">Ici, cette classe :</p><ul class="t2-points">' + mine.map(lineHtml).join('') + '</ul></div>' : '') +
@@ -362,11 +382,15 @@
       (sub ? '<p class="t2-tagline">' + sub + '</p>' : '') + (extra || '') + '</header>';
   }
 
-  function listHtml(tab) {
+  function listHtml(tab, spe) {
     const d = data();
-    const nSit = d.items.reduce(function (n, it) { return n + it.situations.length; }, 0);
-    const classes = Object.keys(d.classes).map(function (k) { return d.classes[k]; });
-    let html = header('Traitements · cardiologie', 'Traitements cardio', 'Chaque traitement dans sa situation réelle : toute l’ordonnance, dans l’ordre, rangs A et B du Collège.') +
+    const items = d.items.filter(function (it) { return inScope(spe, itemSpe(it)); });
+    const nSit = items.reduce(function (n, it) { return n + it.situations.length; }, 0);
+    const classes = Object.keys(d.classes).map(function (k) { return d.classes[k]; }).filter(function (c) { return inScope(spe, clsSpe(c)); });
+    const multiSpe = spe === 'all' && spesWith(items, itemSpe).concat(spesWith(classes, clsSpe)).filter(function (x, i, a) { return a.indexOf(x) === i; }).length > 1;
+    const kick = spe === 'all' ? (multiSpe ? 'Traitements · toutes matières' : 'Traitements · cardiologie') : 'Traitements · ' + (SPE_NAME[spe] || spe);
+    const ttl = spe === 'all' ? (multiSpe ? 'Traitements' : 'Traitements cardio') : 'Traitements ' + speShort(spe).toLowerCase();
+    let html = header(kick, ttl, 'Chaque traitement dans sa situation réelle : toute l’ordonnance, dans l’ordre, rangs A et B du Collège.') +
       '<div class="seg seg--block t2-tabs" role="tablist">' +
       '<button type="button" role="tab" class="seg__btn' + (tab === 'situations' ? ' is-on' : '') + '" data-tab="situations" aria-selected="' + (tab === 'situations') + '">Par situation</button>' +
       '<button type="button" role="tab" class="seg__btn' + (tab === 'classes' ? ' is-on' : '') + '" data-tab="classes" aria-selected="' + (tab === 'classes') + '">Par classe</button></div>' +
@@ -374,11 +398,13 @@
     if (tab === 'situations') {
       html += '<label class="t2-search">' + icon('search') + '<input type="search" class="t2-search__in" placeholder="Rechercher : molécule, situation, dose…" autocomplete="off" aria-label="Rechercher dans les situations"></label>' +
         '<div class="t2-results" hidden></div>' +
-        '<div class="t2-items">' + d.items.map(function (it) {
+        '<div class="t2-items">' + (items.length ? '' : '<p class="t2-empty">Pas encore de traitements v2 pour cette matière.</p>') + items.map(function (it, i) {
           const sits = it.situations.map(sit).filter(Boolean);
           const hasB = sits.some(sitHasB);
           const allB = sits.length && sits.every(function (s) { return rk(s) === 'B'; });
-          return '<details class="t2-item"' + rkAttr(allB ? 'B' : 'A', hasB) + '><summary class="t2-item__head">' +
+          const sp = itemSpe(it);
+          const head = multiSpe && (i === 0 || itemSpe(items[i - 1]) !== sp) ? '<h2 class="t2-group__h">' + esc(speShort(sp)) + '</h2>' : '';
+          return head + '<details class="t2-item"' + rkAttr(allB ? 'B' : 'A', hasB) + '><summary class="t2-item__head">' +
             '<span class="t2-item__n">' + esc(itemLabel(it.item)) + '</span>' +
             '<span class="t2-item__main"><span class="t2-item__t">' + inline(it.title) + '</span>' +
             '<span class="t2-item__s">' + plural(sits.length, 'situation', 'situations') + ' · ' + ((it.flash || []).length + (it.qroc || []).length) + ' cartes</span></span>' +
@@ -387,11 +413,12 @@
             '<a class="btn btn--ghost btn--sm t2-item__more" href="#/ttt2/item/' + encodeURIComponent(it.item) + '">' + icon('flash') + '<span>Page de l’item · flashcards et QROC</span></a></div></details>';
         }).join('') + '</div>';
     } else {
-      const groups = [];
-      classes.forEach(function (c) { if (groups.indexOf(c.group) < 0) groups.push(c.group); });
+      const groups = [];   // [matière, groupe] (une même étiquette de groupe ne mélange jamais deux matières)
+      classes.forEach(function (c) { if (!groups.some(function (g) { return g[0] === clsSpe(c) && g[1] === c.group; })) groups.push([clsSpe(c), c.group]); });
+      if (!classes.length) html += '<p class="t2-empty">Pas encore de fiches classes v2 pour cette matière.</p>';
       html += groups.map(function (g) {
-        return '<section class="t2-group"><h2 class="t2-group__h">' + esc(g) + '</h2><div class="t2-list">' +
-          classes.filter(function (c) { return c.group === g; }).map(function (c) {
+        return '<section class="t2-group"><h2 class="t2-group__h">' + (multiSpe ? esc(speShort(g[0])) + ' · ' : '') + esc(g[1]) + '</h2><div class="t2-list">' +
+          classes.filter(function (c) { return clsSpe(c) === g[0] && c.group === g[1]; }).map(function (c) {
             const n = (c.situations || []).length;
             return '<a class="t2-card" data-filterable href="#/ttt2/c/' + encodeURIComponent(c.id) + '"' + rkAttr('A', clsHasB(c)) + '>' +
               '<span class="t2-card__top"><span class="pill pill--kind">' + plural(n, 'situation', 'situations') + '</span></span>' +
@@ -401,7 +428,9 @@
       }).join('');
     }
     html += '<p class="t2-empty t2-empty-f" hidden>Rien à afficher avec ce filtre.</p>' +
-      '<p class="t2-foot"><a href="#/ttt">Pneumo et dermato : rubrique Traitements (ancienne présentation) →</a></p>';
+      (spe === 'dermato' || spe === 'pneumo'
+        ? '<p class="t2-foot"><a href="#/ttt">' + esc(speShort(spe)) + ' : fiches par classe (ancienne présentation) →</a></p>'
+        : '<p class="t2-foot"><a href="#/ttt">Pneumo et dermato : rubrique Traitements (ancienne présentation) →</a></p>');
     return html;
   }
 
@@ -416,14 +445,14 @@
     }
     return hayCache[s.id];
   }
-  function search(root, q) {
+  function search(root, q, spe) {
     const box = root.querySelector('.t2-results');
     const items = root.querySelector('.t2-items');
     const terms = norm(q).split(' ').filter(function (t) { return t.length >= 2; });
     if (!terms.length) { box.hidden = true; box.innerHTML = ''; items.hidden = false; applyFilter(root, getFilter()); return; }
     const d = data();
     const hits = [];
-    d.items.forEach(function (it) { it.situations.forEach(function (id) { const s = sit(id); if (s && terms.every(function (t) { return hay(s).indexOf(t) >= 0; })) hits.push(s); }); });
+    d.items.filter(function (it) { return inScope(spe || 'all', itemSpe(it)); }).forEach(function (it) { it.situations.forEach(function (id) { const s = sit(id); if (s && terms.every(function (t) { return hay(s).indexOf(t) >= 0; })) hits.push(s); }); });
     items.hidden = true;
     box.hidden = false;
     box.innerHTML = '<p class="t2-results__n">' + (hits.length ? plural(hits.length, 'situation trouvée', 'situations trouvées') : 'Aucune situation ne contient ces mots.') + '</p>' +
@@ -687,6 +716,11 @@
       mount(root, clsHtml(c));
       return { el: root, title: str(c.title) };
     }
+    // ?spe=… (lien depuis l'ancienne rubrique Traitements) : choisit la matière active, comme le sélecteur
+    if (q.spe && SPE_ORDER.indexOf(str(q.spe)) >= 0 && mat() && typeof mat().set === 'function' && curSpe() !== str(q.spe)) {
+      try { mat().set(str(q.spe)); } catch (e) { /* ignore */ }
+    }
+    let spe = curSpe();
     let tab = q.tab === 'classes' || q.tab === 'situations' ? q.tab : lsGet(LS_TAB, 'situations');
     if (tab !== 'classes') tab = 'situations';
     let cur = root;
@@ -698,7 +732,7 @@
       return fresh;
     }
     function paint(target) {
-      mount(target, listHtml(tab), function (e) {
+      mount(target, listHtml(tab, spe), function (e) {
         const t = e.target.closest('[data-tab]');
         if (t) {
           tab = t.getAttribute('data-tab');
@@ -707,19 +741,34 @@
           paint(next);
         }
       });
+      // sélecteur de matière partagé (null s'il n'y a qu'une matière) : redessine la liste
+      const m = mat();
+      const page = target.querySelector('.t2');
+      if (m && typeof m.switcher === 'function' && page) {
+        try {
+          const sw = m.switcher({ onChange: function () { spe = curSpe(); const next = draw(); paint(next); } });
+          if (sw) page.insertBefore(sw, page.firstChild);
+        } catch (e) { /* sans sélecteur */ }
+      }
       const input = target.querySelector('.t2-search__in');
       if (input) {
         let timer = 0;
-        input.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(function () { search(target, input.value); }, 120); });
+        input.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(function () { search(target, input.value, spe); }, 120); });
       }
     }
     paint(root);
-    return { el: root, title: 'Traitements cardio' };
+    return { el: root, title: spe === 'dermato' || spe === 'pneumo' ? 'Traitements ' + speShort(spe).toLowerCase() : 'Traitements cardio' };
   }
 
   CARDIO.views.ttt2 = {
     render: render,
-    available: function () { return !!data(); },
+    /** Contenu v2 présent (pour une matière si `spe` est donné : au moins un item de cette matière). */
+    available: function (spe) {
+      const d = data();
+      if (!d) return false;
+      if (!spe || spe === 'all') return true;
+      return d.items.some(function (it) { return itemSpe(it) === spe && it.situations.length > 0; });
+    },
     /** Nombre de situations d'un item (0 si l'item n'a pas de traitements v2). */
     count: function (num) { const it = itemOf(num); return it ? it.situations.length : 0; }
   };

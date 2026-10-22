@@ -381,13 +381,19 @@
   function chipsBlock() {
     const spe = activeSpe();
     const cardioOnly = spe !== 'all' && spe !== 'cardio';
-    // Traitements cardio v2 (views/ttt2.js) quand le contenu est chargé ; pneumo/dermato restent sur #/ttt
+    // Traitements v2 (views/ttt2.js) quand le contenu est chargé : la matière active y est montrée ; une matière sans
+    // situations v2 reste sur l'ancienne rubrique #/ttt
     const ttt2 = !!(CARDIO.views && CARDIO.views.ttt2 && safe(function () { return CARDIO.views.ttt2.available(); }, false));
+    const ttt2Spe = spe !== 'all' && !!(CARDIO.views && CARDIO.views.ttt2 && safe(function () { return CARDIO.views.ttt2.available(spe); }, false));
+    const ttt2Multi = ttt2 && ['dermato', 'pneumo'].some(function (x) { return safe(function () { return CARDIO.views.ttt2.available(x); }, false); });
+    const m = matiere();
+    const speShort = m ? safe(function () { return m.short(spe); }, spe) : spe;
     const chips = [
       { label: 'Observation', href: '#/observation', ico: 'case', obs: true },
       { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
       { label: 'Parasito-myco', href: '#/parasito', ico: 'list', parasito: true },
-      { label: 'Traitements · 3 Collèges', href: ttt2 && spe === 'cardio' ? '#/ttt2' : '#/ttt', ico: 'pill' },
+      { label: 'Traitements · 3 Collèges', href: ttt2Spe ? '#/ttt2' : '#/ttt', ico: 'pill' },
+      { label: 'Traitements ' + String(speShort).toLowerCase(), href: '#/ttt2', ico: 'pill', keep: true, dp: true },
       { label: 'Examens en pneumo', href: '#/points/pneumo-examens', ico: 'search' },
       { label: 'Récaps Pareto', href: '#/pareto', ico: 'list' },
       { label: 'QROC', href: '#/review?mode=smart&kind=qroc&autostart=1', ico: 'edit' },
@@ -397,7 +403,8 @@
       { label: 'Examen blanc', href: '#/review?mode=exam', ico: 'clock' },
       { label: 'ECG du jour', href: '#/ecg?daily=1', ico: 'ecg', cardio: true },
       { label: 'Arbres', href: '#/trees', ico: 'tree', cardio: true },
-      { label: ttt2 ? 'Traitements cardio' : 'Traitements', href: ttt2 ? '#/ttt2' : '#/treatments', ico: 'pill', cardio: true },
+      // « Toutes » : la v2 montre toutes les matières dès qu'il y a des situations dermato / pneumo
+      { label: ttt2 ? (spe === 'all' && ttt2Multi ? 'Traitements' : 'Traitements cardio') : 'Traitements', href: ttt2 ? '#/ttt2' : '#/treatments', ico: 'pill', cardio: true, keep: ttt2 },
       { label: 'Prise en charge A → Z', href: '#/parcours', ico: 'case', cardio: true },
       { label: 'Examens & gestes', href: '#/examens', ico: 'search', cardio: true },
       { label: 'Sémiologie', href: '#/semio', ico: 'eye', cardio: true },
@@ -410,8 +417,9 @@
     ]).filter(function (c) {
       const simple = (function () { try { return localStorage.getItem('cardio.simple') !== '0'; } catch (e) { return true; } })();
       const KEEP = { 'Traitements cardio': 1, 'Observation': 1, 'QROC': 1, 'QCM': 1, 'Flashcards': 1, 'Mes erreurs': 1, 'Rang A': 1, 'Parasito-myco': 1 };
-      if (c.obs) { const v = CARDIO.views && CARDIO.views.observation; if (!(v && v.available && v.available())) return false; }
-      if (simple && !KEEP[c.label]) return false;
+      if (c.obs) { const v = CARDIO.views && CARDIO.views.observation; if (!(v && v.available && v.available(spe))) return false; }
+      if (c.dp && !((spe === 'dermato' || spe === 'pneumo') && ttt2Spe)) return false;
+      if (simple && !KEEP[c.label] && !c.keep) return false;
       if (!simple && c.simple) return false;
       if (c.parasito) { const v = CARDIO.views && CARDIO.views.parasito; return !!(v && v.available && v.available()); }
       return !(cardioOnly && c.cardio);

@@ -60,6 +60,17 @@
     try { const r = registry(); return typeof r.label === 'function' ? r.label(num) : str(num); } catch (e) { return str(num); }
   }
 
+  /** « Dermato · » / « Pneumo · » devant le numéro d'un item hors cardio (rien en cardio). */
+  function speKicker(num) {
+    try {
+      const r = registry();
+      const sp = typeof r.speOf === 'function' ? r.speOf(num) : 'cardio';
+      if (!sp || sp === 'cardio') return '';
+      const m = CARDIO.views.matiere;
+      return (m && typeof m.short === 'function' ? m.short(sp) : sp) + ' · ';
+    } catch (e) { return ''; }
+  }
+
   /* ---------- progression locale ---------- */
 
   function progKey(num) { return 'cardio.fiche2.' + num; }
@@ -251,7 +262,7 @@
         return '<li' + rkAttr(r) + '>' + icon('check') + '<span>' + inline(t) + pillB(r, 'A') + '</span></li>';
       }).join('') + '</ul></section>' : '';
     return '<header class="f2-head">' +
-      '<div class="f2-kicker">Item ' + esc(itemLabel(num)) + ' · cours</div>' +
+      '<div class="f2-kicker">' + esc(speKicker(num)) + 'Item ' + esc(itemLabel(num)) + ' · cours</div>' +
       '<h1 class="f2-title">' + inline(f.title) + '</h1>' +
       (f.tagline ? '<p class="f2-tagline">' + inline(f.tagline) + '</p>' : '') +
       '<div class="f2-meta"><div class="f2-ring" aria-hidden="true"></div>' +
@@ -892,5 +903,16 @@
     return root;
   }
 
-  CARDIO.views.fiche2 = { render: render, available: function (num) { return !!data(num); } };
+  CARDIO.views.fiche2 = {
+    render: render,
+    available: function (num) { return !!data(num); },
+    /** {n: parties, done: parties revues} de la fiche v2 de l'item (null sans fiche v2). */
+    stats: function (num) {
+      const f = data(num);
+      if (!f) return null;
+      const secs = Array.isArray(f.sections) ? f.sections : [];
+      const read = progress(str(num)).read;
+      return { n: secs.length, done: secs.filter(function (s) { return !!read[s.id]; }).length };
+    }
+  };
 })();
