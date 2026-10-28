@@ -28,6 +28,9 @@
   const ORDER = ['classique', 'long', 'allegee', 'intensive', 'adaptative'];
   const GRADES = { difficile: { label: 'Difficile', v: 0.2, tone: 'bad' }, moyen: { label: 'Moyen', v: 0.6, tone: 'warn' }, facile: { label: 'Facile', v: 1, tone: 'ok' } };
   const HORIZON = 21;
+  const LEVELS = { 1: { label: 'Vu 1 fois, flou', v: 0.15 }, 2: { label: 'Les bases', v: 0.45 }, 3: { label: 'Bien', v: 0.7 }, 4: { label: 'Maîtrisé', v: 0.95 } };
+  const FREQ = { 1: 'Tombe rarement', 2: 'Tombe parfois', 3: 'Tombe souvent' };
+  const TOURS_MIN = 3, TOURS_MAX = 120;
   const CSS_ID = 'planj-css';
 
   /* ---------- outils ---------- */
@@ -88,7 +91,7 @@
   }
 
   /* ---------- données ---------- */
-  function blank() { return { v: 1, rhythm: 'classique', capacity: 12, updatedAt: 0, courses: {} }; }
+  function blank() { return { v: 1, rhythm: 'classique', capacity: 12, updatedAt: 0, courses: {}, freq: {}, tours: null }; }
   function load() {
     const raw = CARDIO.store && typeof CARDIO.store.get === 'function' ? CARDIO.store.get('planJ') : null;
     const d = blank();
@@ -96,6 +99,8 @@
     if (RHYTHMS[raw.rhythm]) d.rhythm = raw.rhythm;
     d.capacity = Math.max(2, Math.min(60, Math.round(Number(raw.capacity)) || 12));
     d.updatedAt = Number(raw.updatedAt) || 0;
+    if (raw.freq && typeof raw.freq === 'object') Object.keys(raw.freq).forEach(function (k) { const v = Math.round(Number(raw.freq[k])); if (/^[ipc]:/.test(k) && v >= 1 && v <= 3) d.freq[k] = v; });
+    d.tours = toursNorm(raw.tours);
     const t = today();
     const cs = raw.courses && typeof raw.courses === 'object' ? raw.courses : {};
     Object.keys(cs).forEach(function (k) {
@@ -112,6 +117,7 @@
         }) : []
       };
       if (valid(c.planned)) o.planned = c.planned;
+      { const lv = Math.round(Number(c.level)); if (lv >= 1 && lv <= 4) o.level = lv; }
       if (o.state === 'active' && !o.due) o.due = t;
       if (o.state === 'active') o.step = Math.min(o.step, last(d.rhythm));
       if (k.charAt(0) === 'c' && !o.title) return;
@@ -136,11 +142,11 @@
     items.forEach(function (it) {
       if (!it || it.num == null) return;
       const lab = typeof r.label === 'function' ? r.label(it.num) : String(it.num);
-      out.push({ key: 'i:' + it.num, group: SPE[it.spe || 'cardio'] || 'Autre', title: 'Item ' + lab + ' · ' + (it.short || it.title || ''), href: '#/item/' + encodeURIComponent(it.num), train: '#/review?mode=item&item=' + encodeURIComponent(it.num) + '&size=inf&all=1&from=' + encodeURIComponent('#/planj') + '&autostart=1' });
+      out.push({ key: 'i:' + it.num, weight: Number(it.tierCounts && it.tierCounts['1']) || 0, group: SPE[it.spe || 'cardio'] || 'Autre', title: 'Item ' + lab + ' · ' + (it.short || it.title || ''), href: '#/item/' + encodeURIComponent(it.num), train: '#/review?mode=item&item=' + encodeURIComponent(it.num) + '&size=inf&all=1&from=' + encodeURIComponent('#/planj') + '&autostart=1' });
     });
     (Array.isArray(r.parasito) ? r.parasito : []).forEach(function (p) {
       if (!p || !p.id) return;
-      out.push({ key: 'p:' + p.id, group: 'Parasito-myco', title: p.title || p.id, href: '#/parasito/' + encodeURIComponent(p.id), train: '#/parasito/' + encodeURIComponent(p.id) + '/cartes' });
+      out.push({ key: 'p:' + p.id, weight: 0, group: 'Parasito-myco', title: p.title || p.id, href: '#/parasito/' + encodeURIComponent(p.id), train: '#/parasito/' + encodeURIComponent(p.id) + '/cartes' });
     });
     return out;
   }
@@ -155,7 +161,11 @@
     if (!c) return { lvl: 'none', label: 'Pas placé', score: 0 };
     if (c.state === 'acquis') return { lvl: 'acq', label: 'Acquis', score: 1 };
     const hs = c.history.slice(-3);
-    if (!hs.length) return { lvl: 'new', label: 'Vu, pas encore revu', score: 0.3 };
+    const base = c.level ? LEVELS[c.level].v : null;
+    if (!hs.length) {
+      if (base == null) return { lvl: 'new', label: 'Vu, pas encore revu', score: 0.3 };
+      return base < 0.4 ? { lvl: 'bad', label: 'Fragile (mon classement)', score: base } : base < 0.7 ? { lvl: 'mid', label: 'En cours (mon classement)', score: base } : { lvl: 'ok', label: 'Solide (mon classement)', score: base };
+    }
     let s = 0, w = 0;
     hs.forEach(function (x, i) {
       const wt = i + 1;
@@ -163,7 +173,7 @@
       if (x.note != null) v = (v + x.note / 100) / 2;
       s += v * wt; w += wt;
     });
-    const recent = s / w;
+    const recent = base == null ? s / w : (s / w) * 0.7 + base * 0.3;
     const prog = Math.min(1, c.step / Math.max(1, offs(d.rhythm).length));
     const sc = recent * 0.7 + prog * 0.3;
     if (sc < 0.4) return { lvl: 'bad', label: 'Fragile', score: sc };
@@ -290,6 +300,92 @@
     return late.length;
   }
 
+  /* ---------- fréquence aux examens et priorité ---------- */
+  /* Aucune statistique officielle fiable des items « les plus tombés » n'est dans l'app : c'est TOI qui règles la
+   * fréquence (selon tes annales, tes profs) ; à défaut, estimation d'après le volume de l'essentiel (niveau 1) de l'item. */
+  function weightTiers(cat) {
+    const ws = cat.map(function (m) { return m.weight || 0; }).filter(function (w) { return w > 0; }).sort(function (a, b) { return a - b; });
+    return { lo: ws[Math.floor(ws.length / 3)] || 0, hi: ws[Math.floor((ws.length * 2) / 3)] || 0 };
+  }
+  function freqOf(d, m, tiers) {
+    if (d.freq[m.key]) return { v: d.freq[m.key], est: false };
+    if (!m.weight || !tiers) return { v: 2, est: true };
+    return { v: m.weight >= tiers.hi ? 3 : m.weight >= tiers.lo ? 2 : 1, est: true };
+  }
+  /* Score de priorité (plus haut = à travailler d'abord) : faible maîtrise, tombe souvent, retard, jamais vu. */
+  function priority(d, m, tiers) {
+    const c = d.courses[m.key]; const t = today();
+    const ms = mastery(c, d);
+    const f = freqOf(d, m, tiers);
+    let s = (1 - ms.score) * 50 + (f.v - 1) * 18;
+    const why = [];
+    if (!c) { s += 8; why.push('jamais placé'); }
+    else if (c.state === 'acquis') { s -= 30; }
+    else if (c.state === 'active' && c.due && c.due < t) { s += Math.min(20, diff(c.due, t) * 2); why.push('en retard'); }
+    if (ms.lvl === 'bad') why.push('fragile');
+    if (f.v === 3) why.push(f.est ? 'gros item' : 'tombe souvent');
+    return { score: Math.round(s), why: why, mastery: ms, freq: f };
+  }
+
+  /* ---------- méthode des tours ---------- */
+  /* Tout le programme choisi, cours après cours, en N jours (tour 1) ; chaque tour suivant va plus vite
+   * (jours × 0,6, minimum 3). L'ordre d'un tour est figé à son début : par priorité ou ordre du programme. */
+  function toursNorm(x) {
+    if (!x || typeof x !== 'object' || !Array.isArray(x.order) || !x.order.length) return null;
+    return {
+      groups: Array.isArray(x.groups) ? x.groups.filter(function (g) { return typeof g === 'string'; }) : [],
+      mode: x.mode === 'programme' ? 'programme' : 'priorite',
+      order: x.order.filter(function (k) { return typeof k === 'string' && /^[ipc]:/.test(k); }),
+      days: Math.max(TOURS_MIN, Math.min(TOURS_MAX, Math.round(Number(x.days)) || 21)),
+      firstDays: Math.max(TOURS_MIN, Math.min(TOURS_MAX, Math.round(Number(x.firstDays || x.days)) || 21)),
+      tour: Math.max(1, Math.round(Number(x.tour)) || 1),
+      pos: Math.max(0, Math.round(Number(x.pos)) || 0),
+      startedAt: valid(x.startedAt) ? x.startedAt : today(),
+      dayDate: valid(x.dayDate) ? x.dayDate : null,
+      dayPos: Math.max(0, Math.round(Number(x.dayPos)) || 0),
+      rolledAt: valid(x.rolledAt) ? x.rolledAt : null,
+      lastDoneAt: valid(x.lastDoneAt) ? x.lastDoneAt : null
+    };
+  }
+  function tourOrder(d, groups, mode, cat) {
+    const tiers = weightTiers(cat);
+    const custom = list(d).filter(function (c) { return c.key.charAt(0) === 'c'; }).map(function (c) { return { key: c.key, group: c.group || 'Mes cours', title: c.title, weight: 0 }; });
+    let ms = cat.concat(custom).filter(function (m) { return groups.indexOf(m.group) >= 0; });
+    if (mode === 'priorite') ms = ms.map(function (m) { return { m: m, p: priority(d, m, tiers).score }; }).sort(function (a, b) { return b.p - a.p; }).map(function (x) { return x.m; });
+    return ms.map(function (m) { return m.key; });
+  }
+  function tourQuota(T) { return Math.max(1, Math.ceil(T.order.length / Math.max(1, T.days))); }
+  function tourToday(T) {
+    const t = today(); const q = tourQuota(T);
+    if (T.rolledAt === t && T.pos === 0) return { items: [], finished: true, quota: q };
+    const sp = T.dayDate === t ? Math.min(T.dayPos, T.pos) : T.pos;
+    const items = [];
+    for (let i = sp; i < Math.min(T.order.length, sp + q); i++) items.push({ index: i, key: T.order[i], done: i < T.pos });
+    return { items: items, finished: false, quota: q };
+  }
+  function tourDone(d, cat) {
+    const T = d.tours; const t = today();
+    if (!T) return null;
+    if (T.dayDate !== t) { T.dayDate = t; T.dayPos = T.pos; }
+    T.pos += 1; T.lastDoneAt = t;
+    if (T.pos >= T.order.length) {
+      const n = T.tour;
+      T.tour += 1; T.pos = 0; T.dayPos = 0;
+      T.days = Math.max(TOURS_MIN, Math.round(T.days * 0.6));
+      T.startedAt = add(t, 1); T.rolledAt = t;
+      T.order = tourOrder(d, T.groups, T.mode, cat).filter(function (k) { return !d.courses[k] || d.courses[k].state !== 'acquis' || T.mode === 'programme'; });
+      if (!T.order.length) T.order = tourOrder(d, T.groups, T.mode, cat);
+      return 'Tour ' + n + ' terminé ! Le tour ' + T.tour + ' commence demain, en ' + plural(T.days, 'jour', 'jours') + '.';
+    }
+    return null;
+  }
+  function tourProgress(T) {
+    const total = T.order.length, q = tourQuota(T);
+    const dayIndex = Math.max(0, diff(T.startedAt, today()));
+    const expected = Math.min(total, (dayIndex + 1) * q);
+    return { total: total, pos: Math.min(T.pos, total), pct: total ? Math.round(Math.min(T.pos, total) / total * 100) : 0, quota: q, day: Math.min(T.days, dayIndex + 1), behind: Math.max(0, expected - q - T.pos), next: Math.max(TOURS_MIN, Math.round(T.days * 0.6)) };
+  }
+
   /* ---------- rendu ---------- */
   function ensureStyles() {
     if (document.getElementById(CSS_ID)) return;
@@ -346,16 +442,16 @@
     ensureStyles();
     const q = query || {};
     const root = h('div', { class: 'pj' });
-    const state = { tab: ['cours', 'plan', 'regl'].indexOf(q.tab) >= 0 ? q.tab : 'today', open: q.open || null, filter: '', sel: {}, bulk: false, day: null };
+    const state = { tab: ['cours', 'prio', 'tours', 'plan', 'regl'].indexOf(q.tab) >= 0 ? q.tab : 'today', open: q.open || null, filter: '', sel: {}, bulk: false, classify: false, day: null, tg: null };
     function rerender() {
       const d = load();
       const cat = catalog();
       root.replaceChildren.apply(root, [tabs(), kpis(d)].concat(state.tab === 'today' ? viewToday(d, cat)
-        : state.tab === 'cours' ? viewCourses(d, cat) : state.tab === 'plan' ? viewPlan(d, cat) : viewSettings(d)).filter(Boolean));
+        : state.tab === 'cours' ? viewCourses(d, cat) : state.tab === 'prio' ? viewPrio(d, cat) : state.tab === 'tours' ? viewTours(d, cat) : state.tab === 'plan' ? viewPlan(d, cat) : viewSettings(d)).filter(Boolean));
     }
     function go(tab) { state.tab = tab; state.open = null; rerender(); window.scrollTo(0, 0); }
     function tabs() {
-      const T = [['today', 'Aujourd’hui'], ['cours', 'Mes cours'], ['plan', 'Planning'], ['regl', 'Réglages']];
+      const T = [['today', 'Aujourd’hui'], ['cours', 'Mes cours'], ['prio', 'Priorités'], ['tours', 'Tours'], ['plan', 'Planning'], ['regl', 'Réglages']];
       return h('nav', { class: 'pj-tabs' }, T.map(function (x) {
         return h('a', { href: '#/planj' + (x[0] === 'today' ? '' : '?tab=' + x[0]), class: state.tab === x[0] ? 'is-on' : '', on: { click: function (e) { e.preventDefault(); go(x[0]); } } }, x[1]);
       }));
@@ -456,7 +552,9 @@
         on: { input: function (e) { state.filter = e.target.value; const pos = e.target.selectionStart; rerender(); const s = root.querySelector('.pj-search'); if (s) { s.focus(); try { s.setSelectionRange(pos, pos); } catch (er) { /* ignore */ } } } } });
       out.push(h('div', { class: 'pj-row__acts' },
         btn(state.bulk ? 'Terminer la sélection' : 'Placer plusieurs cours d’un coup', state.bulk ? 'btn--primary btn--sm' : null, function () { state.bulk = !state.bulk; state.sel = {}; rerender(); }, 'check'),
+        btn(state.classify ? 'Terminer le classement' : 'Classer par maîtrise', state.classify ? 'btn--primary btn--sm' : null, function () { state.classify = !state.classify; state.bulk = false; rerender(); }, 'layers'),
         btn('Ajouter un cours perso', null, function () { state.open = 'new'; rerender(); }, 'plus')));
+      if (state.classify) out.push(h('p', { class: 'secondary muted' }, 'Pour chaque cours, touche ton niveau : un cours pas encore placé est placé tout seul (plus il est maîtrisé, plus sa prochaine révision est lointaine). Ça sert aussi à calculer tes priorités.'));
       out.push(search);
       if (state.open === 'new') out.push(sheet(d, null, cat));
       const f = state.filter.trim().toLowerCase();
@@ -485,10 +583,32 @@
       const main = h('div', { class: 'pj-row__main', style: 'cursor:pointer', on: { click: function () { if (state.bulk) { toggle(); return; } state.open = state.open === m.key ? null : m.key; rerender(); } } },
         h('div', { class: 'pj-row__t' }, m.title), h('div', { class: 'pj-row__s' }, sub));
       function toggle() { state.sel[m.key] = !state.sel[m.key]; rerender(); }
+      if (state.classify) {
+        return h('div', { class: 'pj-row', style: 'flex-wrap:wrap' }, dot(ms), h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, m.title), h('div', { class: 'pj-row__s' }, sub)),
+          h('div', { style: 'flex-basis:100%' }, levelChips(c && c.level, function (lv) { setLevel(d, m, lv); rerender(); })));
+      }
       return h('div', { class: 'pj-row' },
         state.bulk ? h('input', { type: 'checkbox', class: 'pj-check', checked: !!state.sel[m.key], on: { change: toggle }, 'aria-label': 'Sélectionner ' + m.title }) : dot(ms),
         main,
         !state.bulk && !c ? btn('Vu aujourd’hui', 'btn--outline btn--sm', function () { place(d, m.key, { start: today(), passes: 0 }); save(d); toast(m.title + ' placé : J1 demain', 'ok'); rerender(); }, 'plus') : null);
+    }
+    function levelChips(val, onPick) {
+      return h('div', { class: 'pj-chips' }, [1, 2, 3, 4].map(function (lv) {
+        return h('button', { type: 'button', class: val === lv ? 'is-on' : '', on: { click: function () { onPick(val === lv ? 0 : lv); } } }, LEVELS[lv].label);
+      }));
+    }
+    function setLevel(d, m, lv) {
+      let c = d.courses[m.key];
+      if (!lv) { if (c) delete c.level; save(d); return; }
+      if (!c) { c = place(d, m.key, { start: today(), passes: lv - 1, title: m.key.charAt(0) === 'c' ? m.title : undefined }); }
+      c.level = lv;
+      save(d); toast(m.title + ' : ' + LEVELS[lv].label.toLowerCase(), 'ok');
+    }
+    function freqChips(d, m, cat) {
+      const f = freqOf(d, m, weightTiers(cat));
+      return h('div', { class: 'pj-chips' }, [1, 2, 3].map(function (v) {
+        return h('button', { type: 'button', class: f.v === v ? 'is-on' : '', on: { click: function () { if (d.freq[m.key] === v) delete d.freq[m.key]; else d.freq[m.key] = v; save(d); rerender(); } } }, FREQ[v] + (f.v === v && f.est ? ' (estimé)' : ''));
+      }));
     }
     function passChips(val, onPick) {
       const opts = [[0, 'Juste lu'], [1, 'Revu 1×'], [2, 'Revu 2×'], [3, '3×'], [4, '4× et +']];
@@ -499,7 +619,7 @@
     function sheet(d, m, cat) {
       const isNew = !m;
       const c = m ? d.courses[m.key] : null;
-      const loc = { start: c ? c.start : today(), passes: c ? Math.min(4, c.history.length) : 0 };
+      const loc = { start: c ? c.start : today(), passes: c ? Math.min(4, c.step) : 0 };
       const title = h('input', { type: 'text', maxlength: '100', placeholder: 'Ex. Item 152 · Endocardite (cours fac)' });
       const group = h('input', { type: 'text', maxlength: '40', placeholder: 'Ex. Néphro, Gynéco…', value: 'Mes cours' });
       const start = h('input', { type: 'date', value: loc.start, max: today() });
@@ -516,6 +636,10 @@
       if (isNew) body.push(h('label', { class: 'pj-field' }, 'Nom du cours', title), h('label', { class: 'pj-field' }, 'Matière (groupe)', group));
       body.push(h('label', { class: 'pj-field' }, 'Première lecture le', start),
         h('div', { class: 'pj-field' }, 'Déjà revu combien de fois depuis ?', chips), prev);
+      if (m) {
+        body.push(h('div', { class: 'pj-field' }, 'Ma maîtrise (mon propre classement)', levelChips(c && c.level, function (lv) { setLevel(d, m, lv); rerender(); })));
+        body.push(h('div', { class: 'pj-field' }, 'Aux examens, ce cours…', freqChips(d, m, cat)));
+      }
       const acts = [btn(c ? 'Replacer' : 'Placer', 'btn--primary btn--sm', function () {
         let k = m ? m.key : 'c:' + uid();
         if (isNew && !title.value.trim()) { toast('Donne un nom au cours', 'warn'); return; }
@@ -557,6 +681,111 @@
             save(d); state.sel = {}; state.bulk = false; toast(plural(keys.length, 'cours placé', 'cours placés'), 'ok'); rerender();
           }, 'check'),
           btn('Annuler', null, function () { state.sel = {}; state.bulk = false; rerender(); })));
+    }
+
+    /* --- Priorités --- */
+    function allMetas(d, cat) {
+      const custom = list(d).filter(function (c) { return c.key.charAt(0) === 'c'; }).map(function (c) { return { key: c.key, group: c.group || 'Mes cours', title: c.title, weight: 0, href: null, train: null }; });
+      return cat.concat(custom);
+    }
+    function viewPrio(d, cat) {
+      const tiers = weightTiers(cat);
+      const groups = {};
+      allMetas(d, cat).forEach(function (m) { groups[m.group] = 1; });
+      const gs = Object.keys(groups);
+      if (!state.tg) state.tg = {};
+      const out = [h('p', { class: 'secondary muted' }, 'Ordre conseillé de travail, recalculé à chaque changement : d’abord ce que tu maîtrises le moins (tes notes et ton classement), ce qui tombe souvent, et ce qui est en retard. La fréquence aux examens se règle sur chaque cours (« Mes cours », touche un cours) ; sans réglage, elle est estimée d’après le volume de l’essentiel de l’item.')];
+      out.push(h('div', { class: 'pj-chips' }, gs.map(function (g) {
+        const on = state.tg[g] !== false;
+        return h('button', { type: 'button', class: on ? 'is-on' : '', on: { click: function () { state.tg[g] = !on; rerender(); } } }, g);
+      })));
+      out.push(h('div', { class: 'pj-chips' }, h('button', { type: 'button', class: state.unseen ? 'is-on' : '', on: { click: function () { state.unseen = !state.unseen; rerender(); } } }, state.unseen ? 'Pas encore vus inclus' : '+ Inclure les cours pas encore vus')));
+      const ranked = allMetas(d, cat).filter(function (m) { return state.tg[m.group] !== false && (state.unseen || d.courses[m.key]); })
+        .map(function (m) { return { m: m, p: priority(d, m, tiers) }; })
+        .filter(function (x) { const c = d.courses[x.m.key]; return !c || c.state !== 'acquis'; })
+        .sort(function (a, b) { return b.p.score - a.p.score; });
+      const top = ranked.slice(0, 40);
+      const max = Math.max(1, top.length ? top[0].p.score : 1);
+      out.push(h('div', { class: 'pj-grp' }, top.map(function (x, i) {
+        const m = x.m, c = d.courses[m.key];
+        return h('div', { class: 'pj-row', style: 'align-items:flex-start' },
+          h('b', { style: 'width:22px;text-align:right;color:var(--muted)' }, String(i + 1)), dot(x.p.mastery),
+          h('div', { class: 'pj-row__main' },
+            h('div', { class: 'pj-row__t' }, m.title),
+            h('div', { class: 'pj-row__s' }, m.group + ' · ' + x.p.mastery.label + ' · ' + FREQ[x.p.freq.v].toLowerCase() + (x.p.freq.est ? ' (estimé)' : '') + (x.p.why.length ? ' · ' + x.p.why.join(', ') : '')),
+            h('div', { class: 'pj-bar__track', style: 'margin-top:6px' }, h('div', { class: 'pj-bar__fill', style: 'width:' + Math.max(4, Math.round(x.p.score / max * 100)) + '%' })),
+            h('div', { class: 'pj-row__acts' },
+              m.href ? h('a', { class: 'btn btn--ghost btn--sm', href: m.href }, icon('book'), 'Cours') : null,
+              m.train ? h('a', { class: 'btn btn--ghost btn--sm', href: m.train }, icon('play'), 'S’entraîner') : null,
+              !c ? btn('Vu aujourd’hui', 'btn--outline btn--sm', function () { place(d, m.key, { start: today(), passes: 0 }); save(d); toast(m.title + ' placé : J1 demain', 'ok'); rerender(); }, 'plus')
+                : btn('Régler', null, function () { state.tab = 'cours'; state.open = m.key; state.filter = ''; rerender(); }, 'edit'))));
+      })));
+      if (!ranked.length) out.push(h('p', { class: 'secondary muted' }, 'Aucun cours placé dans ces matières. Place ou classe tes cours dans « Mes cours », ou inclus les cours pas encore vus.'));
+      if (ranked.length > top.length) out.push(h('p', { class: 'secondary muted' }, '… et ' + (ranked.length - top.length) + ' autres, moins prioritaires.'));
+      return out;
+    }
+
+    /* --- Tours --- */
+    function viewTours(d, cat) {
+      const out = [];
+      const T = d.tours;
+      if (!T) {
+        const groups = {};
+        allMetas(d, cat).forEach(function (m) { groups[m.group] = (groups[m.group] || 0) + 1; });
+        if (!state.tg) state.tg = {};
+        const loc = state.tsetup || (state.tsetup = { days: 21, mode: 'priorite' });
+        const daysIn = h('input', { type: 'number', min: String(TOURS_MIN), max: String(TOURS_MAX), value: String(loc.days), inputmode: 'numeric', on: { input: function (e) { loc.days = e.target.value; } } });
+        const sel = Object.keys(groups).filter(function (g) { return state.tg[g] !== false; });
+        const n = sel.reduce(function (s, g) { return s + groups[g]; }, 0);
+        out.push(h('div', { class: 'card stack' },
+          h('p', { class: 'pj-h' }, 'Méthode des tours'),
+          h('p', { class: 'secondary muted' }, 'Quand tu as beaucoup de cours déjà vus, tu repasses sur TOUT le programme choisi, cours après cours, en un nombre de jours fixé. Chaque tour suivant va plus vite (durée × 0,6). Ça complète les J : les J gèrent chaque cours, les tours te font balayer l’ensemble.')));
+        out.push(h('div', { class: 'pj-sheet' },
+          h('div', { class: 'pj-field' }, 'Matières du tour', h('div', { class: 'pj-chips' }, Object.keys(groups).map(function (g) {
+            const on = state.tg[g] !== false;
+            return h('button', { type: 'button', class: on ? 'is-on' : '', on: { click: function () { state.tg[g] = !on; rerender(); } } }, g + ' (' + groups[g] + ')');
+          }))),
+          h('label', { class: 'pj-field' }, 'Durée du 1er tour (jours)', daysIn),
+          h('div', { class: 'pj-field' }, 'Ordre', h('div', { class: 'pj-chips' },
+            h('button', { type: 'button', class: loc.mode === 'priorite' ? 'is-on' : '', on: { click: function () { loc.mode = 'priorite'; rerender(); } } }, 'Par priorité (conseillé)'),
+            h('button', { type: 'button', class: loc.mode === 'programme' ? 'is-on' : '', on: { click: function () { loc.mode = 'programme'; rerender(); } } }, 'Ordre du programme'))),
+          h('p', { class: 'secondary muted' }, plural(n, 'cours', 'cours') + ' · environ ' + Math.max(1, Math.ceil(n / Math.max(TOURS_MIN, Math.min(TOURS_MAX, Number(loc.days) || 21)))) + ' par jour'),
+          h('div', { class: 'pj-row__acts' }, btn('Lancer le tour 1', 'btn--primary btn--sm', function () {
+            if (!sel.length) { toast('Choisis au moins une matière', 'warn'); return; }
+            const days = Math.max(TOURS_MIN, Math.min(TOURS_MAX, Math.round(Number(loc.days)) || 21));
+            d.tours = { groups: sel, mode: loc.mode, order: tourOrder(d, sel, loc.mode, cat), days: days, firstDays: days, tour: 1, pos: 0, startedAt: today(), dayDate: null, dayPos: 0, rolledAt: null, lastDoneAt: null };
+            save(d); toast('Tour 1 lancé : ' + plural(days, 'jour', 'jours'), 'ok'); rerender();
+          }, 'play'))));
+        return out;
+      }
+      const pr = tourProgress(T); const td = tourToday(T);
+      out.push(h('div', { class: 'card stack' },
+        h('p', { class: 'pj-h' }, 'Tour ' + T.tour + ' · jour ' + pr.day + '/' + T.days),
+        h('div', { class: 'pj-bar__track' }, h('div', { class: 'pj-bar__fill', style: 'width:' + pr.pct + '%' })),
+        h('p', { class: 'secondary muted' }, pr.pos + '/' + pr.total + ' cours faits (' + pr.pct + ' %) · ' + pr.quota + ' par jour · ' + T.groups.join(', ') + ' · ' + (T.mode === 'priorite' ? 'par priorité' : 'ordre du programme')
+          + (pr.behind ? ' · ' + plural(pr.behind, 'cours de retard', 'cours de retard') : '') + ' · tour suivant en ' + plural(pr.next, 'jour', 'jours'))));
+      if (td.finished) out.push(h('p', { class: 'pj-h' }, 'Tour terminé aujourd’hui : bravo ! Le suivant commence demain.'));
+      else {
+        out.push(h('p', { class: 'pj-h' }, 'Au programme aujourd’hui'));
+        out.push(h('div', { class: 'pj-grp' }, td.items.map(function (it) {
+          const c = d.courses[it.key]; const m = meta(c || { key: it.key }, cat);
+          const isNext = !it.done && it.index === T.pos;
+          return h('div', { class: 'pj-row', style: it.done ? 'opacity:.6' : null }, dot(mastery(c, d)),
+            h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, (it.done ? '✓ ' : '') + m.title), h('div', { class: 'pj-row__s' }, m.group + ' · ' + mastery(c, d).label),
+              !it.done ? h('div', { class: 'pj-row__acts' },
+                m.href ? h('a', { class: 'btn btn--ghost btn--sm', href: m.href }, icon('book'), 'Cours') : null,
+                m.train ? h('a', { class: 'btn btn--ghost btn--sm', href: m.train }, icon('play'), 'S’entraîner') : null,
+                isNext ? btn('Fait', 'btn--primary btn--sm', function () { const msg = tourDone(d, cat); save(d); toast(msg || 'Coché', 'ok'); rerender(); }, 'check') : null) : null));
+        })));
+        if (td.items.length && td.items.every(function (x) { return x.done; })) {
+          out.push(h('p', { class: 'secondary muted' }, 'Quota du jour fait. Tu peux t’arrêter là ou avancer le cours suivant.'));
+          out.push(btn('Avancer d’un cours', null, function () { T.dayDate = null; save(d); rerender(); }, 'plus'));
+        }
+      }
+      out.push(h('div', { class: 'pj-row__acts' },
+        btn('Recalculer l’ordre (priorités actuelles)', null, function () { const done = T.order.slice(0, T.pos); const rest = tourOrder(d, T.groups, T.mode, cat).filter(function (k) { return done.indexOf(k) < 0; }); T.order = done.concat(rest); save(d); toast('Ordre recalculé', 'ok'); rerender(); }, 'refresh'),
+        btn('Arrêter les tours', 'btn--ghost btn--sm', function () { if (!window.confirm('Arrêter la méthode des tours ? La progression du tour sera perdue (les J ne changent pas).')) return; d.tours = null; save(d); rerender(); }, 'x')));
+      return out;
     }
 
     /* --- Planning --- */
