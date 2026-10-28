@@ -96,9 +96,16 @@
   }
 
   /* ---------- liste ---------- */
+  /* Sélection de plusieurs fiches pour s'entraîner dessus (mémorisée pour la session de l'onglet). */
+  const SEL_KEY = 'cardio.parasito.sel';
+  function getSel() { try { return JSON.parse(sessionStorage.getItem(SEL_KEY) || '[]') || []; } catch (e) { return []; } }
+  function setSel(a) { try { sessionStorage.setItem(SEL_KEY, JSON.stringify(a)); } catch (e) { /* ignore */ } }
+  let selMode = false;
   function buildList() {
     const all = list();
     const page = h('div', { class: 'page stack' });
+    const sel = getSel().filter(function (id) { return all.some(function (p) { return p.id === id; }); });
+    const redraw = function () { const v = page.parentNode; if (v) v.replaceChild(buildList(), page); };
     page.appendChild(h('p', { class: 'secondary' }, 'Une fiche par parasite et par mycose, avec uniquement ce qui est en rouge (rang A) dans le poly de parasitologie-mycologie. Mode « Me tester » : les mots-clés sont cachés, à toi de les retrouver.'));
     if (!all.length) {
       page.appendChild(h('div', { class: 'empty' }, h('div', { class: 'empty__title' }, 'Fiches non disponibles ici'), 'Cette rubrique est réservée à ta version privée de l’app.'));
@@ -106,15 +113,30 @@
     }
     const tb = trainBlock(null);
     if (tb) page.appendChild(tb);
+    page.appendChild(h('div', { class: 'cluster' },
+      h('button', { type: 'button', class: 'btn ' + (selMode ? 'btn--primary' : 'btn--outline') + ' btn--sm', on: { click: function () { selMode = !selMode; redraw(); } } },
+        selMode ? 'Terminer la sélection' : 'Choisir plusieurs fiches pour m’entraîner'),
+      selMode && sel.length ? h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: function () { setSel([]); redraw(); } } }, 'Tout décocher') : null));
     const st = loadState();
     GROUPS.forEach(function (g) {
       const group = all.filter(function (p) { return p.group === g[0]; });
       if (!group.length) return;
       const done = group.filter(function (p) { return st[p.id] && st[p.id].ok === true; }).length;
-      page.appendChild(h('div', { class: 'section-head' }, h('h2', {}, g[1]), h('span', { class: 'secondary muted' }, done + ' / ' + group.length + ' sues')));
+      const allIn = group.every(function (p) { return sel.indexOf(p.id) >= 0; });
+      page.appendChild(h('div', { class: 'section-head' }, h('h2', {}, g[1]),
+        selMode ? h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: function () {
+          let s = getSel();
+          if (allIn) s = s.filter(function (id) { return !group.some(function (p) { return p.id === id; }); });
+          else group.forEach(function (p) { if (s.indexOf(p.id) < 0) s.push(p.id); });
+          setSel(s); redraw();
+        } } }, allIn ? 'Décocher le groupe' : 'Tout le groupe') : h('span', { class: 'secondary muted' }, done + ' / ' + group.length + ' sues')));
       page.appendChild(h('div', { class: 'pz-list' }, group.map(function (p) {
         const sta = status(p.id);
-        return h('a', { class: 'pz-card', href: '#/parasito/' + encodeURIComponent(p.id) },
+        const on = sel.indexOf(p.id) >= 0;
+        return h('a', { class: 'pz-card', href: '#/parasito/' + encodeURIComponent(p.id),
+          style: selMode ? 'position:relative;' + (on ? 'outline:3px solid var(--accent);outline-offset:-1px' : '') : null,
+          on: selMode ? { click: function (e) { e.preventDefault(); let s = getSel(); if (on) s = s.filter(function (x) { return x !== p.id; }); else s.push(p.id); setSel(s); redraw(); } } : null },
+          selMode ? h('span', { 'aria-hidden': 'true', style: 'position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;' + (on ? 'background:var(--accent);color:#fff' : 'border:2px solid var(--line);background:var(--surface)') }, on ? '✓' : '') : null,
           h('div', { class: 'pz-card__top' },
             h('span', { class: 'pill pill--A' }, 'Rang A'),
             h('span', { class: 'pill pill--kind' }, count(p) + ' points'),
@@ -125,6 +147,18 @@
           pjStatus(p.id, false));
       })));
     });
+    if (selMode || sel.length) {
+      const chosen = all.filter(function (p) { return sel.indexOf(p.id) >= 0; });
+      const nCards = chosen.reduce(function (a, p) { return a + cardsOf(p).length; }, 0);
+      const base = '#/parasito/choix/cartes?ids=' + chosen.map(function (p) { return encodeURIComponent(p.id); }).join(',');
+      page.appendChild(h('div', { class: 'card', style: 'position:sticky;bottom:calc(var(--tabbar-h,60px) + 8px);z-index:6;display:grid;gap:8px;box-shadow:var(--shadow-2)' },
+        h('b', {}, chosen.length ? chosen.length + ' fiche' + (chosen.length > 1 ? 's' : '') + ' choisie' + (chosen.length > 1 ? 's' : '') + ' · ' + nCards + ' cartes' : 'Touche les fiches à travailler ensemble'),
+        chosen.length ? h('div', { class: 'cluster' },
+          h('a', { class: 'btn btn--primary btn--sm', href: base }, 'Mixte · 20'),
+          h('a', { class: 'btn btn--outline btn--sm', href: base + '&type=qroc' }, 'QROC'),
+          h('a', { class: 'btn btn--outline btn--sm', href: base + '&type=flash' }, 'Flashcards'),
+          h('a', { class: 'btn btn--outline btn--sm', href: base + '&size=all' }, 'Toutes les cartes (' + nCards + ')')) : null));
+    }
     if (noA().length) {
       page.appendChild(h('p', { class: 'secondary muted' }, 'Sans rien en rouge dans le poly (donc pas de fiche) : ' + noA().join(', ') + '.'));
     }
@@ -309,7 +343,7 @@
     return out;
   }
   function allCards(scope, type) {
-    const all = (scope ? [scope] : list()).reduce(function (a, p) { return a.concat(cardsOf(p)); }, []);
+    const all = (Array.isArray(scope) ? scope : scope ? [scope] : list()).reduce(function (a, p) { return a.concat(cardsOf(p)); }, []);
     return type === 'qroc' || type === 'flash' ? all.filter(function (c) { return c.kind === type; }) : all;
   }
   function counts(scope, type) {
@@ -391,16 +425,18 @@
         nf ? h('a', { class: 'btn btn--outline btn--sm', href: base + '?type=flash' }, 'Flashcards') : null));
   }
 
-  function renderTrain(scope, root, type) {
+  function renderTrain(scope, root, type, size) {
     const page = h('div', { class: 'page stack' });
-    const queue = buildSession(scope, 20, type);
+    const multi = Array.isArray(scope);
+    const queue = buildSession(scope, size || 20, type);
     const total = queue.length;
     let done = 0, good = 0;
     const missed = {};
     const head = h('div', { class: 'cluster' });
     const stage = h('div', { class: 'stack' });
-    const back = scope ? '#/parasito/' + encodeURIComponent(scope.id) : '#/parasito';
-    page.append(h('div', {}, h('div', { class: 'caption' }, (type === 'qroc' ? 'QROC' : type === 'flash' ? 'Flashcards' : 'Flashcards + QROC') + ' parasito · rang A'), h('h2', { style: 'margin:4px 0 0' }, scope ? str(scope.title) : 'Toutes les fiches')), head, stage);
+    const back = scope && !multi ? '#/parasito/' + encodeURIComponent(scope.id) : '#/parasito';
+    page.append(h('div', {}, h('div', { class: 'caption' }, (type === 'qroc' ? 'QROC' : type === 'flash' ? 'Flashcards' : 'Flashcards + QROC') + ' parasito · rang A'), h('h2', { style: 'margin:4px 0 0' }, multi ? scope.length + ' fiches choisies' : scope ? str(scope.title) : 'Toutes les fiches'),
+      multi ? h('p', { class: 'secondary muted', style: 'margin:2px 0 0' }, scope.map(function (x) { return str(x.title); }).join(' · ')) : null), head, stage);
     root.appendChild(page);
     if (!total) {
       stage.append(h('div', { class: 'empty' }, h('div', { class: 'empty__title' }, 'Rien à revoir pour l’instant'), 'Reviens plus tard : les cartes reviennent quand il faut.'),
@@ -427,7 +463,7 @@
       const card = h('div', { class: 'pz-card-q' },
         h('div', { class: 'pz-card__top' },
           h('span', { class: 'pill ' + (c.kind === 'qroc' ? 'pill--info' : 'pill--kind') }, c.kind === 'qroc' ? 'QROC' : 'Flashcard'),
-          !scope ? h('span', { class: 'secondary muted' }, str(c.fiche.title)) : null,
+          !scope || Array.isArray(scope) ? h('span', { class: 'secondary muted' }, str(c.fiche.title)) : null,
           missed[c.id] ? h('span', { class: 'pill pill--warn' }, 'deuxième passage') : null),
         h('div', { class: 'pz-q' }, inlineMd(c.q)),
         c.img ? h('figure', { class: 'card-fig' }, h('a', { href: c.img, target: '_blank', rel: 'noopener' }, h('img', { src: c.img, alt: 'Image de la question', loading: 'lazy' })),
@@ -473,8 +509,8 @@
       stage.replaceChildren(
         h('div', { class: 'feedback feedback--ok' }, 'Session terminée : ' + good + ' / ' + total + ' sues du premier coup.'),
         h('p', { class: 'secondary' }, n.known + ' / ' + n.total + ' cartes bien sues' + (n.fresh ? ' · ' + n.fresh + ' nouvelles restantes' : '') + '.'),
-        h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: function () { root.replaceChildren(); renderTrain(scope, root, type); } } }, 'Encore une session'),
-        h('a', { class: 'btn btn--secondary btn--block', href: back }, scope ? 'Retour à la fiche' : 'Retour aux fiches'));
+        h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: function () { root.replaceChildren(); renderTrain(scope, root, type, size); } } }, 'Encore une session'),
+        h('a', { class: 'btn btn--secondary btn--block', href: back }, scope && !multi ? 'Retour à la fiche' : 'Retour aux fiches'));
     }
     next();
   }
@@ -484,9 +520,15 @@
     const root = h('div', { class: 'view-parasito' });
     const id = str(params && params.id);
     if (params && params.train) {
-      const scope = id === 'toutes' ? null : list().find(function (x) { return x.id === id; });
+      let scope = id === 'toutes' ? null : list().find(function (x) { return x.id === id; });
+      if (id === 'choix') {
+        const ids = str(query && query.ids).split(',').map(function (s) { return decodeURIComponent(s.trim()); }).filter(Boolean);
+        scope = list().filter(function (x) { return ids.indexOf(x.id) >= 0; });
+        if (!scope.length) scope = null;
+      }
       root.dataset.title = 'Cartes parasito';
-      renderTrain(scope || null, root, query && query.type);
+      const sz = query && query.size === 'all' ? 100000 : query && Number(query.size) > 0 ? Math.min(500, Number(query.size)) : 20;
+      renderTrain(scope || null, root, query && query.type, sz);
       return root;
     }
     if (id) {
