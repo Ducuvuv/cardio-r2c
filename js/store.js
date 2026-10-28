@@ -1105,7 +1105,9 @@
       if (out.length >= lim) return;
       const groups = items.map(function (it) {
         const list = perItem[it].filter(function (c) { return c.tier === tier; });
-        list.sort(function (a, b) { return a.diff - b.diff; });
+        // Facile d'abord, mais avec du hasard : jamais toujours les mêmes nouvelles questions.
+        list.forEach(function (c) { c.k = (Number(c.diff) || 0) + Math.random() * 2; });
+        list.sort(function (a, b) { return a.k - b.k; });
         return byKindRoundRobin(list);
       });
       roundRobin(groups).forEach(function (id) { if (out.length < lim) out.push(id); });

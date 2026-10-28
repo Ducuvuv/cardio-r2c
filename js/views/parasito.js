@@ -264,8 +264,9 @@
   function buildSession(scope, size, type) {
     const st = loadSrs(), now = Date.now();
     const cards = allCards(scope, type);
-    const due = cards.filter(function (c) { return st[c.id] && st[c.id].d <= now; }).sort(function (a, b) { return st[a.id].d - st[b.id].d; });
-    const fresh = cards.filter(function (c) { return !st[c.id]; });
+    // Tirage aléatoire à chaque séance (dues et nouvelles mélangées ; le rang A reste devant parmi les nouvelles).
+    const due = shuffle(cards.filter(function (c) { return st[c.id] && st[c.id].d <= now; }));
+    const fresh = shuffle(cards.filter(function (c) { return !st[c.id]; }));
     fresh.sort(function (a, b) { return (a.rank === 'B' ? 1 : 0) - (b.rank === 'B' ? 1 : 0); });
     return shuffle(due.slice(0, size).concat(fresh.slice(0, Math.max(0, size - due.length))));
   }
