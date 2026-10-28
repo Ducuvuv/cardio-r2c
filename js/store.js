@@ -1075,7 +1075,7 @@
   function newCards(filter, limit) {
     const f = normFilter(filter);
     const fo = isObj(filter) ? filter : {};
-    const lim = limit === undefined || limit === null ? Infinity : Math.max(0, num(limit, 0));
+    const lim = limit === undefined || limit === null || limit === Infinity ? Infinity : Math.max(0, num(limit, 0));
     if (lim === 0) return [];
     const pool = registryCards(f.item) || [];
     const perItem = {};
@@ -1199,7 +1199,8 @@
     if (mode === 'exam') return buildExam(o, f);
 
     // Un type choisi explicitement (« Par type ») passe outre les niveaux ; les autres modes les respectent.
-    const flags = { item: f.item, items: f.items, kinds: f.kinds, rank: f.rank, anyLevel: mode === 'kind' };
+    const allLevels = mode === 'kind' || o.all === true;
+    const flags = { item: f.item, items: f.items, kinds: f.kinds, rank: f.rank, anyLevel: allLevels };
     // Cartes dues : plus anciennes d'abord, sans celles affichées il y a très peu de temps, réparties par
     // chapitre ; cartes ratées récemment plafonnées (~1/3) ; au plus la moitié de la séance, pour laisser
     // la place à des questions jamais vues.
@@ -1232,7 +1233,7 @@
         const cs = state.cards[id];
         if (inList[id] || !(cs.reps > 0) || reviewedToday(cs, now) || isLeech(id)) return;
         const t = cardTier(id);
-        if (t === 0 || (mode !== 'kind' && t > itemTier(itemOfId(id)))) return;
+        if (t === 0 || (!allLevels && t > itemTier(itemOfId(id)))) return;
         if (!matchesFilter(cardMeta(id), f)) return;
         extra.push({ id: id, last: cs.last || 0 });
       });

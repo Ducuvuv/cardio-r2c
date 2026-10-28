@@ -402,6 +402,8 @@
       size,
       objectives: objectives.map((s) => String(s).trim()).filter(Boolean),
       // Point de cours d'origine (#/item/…/cours?sec=…) : on y revient à la fin de la séance.
+      // all : tout l'item, tous niveaux et tous types (bouton « Tout l'entraînement de l'item »).
+      all: o.all === '1' || o.all === true || o.all === 'true',
       from: typeof o.from === 'string' && /^#\/[^\s<>"']*$/.test(o.from) ? o.from : null,
       autostart: o.autostart === '1' || o.autostart === true || o.autostart === 'true'
     };
@@ -421,6 +423,7 @@
     if (x.rank && x.mode !== 'rank') p.set('rank', x.rank);
     if (x.size != null && x.mode !== 'exam' && x.mode !== 'endless') p.set('size', x.size === 0 ? 'inf' : String(x.size));
     if (x.objectives && x.objectives.length) p.set('objective', x.objectives.join(','));
+    if (x.all) p.set('all', '1');
     if (x.from) p.set('from', x.from);
     if (x.autostart) p.set('autostart', '1');
     return '#/review?' + p.toString();
@@ -853,7 +856,7 @@
         try {
           ids = st.buildSession({
             mode: opts.mode, item: opts.item, size: effectiveSize(opts),
-            kinds: opts.kinds.length ? opts.kinds : null, rank: opts.rank
+            kinds: opts.kinds.length ? opts.kinds : null, rank: opts.rank, all: opts.all
           }) || [];
         } catch (e) { console.error('[quiz] buildSession a échoué', e); ids = []; }
       } else {

@@ -212,6 +212,10 @@
     '.hub__mastery-txt{flex:1;min-width:0;font-size:.875rem;color:var(--muted)}',
     '.hub__mastery-txt b{color:var(--ink)}',
     '.hub__ctas{display:grid;gap:8px;margin-bottom:16px}',
+    '.hub__all{display:grid;gap:8px;margin-bottom:16px;padding:14px 16px}',
+    '.hub__all-title{margin:0;font:700 1rem/1.3 var(--font-display)}',
+    '.hub__all .secondary{margin:0}',
+    '.hub__all .btn .ico{display:inline-flex;margin-right:8px}',
     '.hub__ctas .btn .ico{display:inline-flex;margin-right:8px}',
     '.hub__grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}',
     '.hub__sec{display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit;background:var(--surface);border-radius:var(--r-m);box-shadow:var(--shadow-1);padding:14px;min-height:96px}',
@@ -742,6 +746,16 @@
     page.appendChild(h('div', { class: 'hub__ctas' },
       h('a', { class: 'btn btn--primary btn--block', href: '#/review?mode=item&item=' + it.num + '&autostart=1' }, iconEl('play'), 'Réviser cet item'),
       cardio || Number(c.sec) > 0 || hasF2(it.num) ? h('a', { class: 'btn btn--secondary btn--block', href: '#/item/' + it.num + '/cours' }, iconEl('book'), cardio ? 'Fiche complète' : hasF2(it.num) ? 'Cours' : 'Fiche 80 %') : null));
+
+    // Tout l'entraînement de l'item : toutes les questions/flashcards (tous niveaux, sans limite) + cartes traitements.
+    const allHref = '#/review?mode=item&item=' + it.num + '&size=inf&all=1&from=' + encodeURIComponent('#/item/' + it.num) + '&autostart=1';
+    const nT2 = t2Count(it.num);
+    page.appendChild(h('section', { class: 'card hub__all' },
+      h('h3', { class: 'hub__all-title' }, 'Tout l’entraînement de l’item'),
+      h('p', { class: 'secondary' }, 'Toutes les questions et flashcards de l’item d’un coup, tous niveaux confondus, dans un ordre aléatoire.'),
+      h('a', { class: 'btn btn--primary btn--block', href: allHref }, iconEl('play'), 'Tout faire' + (m.total ? ' · ' + m.total + ' cartes' : '')),
+      nT2 > 0 ? h('a', { class: 'btn btn--secondary btn--block', href: '#/ttt2/item/' + encodeURIComponent(it.num) + '/cartes' }, iconEl('flash'), 'Cartes traitements de l’item') : null,
+      hasF2(it.num) ? h('a', { class: 'btn btn--ghost btn--block', href: '#/item/' + it.num + '/cours' }, iconEl('book'), 'Mini-quiz du cours, partie par partie') : null));
 
     const lvl = levelPanel(it);
     if (lvl) page.appendChild(lvl);
