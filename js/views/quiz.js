@@ -1522,7 +1522,7 @@
       slot.replaceChildren(feedbackEl(tone, line, sub));
       const grades = ctx.gradeBar({ score, ms, onGrade: (g) => ctx.finish({ score, grade: g, ms, details: { type: d.type, discordances: disc, difficulty: d.difficulty, selected: Array.from(selected) } }) });
       if (qHint) qHint.remove();
-      after.replaceChildren(explainEl('Explication', d.explanation), deepEl(d.deep), trapEl(d.trap), srcEl(d.src), grades);
+      after.replaceChildren(...[explainEl('Explication', d.explanation), deepEl(d.deep), trapEl(d.trap), srcEl(d.src), grades].filter(Boolean));
       after.hidden = false;
       scrollIntoView(slot);
     }
@@ -1544,7 +1544,15 @@
   function renderQroc(card, ctx) {
     const d = ctx.data;
     const bed = (function () { try { return localStorage.getItem('cardio.bed') === '1'; } catch (e) { return false; } })();
-    const norm = (s) => (U().normalize ? U().normalize(s) : txt(s).toLowerCase().trim());
+    // Les signes de comparaison comptent : « > 10 » ne doit pas valider « < 10 » (normalize efface la ponctuation).
+    const signs = (s) => txt(s)
+      .replace(/\bST\s*\+/gi, ' ST plus ').replace(/\bST\s*[-−]/gi, ' ST moins ')
+      .replace(/\bavant (?=\d)/gi, ' inf ').replace(/\b(?:apr[èe]s|au-del[àa] de) (?=\d)/gi, ' sup ')
+      .replace(/≥|>=|sup[ée]rieure?s? ou [ée]gale?s? [àa]/gi, ' supeg ')
+      .replace(/≤|<=|inf[ée]rieure?s? ou [ée]gale?s? [àa]/gi, ' infeg ')
+      .replace(/>|sup[ée]rieure?s? [àa]|plus de /gi, ' sup ')
+      .replace(/<|inf[ée]rieure?s? [àa]|moins de /gi, ' inf ');
+    const norm = (s) => (U().normalize ? U().normalize(signs(s)) : signs(s).toLowerCase().trim());
     let validated = false;
     const input = h('input', {
       type: 'text', class: 'input', autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false',
@@ -1603,16 +1611,25 @@
         }
         return false;
       };
-      const exact = !!given && expected.some((a) => given === a || hasAnswer(given, a));
+      // Une négation absente de toutes les réponses attendues (« non calcifié » pour « calcifié ») ne vaut jamais 100 %.
+      const NEG = /(^| )(non|pas|sans|aucune?|jamais|ni|absence)( |$)/;
+      // Signe inversé (« < 38,5 » pour « > 38,5 », « moins de 5 ans » pour « plus de 5 ans ») : jamais 100 % non plus.
+      const sideOf = (s) => { const m = / (supeg|sup|infeg|inf) /.exec(' ' + s + ' '); return m ? m[1].slice(0, 3) : ''; };
+      const wantSide = sideOf(norm(d.answer));
+      const flipSide = !!wantSide && !!sideOf(given) && sideOf(given) !== wantSide;
+      const negOnly = (NEG.test(given) && !expected.some((a) => NEG.test(a))) || flipSide;
+      const exact = !!given && !negOnly && expected.some((a) => given === a || hasAnswer(given, a));
       const keywords = Array.isArray(d.keywords) ? d.keywords : [];
       const matched = keywords.filter((k) => { const nk = norm(k); return nk && has(given, nk); });
       const ratio = exact ? 1 : keywords.length ? matched.length / keywords.length : 0;
-      const score = exact || (keywords.length && ratio >= 0.999) ? 1 : ratio > 0 ? 0.5 : 0;
+      const score = exact || (!negOnly && keywords.length && ratio >= 0.999) ? 1 : ratio > 0 ? 0.5 : 0;
       let tone, line;
       if (!given && bed) { tone = 'info'; line = 'Compare avec ta réponse de tête.'; }
       else if (!given) { tone = 'info'; line = 'Pas de réponse — lis la correction.'; }
       else if (exact) { tone = 'ok'; line = 'Juste.'; }
       else if (score === 1) { tone = 'ok'; line = 'Tous les mots-clés sont là.'; }
+      else if (score === 0.5 && flipSide) { tone = 'warn'; line = 'Attention au sens du seuil : compare avec la réponse attendue.'; }
+      else if (score === 0.5 && negOnly) { tone = 'warn'; line = 'Attention à la négation : compare avec la réponse attendue.'; }
       else if (score === 0.5) { tone = 'warn'; line = 'Presque : ' + matched.length + ' / ' + keywords.length + ' mots-clés.'; }
       else { tone = 'bad'; line = 'Compare avec la réponse attendue.'; }
       haptic();
@@ -1632,7 +1649,7 @@
         onGrade: (g) => ctx.finish({ score: gradeToScore(g), grade: g, ms, details: { given: input.value.slice(0, 200), matched: matched.length, keywords: keywords.length, exact } })
       });
       if (qHint) qHint.remove();
-      after.replaceChildren(answer, kw, explainEl('Explication', d.explanation), deepEl(d.deep), srcEl(d.src), grades);
+      after.replaceChildren(...[answer, kw, explainEl('Explication', d.explanation), deepEl(d.deep), srcEl(d.src), grades].filter(Boolean));
       after.hidden = false;
       scrollIntoView(slot);
     }
@@ -1686,10 +1703,10 @@
         cb.addEventListener('change', () => { if (cb.checked) ticked.add(i); else ticked.delete(i); lab.classList.toggle('is-on', cb.checked); refresh(); });
         return lab;
       });
-      after.replaceChildren(
+      after.replaceChildren(...[
         explainEl('Réponse modèle', d.model),
         rubric.length ? h('div', { class: 'stack stack--sm' }, h('span', { class: 'caption' }, 'Grille : coche ce que tu as cité'), h('div', { class: 'rubric' }, items), scoreLine) : null,
-        srcEl(d.src), grades);
+        srcEl(d.src), grades].filter(Boolean));
       after.hidden = false;
       scrollIntoView(after);
     }
@@ -1977,7 +1994,7 @@
       const ms = ctx.elapsed();
       haptic();
       const grades = ctx.gradeBar({ score: 1, ms, suggested: 3, title: 'Tu connaissais cet arbre ?', onGrade: (g) => ctx.finish({ score: gradeToScore(g), grade: g, ms }) });
-      after.replaceChildren(srcEl(tree.src), grades);
+      after.replaceChildren(...[srcEl(tree.src), grades].filter(Boolean));
       after.hidden = false;
       scrollIntoView(after);
     }
