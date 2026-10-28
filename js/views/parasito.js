@@ -96,6 +96,32 @@
   }
 
   /* ---------- liste ---------- */
+  /* Réglages d'une séance : type, nombre de cartes, ordre (mémorisés), puis bouton Lancer. */
+  const OPT_KEY = 'cardio.parasito.opts';
+  function getOpts() { try { return Object.assign({ type: '', size: '20', order: 'random' }, JSON.parse(localStorage.getItem(OPT_KEY) || '{}')); } catch (e) { return { type: '', size: '20', order: 'random' }; } }
+  function trainChooser(base, nCards) {
+    const o = getOpts();
+    const wrap = h('div', { style: 'display:grid;gap:8px' });
+    function chips(label, key, opts) {
+      return h('div', { style: 'display:flex;align-items:center;gap:6px;flex-wrap:wrap' }, h('span', { class: 'secondary muted', style: 'min-width:64px' }, label),
+        opts.map(function (x) {
+          return h('button', { type: 'button', class: 'btn btn--sm ' + (o[key] === x[0] ? 'btn--primary' : 'btn--outline'), on: { click: function () { o[key] = x[0]; try { localStorage.setItem(OPT_KEY, JSON.stringify(o)); } catch (e) { /* ignore */ } draw(); } } }, x[1]);
+        }));
+    }
+    function draw() {
+      const n = o.size === 'all' ? nCards : Math.min(nCards, Number(o.size) || 20);
+      const qs = (o.type ? '&type=' + o.type : '') + '&size=' + o.size + '&order=' + o.order;
+      const href = base.indexOf('?') < 0 ? base + '?' + qs.slice(1) : base + qs;
+      wrap.replaceChildren(
+        chips('Cartes', 'type', [['', 'Mixte'], ['qroc', 'QROC'], ['flash', 'Flashcards']]),
+        chips('Nombre', 'size', [['10', '10'], ['20', '20'], ['30', '30'], ['50', '50'], ['all', 'Toutes (' + nCards + ')']]),
+        chips('Ordre', 'order', [['random', 'Au hasard'], ['srs', 'Répétition espacée']]),
+        h('p', { class: 'secondary muted', style: 'margin:0' }, o.order === 'random' ? 'Tirage au hasard à chaque séance, en évitant les cartes que tu viens de voir.' : 'Les cartes dues d’abord, puis les nouvelles, puis les moins récemment vues.'),
+        h('a', { class: 'btn btn--primary btn--block', href: href }, 'Lancer · ' + n + ' carte' + (n > 1 ? 's' : '')));
+    }
+    draw();
+    return wrap;
+  }
   /* Sélection de plusieurs fiches pour s'entraîner dessus (mémorisée pour la session de l'onglet). */
   const SEL_KEY = 'cardio.parasito.sel';
   function getSel() { try { return JSON.parse(sessionStorage.getItem(SEL_KEY) || '[]') || []; } catch (e) { return []; } }
@@ -153,11 +179,7 @@
       const base = '#/parasito/choix/cartes?ids=' + chosen.map(function (p) { return encodeURIComponent(p.id); }).join(',');
       page.appendChild(h('div', { class: 'card', style: 'position:sticky;bottom:calc(var(--tabbar-h,60px) + 8px);z-index:6;display:grid;gap:8px;box-shadow:var(--shadow-2)' },
         h('b', {}, chosen.length ? chosen.length + ' fiche' + (chosen.length > 1 ? 's' : '') + ' choisie' + (chosen.length > 1 ? 's' : '') + ' · ' + nCards + ' cartes' : 'Touche les fiches à travailler ensemble'),
-        chosen.length ? h('div', { class: 'cluster' },
-          h('a', { class: 'btn btn--primary btn--sm', href: base }, 'Mixte · 20'),
-          h('a', { class: 'btn btn--outline btn--sm', href: base + '&type=qroc' }, 'QROC'),
-          h('a', { class: 'btn btn--outline btn--sm', href: base + '&type=flash' }, 'Flashcards'),
-          h('a', { class: 'btn btn--outline btn--sm', href: base + '&size=all' }, 'Toutes les cartes (' + nCards + ')')) : null));
+        chosen.length ? trainChooser(base, nCards) : null));
     }
     if (noA().length) {
       page.appendChild(h('p', { class: 'secondary muted' }, 'Sans rien en rouge dans le poly (donc pas de fiche) : ' + noA().join(', ') + '.'));
@@ -358,14 +380,33 @@
     return { due: due, fresh: fresh, known: known, total: cards.length };
   }
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
-  function buildSession(scope, size, type) {
-    const st = loadSrs(), now = Date.now();
+  /* Dernière fois qu'une carte a été montrée (anti-répétition) : localStorage « cardio.parasito.shown » = {cardId: ms}. */
+  const LS_SHOWN = 'cardio.parasito.shown';
+  function loadShown() { try { return JSON.parse(localStorage.getItem(LS_SHOWN) || '{}') || {}; } catch (e) { return {}; } }
+  function markShown(id) { try { const s = loadShown(); s[id] = Date.now(); localStorage.setItem(LS_SHOWN, JSON.stringify(s)); } catch (e) { /* ignore */ } }
+  /* Les moins récemment montrées d'abord (jamais montrées en tête), tirage au hasard à égalité. */
+  function byFreshness(list, shown) {
+    return shuffle(list.slice()).map(function (c) { return { c: c, t: shown[c.id] || 0 }; })
+      .sort(function (a, b) { return a.t - b.t; }).map(function (x) { return x.c; });
+  }
+  function buildSession(scope, size, type, order) {
+    const st = loadSrs(), now = Date.now(), shown = loadShown();
     const cards = allCards(scope, type);
-    // Tirage aléatoire à chaque séance (dues et nouvelles mélangées ; le rang A reste devant parmi les nouvelles).
-    const due = shuffle(cards.filter(function (c) { return st[c.id] && st[c.id].d <= now; }));
-    const fresh = shuffle(cards.filter(function (c) { return !st[c.id]; }));
+    if (order === 'random') {
+      // Au hasard : toutes les cartes de la sélection, en évitant celles montrées récemment
+      return shuffle(byFreshness(cards, shown).slice(0, size));
+    }
+    // Répétition espacée : dues d'abord, puis nouvelles (rang A devant), puis complément avec les moins récemment vues,
+    // pour que la séance ait toujours sa taille et ne repasse pas toujours les mêmes cartes.
+    const due = byFreshness(cards.filter(function (c) { return st[c.id] && st[c.id].d <= now; }), shown);
+    const fresh = byFreshness(cards.filter(function (c) { return !st[c.id]; }), shown);
     fresh.sort(function (a, b) { return (a.rank === 'B' ? 1 : 0) - (b.rank === 'B' ? 1 : 0); });
-    return shuffle(due.slice(0, size).concat(fresh.slice(0, Math.max(0, size - due.length))));
+    let out = due.slice(0, size).concat(fresh.slice(0, Math.max(0, size - due.length)));
+    if (out.length < size) {
+      const used = {}; out.forEach(function (c) { used[c.id] = 1; });
+      out = out.concat(byFreshness(cards.filter(function (c) { return !used[c.id]; }), shown).slice(0, size - out.length));
+    }
+    return shuffle(out);
   }
   function grade(id, ok) {
     const st = loadSrs(), cur = st[id] || { b: 0 };
@@ -419,16 +460,13 @@
     return h('div', { class: 'pz-train' },
       h('div', { class: 'pz-train__t' }, scope ? 'S’entraîner sur cette fiche' : 'Réviser les cartes parasito'),
       h('div', { class: 'pz-train__s' }, nf + ' flashcards · ' + nq + ' QROC — ' + (n.due ? n.due + ' à revoir · ' : '') + n.fresh + ' nouvelles · ' + n.known + ' bien sues'),
-      h('div', { class: 'pz-train__btns' },
-        h('a', { class: 'btn btn--primary btn--sm', href: base }, 'Mixte'),
-        nq ? h('a', { class: 'btn btn--outline btn--sm', href: base + '?type=qroc' }, 'QROC') : null,
-        nf ? h('a', { class: 'btn btn--outline btn--sm', href: base + '?type=flash' }, 'Flashcards') : null));
+      h('div', { style: 'margin-top:6px' }, trainChooser(base, n.total)));
   }
 
-  function renderTrain(scope, root, type, size) {
+  function renderTrain(scope, root, type, size, order) {
     const page = h('div', { class: 'page stack' });
     const multi = Array.isArray(scope);
-    const queue = buildSession(scope, size || 20, type);
+    const queue = buildSession(scope, size || 20, type, order);
     const total = queue.length;
     let done = 0, good = 0;
     const missed = {};
@@ -460,6 +498,7 @@
       next();
     }
     function show(c) {
+      markShown(c.id);
       const card = h('div', { class: 'pz-card-q' },
         h('div', { class: 'pz-card__top' },
           h('span', { class: 'pill ' + (c.kind === 'qroc' ? 'pill--info' : 'pill--kind') }, c.kind === 'qroc' ? 'QROC' : 'Flashcard'),
@@ -509,7 +548,7 @@
       stage.replaceChildren(
         h('div', { class: 'feedback feedback--ok' }, 'Session terminée : ' + good + ' / ' + total + ' sues du premier coup.'),
         h('p', { class: 'secondary' }, n.known + ' / ' + n.total + ' cartes bien sues' + (n.fresh ? ' · ' + n.fresh + ' nouvelles restantes' : '') + '.'),
-        h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: function () { root.replaceChildren(); renderTrain(scope, root, type, size); } } }, 'Encore une session'),
+        h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: function () { root.replaceChildren(); renderTrain(scope, root, type, size, order); } } }, 'Encore une session'),
         h('a', { class: 'btn btn--secondary btn--block', href: back }, scope && !multi ? 'Retour à la fiche' : 'Retour aux fiches'));
     }
     next();
@@ -528,7 +567,7 @@
       }
       root.dataset.title = 'Cartes parasito';
       const sz = query && query.size === 'all' ? 100000 : query && Number(query.size) > 0 ? Math.min(500, Number(query.size)) : 20;
-      renderTrain(scope || null, root, query && query.type, sz);
+      renderTrain(scope || null, root, query && query.type, sz, query && query.order === 'random' ? 'random' : 'srs');
       return root;
     }
     if (id) {
