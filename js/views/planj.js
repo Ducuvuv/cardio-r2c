@@ -419,7 +419,7 @@
         .sort(function (a, b) { const ca = d.courses[a.key], cb = d.courses[b.key]; return (ca.due < cb.due ? -1 : ca.due > cb.due ? 1 : 0) || ca.step - cb.step; });
       if (!due.length) return null;
       const c = d.courses[due[0].key];
-      return { m: due[0], why: jLabel(d.rhythm, c.step) + (c.due < today() ? ' en retard' : ' prévu ce jour-là') };
+      return { m: due[0], why: jLabel(d.rhythm, c.step) + (c.due < today() ? ' en retard' : c.due === today() ? ' prévu aujourd’hui' : ' prévu ce jour-là') };
     }
     function pickWeak(g) {
       const rest = metas.filter(function (m) { const c = d.courses[m.key]; return m.group === g && c && c.state === 'active' && !used[m.key]; }).sort(function (a, b) { return pr(b) - pr(a); });
@@ -544,6 +544,11 @@
       '.pj-search{min-height:42px;border:1px solid var(--line);border-radius:12px;padding:0 12px;background:var(--surface);color:var(--ink);font-size:15px;width:100%}',
       '.pj-bulk{position:sticky;bottom:calc(var(--tabbar-h,64px) + 8px);z-index:5;box-shadow:var(--shadow-2)}',
       '.pj-xpline{display:flex;gap:6px;flex-wrap:wrap}',
+      '.pj-sts{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}',
+      '.pj-frag{display:flex;flex-direction:column;gap:6px;margin-top:8px;padding:8px;border-radius:14px;background:color-mix(in srgb,var(--bad) 7%,transparent)}',
+      '.pj-frag__row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}',
+      '.pj-frag__t{flex:1;min-width:120px;font-size:13px;font-weight:600;color:var(--ink)}',
+      '.pj-st{font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap}',
       '.pj-xpchip{font-weight:800;font-size:13px;padding:5px 11px;border-radius:999px;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-2,var(--accent)))}',
       '.pj-xpchip--lvl{background:var(--surface-2);color:var(--ink)}',
       '.pj-xpchip--fire{background:linear-gradient(135deg,#F97316,#FBBF24)}',
@@ -568,6 +573,8 @@
       root.replaceChildren.apply(root, [tabs(), kpis(d)].concat(state.tab === 'today' ? viewToday(d, cat)
         : state.tab === 'cours' ? viewCourses(d, cat) : state.tab === 'prio' ? viewPrio(d, cat) : state.tab === 'tours' ? viewTours(d, cat) : state.tab === 'plan' ? viewPlan(d, cat) : viewSettings(d)).filter(Boolean));
     }
+    let rrTimer = null;
+    function rerenderSoon() { clearTimeout(rrTimer); rrTimer = setTimeout(function () { if (root.isConnected) rerender(); }, 120); }
     function go(tab) { state.tab = tab; state.open = null; rerender(); window.scrollTo(0, 0); }
     function tabs() {
       const T = [['today', 'Aujourd’hui'], ['cours', 'Mes cours'], ['prio', 'Priorités'], ['tours', 'Tours'], ['plan', 'Planning'], ['regl', 'Réglages']];
@@ -678,7 +685,9 @@
       return h('div', { class: 'pj-row', style: 'align-items:flex-start' }, dot(ms),
         h('div', { class: 'pj-row__main' },
           h('div', { class: 'pj-row__t' }, m.title),
-          h('div', { class: 'pj-row__s' }, h('span', { class: 'pj-tag' }, jLabel(d.rhythm, c.step)), ' ', lateN ? h('span', { class: 'pj-tag pj-tag--late' }, 'retard ' + lateN + ' j') : null, ' ', m.group + ' · ' + ms.label + qtag(c)),
+          h('div', { class: 'pj-row__s' }, h('span', { class: 'pj-tag' }, jLabel(d.rhythm, c.step)), ' ', lateN ? h('span', { class: 'pj-tag pj-tag--late' }, 'retard ' + lateN + ' j') : null, ' ', m.group),
+          statusEl(c, d, { noLevel: true }),
+          c.key.charAt(0) === 'i' ? fragileEl(c.key.slice(2), rerenderSoon, 2) : null,
           h('div', { class: 'pj-row__acts' },
             m.href ? h('a', { class: 'btn btn--ghost btn--sm', href: m.href }, icon('book'), 'Revoir le cours') : null,
             m.train ? h('a', { class: 'btn btn--ghost btn--sm', href: m.train }, icon('play'), 'S’entraîner') : null),
@@ -741,7 +750,8 @@
         : c.state === 'pause' ? 'En pause' : 'Prochain ' + jLabel(d.rhythm, c.step) + ' · ' + nice(c.due) + ' · ' + ms.label;
       const subQ = sub + qtag(c);
       const main = h('div', { class: 'pj-row__main', style: 'cursor:pointer', on: { click: function () { if (state.bulk) { toggle(); return; } state.open = state.open === m.key ? null : m.key; rerender(); } } },
-        h('div', { class: 'pj-row__t' }, m.title), h('div', { class: 'pj-row__s' }, subQ));
+        h('div', { class: 'pj-row__t' }, m.title), h('div', { class: 'pj-row__s' }, !c ? 'Pas encore placé' : c.state === 'acquis' ? 'Acquis · ' + plural(c.history.length, 'révision', 'révisions') : c.state === 'pause' ? 'En pause' : 'Prochain ' + jLabel(d.rhythm, c.step) + ' · ' + nice(c.due)),
+        c ? statusEl(c, d) : null);
       function toggle() { state.sel[m.key] = !state.sel[m.key]; rerender(); }
       if (state.classify) {
         return h('div', { class: 'pj-row', style: 'flex-wrap:wrap' }, dot(ms), h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, m.title), h('div', { class: 'pj-row__s' }, sub)),
@@ -934,7 +944,9 @@
           h('b', { style: 'width:22px;text-align:right;color:var(--muted)' }, s.done ? '✓' : String(i + 1)), dot(mastery(c, d)),
           h('div', { class: 'pj-row__main' },
             h('div', { class: 'pj-row__t' }, m.title),
-            h('div', { class: 'pj-row__s' }, tag + (c && c.state === 'active' && c.due ? ' · ' + jLabel(d.rhythm, c.step) + (c.due < t ? ' en retard' : c.due === t ? ' dû aujourd’hui' : '') : '') + (s.done && s.grade ? ' · ' + GRADES[s.grade].label : '') + qtag(c)),
+            h('div', { class: 'pj-row__s' }, tag + (s.done && s.grade ? ' · ' + GRADES[s.grade].label : '')),
+            statusEl(c, d, { noLevel: true }),
+            !s.done && s.key.charAt(0) === 'i' ? fragileEl(s.key.slice(2), rerenderSoon, 2) : null,
             acts.length ? h('div', { class: 'pj-row__acts' }, acts) : null)));
         const nextS = day.slots[i + 1];
         if (s.g === 'Parasito-myco' && (!nextS || nextS.g !== 'Parasito-myco')) {
@@ -1028,7 +1040,8 @@
           h('b', { style: 'width:22px;text-align:right;color:var(--muted)' }, String(i + 1)), dot(x.p.mastery),
           h('div', { class: 'pj-row__main' },
             h('div', { class: 'pj-row__t' }, m.title),
-            h('div', { class: 'pj-row__s' }, m.group + ' · ' + x.p.mastery.label + ' · ' + FREQ[x.p.freq.v].toLowerCase() + (x.p.freq.est ? ' (estimé)' : '') + (x.p.why.length ? ' · ' + x.p.why.join(', ') : '')),
+            h('div', { class: 'pj-row__s' }, m.group + ' · ' + FREQ[x.p.freq.v].toLowerCase() + (x.p.freq.est ? ' (estimé)' : '') + (x.p.why.length ? ' · ' + x.p.why.join(', ') : '')),
+            statusEl(c, d, { next: true }),
             h('div', { class: 'pj-bar__track', style: 'margin-top:6px' }, h('div', { class: 'pj-bar__fill', style: 'width:' + Math.max(4, Math.round(x.p.score / max * 100)) + '%' })),
             h('div', { class: 'pj-row__acts' },
               m.href ? h('a', { class: 'btn btn--ghost btn--sm', href: m.href }, icon('book'), 'Cours') : null,
@@ -1087,7 +1100,7 @@
           const c = d.courses[it.key]; const m = meta(c || { key: it.key }, cat);
           const isNext = !it.done && it.index === T.pos;
           return h('div', { class: 'pj-row', style: it.done ? 'opacity:.6' : null }, dot(mastery(c, d)),
-            h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, (it.done ? '✓ ' : '') + m.title), h('div', { class: 'pj-row__s' }, m.group + ' · ' + mastery(c, d).label),
+            h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, (it.done ? '✓ ' : '') + m.title), h('div', { class: 'pj-row__s' }, m.group), statusEl(c, d, { noLevel: true }),
               !it.done ? h('div', { class: 'pj-row__acts' },
                 m.href ? h('a', { class: 'btn btn--ghost btn--sm', href: m.href }, icon('book'), 'Cours') : null,
                 m.train ? h('a', { class: 'btn btn--ghost btn--sm', href: m.train }, icon('play'), 'S’entraîner') : null,
@@ -1240,11 +1253,98 @@
     if (!u || typeof u.on !== 'function') { setTimeout(bindQuiz, 200); return; }
     u.on('quiz:answer', onQuizAnswer);
   })();
+  /* Pastilles visibles partout : niveau de maîtrise (couleur) + note aux questions + prochain J. */
+  const LVL_TONE = { none: ['var(--surface-2)', 'var(--muted)'], new: ['var(--info-soft)', 'var(--info)'], bad: ['var(--bad-soft)', 'var(--bad)'], mid: ['var(--warn-soft)', 'var(--warn)'], ok: ['var(--ok-soft)', 'var(--ok)'], acq: ['var(--ok)', '#fff'] };
+  function chip(text, bg, fg) { return h('span', { class: 'pj-st', style: 'background:' + bg + ';color:' + fg }, text); }
+  function statusEl(c, d, opts) {
+    const ms = mastery(c, d); const tone = LVL_TONE[ms.lvl] || LVL_TONE.none;
+    const lab = ms.label.replace(/ \((mon classement|questions [^)]*)\)$/, '');
+    const out = [chip(lab + (c ? ' · ' + Math.round(ms.score * 100) + ' %' : ''), tone[0], tone[1])];
+    if (c && c.qnote) out.push(chip('📝 ' + c.qnote.pct + ' % · ' + c.qnote.n + ' q.' + (diff(c.qnote.date, today()) ? ' · il y a ' + diff(c.qnote.date, today()) + ' j' : ''), 'var(--accent-soft)', 'var(--accent)'));
+    if (c && c.level && !(opts && opts.noLevel)) out.push(chip('Mon niveau : ' + LEVELS[c.level].label, 'var(--surface-2)', 'var(--ink-2)'));
+    if (opts && opts.next && c && c.state === 'active' && c.due) out.push(chip('Prochain ' + jLabel(d.rhythm, c.step) + ' · ' + nice(c.due), 'var(--surface-2)', 'var(--ink-2)'));
+    return h('span', { class: 'pj-sts' }, out);
+  }
   function qtag(c) {
     if (!c || !c.qnote) return '';
     const days = diff(c.qnote.date, today());
     return ' · 📝 ' + c.qnote.pct + ' % (' + c.qnote.n + ' q.' + (days ? ', il y a ' + days + ' j' : '') + ')';
   }
 
-  CARDIO.views.planj = { render: render, summary: summary, homeCard: function () { ensureStyles(); return homeCard(); } };
+  /* ---------- zones de fragilité : parties de la fiche où tu réussis le moins ----------
+   * Pour chaque partie (section de fiche2 et ses objectifs), score moyen de tes dernières réponses aux cartes de la
+   * partie (au moins 3 cartes déjà faites). Renvoie null tant que le contenu de l'item n'est pas chargé (chargement lancé,
+   * puis `onReady` rappelé). */
+  const GRADE_SCORE = { 1: 0, 2: 0.5, 3: 0.8, 4: 1 };
+  const loading = {};
+  function cardScore(id) {
+    try {
+      const c = CARDIO.store.card(id);
+      if (!c || !Array.isArray(c.hist) || !c.hist.length) return null;
+      const hs = c.hist.slice(-2);
+      let s = 0;
+      hs.forEach(function (x) { s += x[2] != null ? Math.max(0, Math.min(1, Number(x[2]))) : (GRADE_SCORE[x[1]] != null ? GRADE_SCORE[x[1]] : 0.5); });
+      return s / hs.length;
+    } catch (e) { return null; }
+  }
+  function weakSections(num, onReady) {
+    const r = CARDIO.registry || {};
+    const key = String(num);
+    const f2 = r.fiche2 && r.fiche2[key];
+    if (!f2 || !Array.isArray(f2.sections)) return [];
+    if (typeof r.isLoaded === 'function' && !r.isLoaded(key)) {
+      if (!loading[key] && typeof r.load === 'function') {
+        loading[key] = true;
+        r.load(key).then(function () { loading[key] = false; if (typeof onReady === 'function') onReady(); }, function () { loading[key] = false; });
+      }
+      return null;
+    }
+    const out = [];
+    f2.sections.forEach(function (s) {
+      const objs = Array.isArray(s.objectives) ? s.objectives.filter(Boolean) : [];
+      if (!objs.length) return;
+      const ids = {};
+      objs.forEach(function (o) { (typeof r.cardsForObjective === 'function' ? r.cardsForObjective(key, o) : []).forEach(function (c) { if (c.kind !== 'flash') ids[c.id] = 1; }); });
+      const all = Object.keys(ids);
+      let n = 0, sum = 0;
+      all.forEach(function (id) { const v = cardScore(id); if (v != null) { n++; sum += v; } });
+      out.push({ id: s.id, title: String(s.title || s.id).replace(/^\d+\.\s*/, ''), objectives: objs, total: all.length, seen: n, pct: n ? Math.round(sum / n * 100) : null });
+    });
+    return out;
+  }
+  /* Les parties à revoir en priorité : testées (≥ 3 cartes) et sous 70 %, les plus faibles d'abord. */
+  function fragileOf(num, onReady) {
+    const ws = weakSections(num, onReady);
+    if (!ws) return null;
+    return ws.filter(function (s) { return s.seen >= 3 && s.pct < 70; }).sort(function (a, b) { return a.pct - b.pct; });
+  }
+  function sectionLinks(num, s) {
+    const back = encodeURIComponent('#/item/' + num + '/cours?sec=' + s.id);
+    return {
+      read: '#/item/' + encodeURIComponent(num) + '/cours?sec=' + encodeURIComponent(s.id),
+      test: '#/review?mode=item&item=' + encodeURIComponent(num) + '&objective=' + s.objectives.map(encodeURIComponent).join(',') + '&from=' + back + '&autostart=1'
+    };
+  }
+  function fragileEl(num, onReady, max) {
+    const fr = fragileOf(num, onReady);
+    if (!fr || !fr.length) return null;
+    return h('div', { class: 'pj-frag' }, fr.slice(0, max || 2).map(function (s) {
+      const l = sectionLinks(num, s);
+      return h('div', { class: 'pj-frag__row' },
+        h('span', { class: 'pj-st', style: 'background:var(--bad-soft);color:var(--bad)' }, '⚠ ' + s.pct + ' %'),
+        h('span', { class: 'pj-frag__t' }, s.title),
+        h('a', { class: 'btn btn--ghost btn--sm', href: l.read }, 'Revoir'),
+        h('a', { class: 'btn btn--outline btn--sm', href: l.test }, 'Me tester'));
+    }));
+  }
+
+  /* Pour les autres vues (liste des items, page d'un item, séance) */
+  function statusFor(key) {
+    try { const d = load(); return { course: d.courses[key] || null, el: statusEl(d.courses[key] || null, d, { next: true }), mastery: mastery(d.courses[key] || null, d) }; } catch (e) { return null; }
+  }
+  function quizProgress(num) {
+    try { const d = load(); const a = d.qacc && d.qacc.date === today() ? d.qacc.items[String(num)] : null; return a ? { n: a.n, pct: Math.round(a.sum / Math.max(1, a.n) * 100), applied: !!a.applied, min: QUIZ_MIN } : { n: 0, pct: 0, applied: false, min: QUIZ_MIN }; } catch (e) { return null; }
+  }
+  CARDIO.views.planj = { render: render, summary: summary, statusFor: function (k) { ensureStyles(); return statusFor(k); }, quizProgress: quizProgress,
+    weakSections: weakSections, fragileOf: fragileOf, sectionLinks: sectionLinks, homeCard: function () { ensureStyles(); return homeCard(); } };
 })();

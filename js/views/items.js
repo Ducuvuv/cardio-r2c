@@ -315,6 +315,13 @@
 
   /* ---------- Liste des items ---------- */
 
+  // Méthode des J : niveau de maîtrise + note aux questions (views/planj.js)
+  function pjStatus(num) {
+    const pj = CARDIO.views && CARDIO.views.planj;
+    if (!pj || typeof pj.statusFor !== 'function') return null;
+    const s = pj.statusFor('i:' + num);
+    return s && s.el ? s.el : null;
+  }
   function itemRow(it, due) {
     const m = mastery(it.num);
     const soon = it.available === false;
@@ -327,6 +334,7 @@
           soon ? h('span', { class: 'pill pill--info' }, 'bientôt') : null,
           !soon && due ? h('span', { class: 'pill pill--warn items__due' }, due + ' à revoir') : null),
         h('p', { class: 'items__title' }, it.title),
+        soon ? null : pjStatus(it.num),
         h('div', { class: 'items__counts' }, soon ? 'Contenu en préparation' : countsSummary(c)),
         soon ? null : h('div', { class: 'items__bars' },
           h('div', { class: 'items__bar' }, h('span', { class: 'pill pill--A' }, 'A'), bar(m.A, 'bar--A'), h('span', {}, pct(m.A) + ' %')),
@@ -743,6 +751,48 @@
         h('div', {}, h('b', {}, m.seen || 0), ' carte' + (m.seen > 1 ? 's' : '') + ' vue' + (m.seen > 1 ? 's' : '') + (m.total ? ' sur ' + m.total : '')),
         h('div', {}, due ? [h('b', {}, String(due)), ' à revoir maintenant'] : 'Rien en attente'))));
 
+    {
+      const pj = CARDIO.views && CARDIO.views.planj;
+      const s = pj && typeof pj.statusFor === 'function' ? pj.statusFor('i:' + it.num) : null;
+      const qp = pj && typeof pj.quizProgress === 'function' ? pj.quizProgress(it.num) : null;
+      if (s) page.appendChild(h('a', { class: 'card', href: '#/planj?tab=cours', style: 'display:block;margin-bottom:12px;text-decoration:none;color:inherit' },
+        h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px' }, h('b', {}, 'Méthode des J'), h('span', { class: 'secondary muted' }, s.course ? 'Modifier' : 'Placer ce cours')),
+        s.course ? s.el : h('p', { class: 'secondary muted', style: 'margin:4px 0 0' }, 'Pas encore placé dans ton planning.'),
+        qp ? h('p', { class: 'secondary muted', style: 'margin:6px 0 0' }, qp.applied ? '📝 Note du jour enregistrée : ' + qp.pct + ' % sur ' + qp.n + ' questions.' : '📝 ' + qp.n + '/' + qp.min + ' questions aujourd’hui' + (qp.n ? ' (' + qp.pct + ' %)' : '') + ' : à ' + qp.min + ', ta note compte comme une révision.') : null));
+    }
+    {
+      // Zones de fragilité : parties de la fiche où tu réussis le moins (≥ 3 cartes faites, < 70 %), à revoir en premier
+      const pj = CARDIO.views && CARDIO.views.planj;
+      if (pj && typeof pj.weakSections === 'function') {
+        const host = h('section', { class: 'card', style: 'margin-bottom:12px' });
+        const fill = function () {
+          const ws = pj.weakSections(it.num, fill);
+          if (ws === null) { host.replaceChildren(h('b', {}, 'Zones de fragilité'), h('p', { class: 'secondary muted', style: 'margin:4px 0 0' }, 'Calcul en cours…')); return; }
+          if (!ws.length) { host.remove(); return; }
+          const tested = ws.filter(function (s) { return s.seen >= 3; }).sort(function (a, b) { return a.pct - b.pct; });
+          const fragile = tested.filter(function (s) { return s.pct < 70; });
+          const untested = ws.filter(function (s) { return s.seen < 3; });
+          const rowOf = function (s, tone) {
+            const l = pj.sectionLinks(it.num, s);
+            const lab = s.seen >= 3 ? s.pct + ' %' : 'pas encore testé';
+            const col = tone === 'bad' ? 'var(--bad)' : tone === 'ok' ? 'var(--ok)' : 'var(--muted)';
+            return h('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line)' },
+              h('b', { style: 'min-width:74px;color:' + col }, (tone === 'bad' ? '⚠ ' : '') + lab),
+              h('span', { style: 'flex:1;min-width:140px;font-size:14px' }, s.title),
+              h('a', { class: 'btn btn--ghost btn--sm', href: l.read }, 'Revoir'),
+              h('a', { class: 'btn btn--outline btn--sm', href: l.test }, 'Me tester'));
+          };
+          host.replaceChildren.apply(host, [].concat(
+            h('b', {}, fragile.length ? 'À revoir en priorité (' + fragile.length + ')' : 'Zones de fragilité'),
+            h('p', { class: 'secondary muted', style: 'margin:4px 0 6px' }, fragile.length ? 'Les parties du cours où tu réussis le moins, de la plus faible à la moins faible.' : (tested.length ? 'Aucune partie sous 70 % : bravo. Les parties pas encore testées sont listées ci-dessous.' : 'Fais quelques questions sur l’item : les parties où tu bloques apparaîtront ici.')),
+            fragile.map(function (s) { return rowOf(s, 'bad'); }),
+            tested.filter(function (s) { return s.pct >= 70; }).slice(0, 3).map(function (s) { return rowOf(s, 'ok'); }),
+            untested.slice(0, 4).map(function (s) { return rowOf(s, 'none'); })));
+        };
+        fill();
+        page.appendChild(host);
+      }
+    }
     page.appendChild(h('div', { class: 'hub__ctas' },
       h('a', { class: 'btn btn--primary btn--block', href: '#/review?mode=item&item=' + it.num + '&autostart=1' }, iconEl('play'), 'Réviser cet item'),
       cardio || Number(c.sec) > 0 || hasF2(it.num) ? h('a', { class: 'btn btn--secondary btn--block', href: '#/item/' + it.num + '/cours' }, iconEl('book'), cardio ? 'Fiche complète' : hasF2(it.num) ? 'Cours' : 'Fiche 80 %') : null));

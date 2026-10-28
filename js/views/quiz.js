@@ -1284,6 +1284,16 @@
     }
 
     /* Barre de grades Encore / Difficile / Bien / Facile avec aperçu des intervalles. */
+    /* Compteur « 📝 n/20 » de l'item (méthode des J) : à 20 questions dans la journée, la note compte comme une révision. */
+    function qpChip(card) {
+      try {
+        const pj = CARDIO.views && CARDIO.views.planj;
+        if (!pj || !pj.quizProgress || !card || !card.item || card.kind === 'flash') return null;
+        const q = pj.quizProgress(card.item);
+        if (!q) return null;
+        return h('span', { class: 'quiz__meta-item', title: 'Questions sur cet item aujourd’hui (méthode des J)' }, q.applied ? '📝 ' + q.pct + ' %' : '📝 ' + q.n + '/' + q.min);
+      } catch (e) { return null; }
+    }
     /* Partie de la fiche qui traite la question (section de fiche2 rattachée à l'objectif), avec retour à la séance. */
     function pointUrl(card) {
       if (!card || !card.item) return null;
@@ -1369,6 +1379,7 @@
       meta.replaceChildren(
         kindPill(card.kind), rankPill(card.rank),
         h('span', { class: 'quiz__meta-item', title: itemLabel(card.item) }, itemShort(card.item)),
+        qpChip(card),
         totalEl, timerEl
       );
       action.set({ label: 'Valider', disabled: true });
