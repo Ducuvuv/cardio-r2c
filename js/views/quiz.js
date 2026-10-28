@@ -401,6 +401,8 @@
       rank: o.rank === 'A' || o.rank === 'B' ? o.rank : (mode === 'rank' ? 'A' : null),
       size,
       objectives: objectives.map((s) => String(s).trim()).filter(Boolean),
+      // Point de cours d'origine (#/item/…/cours?sec=…) : on y revient à la fin de la séance.
+      from: typeof o.from === 'string' && /^#\/[^\s<>"']*$/.test(o.from) ? o.from : null,
       autostart: o.autostart === '1' || o.autostart === true || o.autostart === 'true'
     };
   }
@@ -419,6 +421,7 @@
     if (x.rank && x.mode !== 'rank') p.set('rank', x.rank);
     if (x.size != null && x.mode !== 'exam' && x.mode !== 'endless') p.set('size', x.size === 0 ? 'inf' : String(x.size));
     if (x.objectives && x.objectives.length) p.set('objective', x.objectives.join(','));
+    if (x.from) p.set('from', x.from);
     if (x.autostart) p.set('autostart', '1');
     return '#/review?' + p.toString();
   }
@@ -679,7 +682,8 @@
     function currentOpts() {
       return normOpts({
         mode: state.mode, item: state.item, kinds: state.kinds, size: state.size,
-        rank: state.mode === 'rank' ? 'A' : state.mode === 'endless' ? state.rank : null, objectives: state.objectives
+        rank: state.mode === 'rank' ? 'A' : state.mode === 'endless' ? state.rank : null, objectives: state.objectives,
+        from: state.objectives && state.objectives.length ? opts.from : null
       });
     }
     function launch() {
@@ -1128,7 +1132,7 @@
         const st = ST();
         if (st && typeof st.endSession === 'function') { try { st.endSession(rt.id, { done: 0 }); } catch (e) { /* ignore */ } }
         dropRt(rt.id);
-        go(rt.opts.item ? '#/item/' + rt.opts.item : '#/review');
+        go(rt.opts.from || (rt.opts.item ? '#/item/' + rt.opts.item : '#/review'));
       });
     }
 
@@ -2376,16 +2380,17 @@
 
     // CTA
     const ctas = h('div', { class: 'stack stack--sm' });
+    if (rt.opts.from) ctas.appendChild(h('a', { class: 'btn btn--primary btn--block btn--lg', href: rt.opts.from }, icon('book'), 'Revenir au point de cours'));
     if (rt.opts.mode === 'exam') {
       ctas.appendChild(h('a', { class: 'btn btn--primary btn--block btn--lg', href: reviewUrl(rt.opts, { autostart: true }) }, icon('refresh'), 'Nouvel examen blanc'));
     } else if (rt.opts.mode !== 'single') {
-      ctas.appendChild(h('a', { class: 'btn btn--primary btn--block btn--lg', href: reviewUrl(rt.opts, { size: 10, autostart: true }) }, icon('play'), 'Encore 10'));
+      ctas.appendChild(h('a', { class: 'btn ' + (rt.opts.from ? 'btn--secondary' : 'btn--primary') + ' btn--block btn--lg', href: reviewUrl(rt.opts, { size: 10, autostart: true }) }, icon('play'), 'Encore 10'));
     }
     ctas.appendChild(h('a', { class: 'btn btn--secondary btn--block', href: '#/' }, 'Retour à l’accueil'));
     if (rt.opts.item) ctas.appendChild(h('a', { class: 'btn btn--ghost btn--block', href: '#/item/' + rt.opts.item }, 'Voir l’item ' + itemShort(rt.opts.item)));
     stack.appendChild(ctas);
 
-    return { el: page, title: 'Résultats', back: rt.opts.item ? '#/item/' + rt.opts.item : '#/review', tab: 'review', session: false };
+    return { el: page, title: 'Résultats', back: rt.opts.from || (rt.opts.item ? '#/item/' + rt.opts.item : '#/review'), tab: 'review', session: false };
   }
 
   function heroLine(s) {

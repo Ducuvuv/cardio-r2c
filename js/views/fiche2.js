@@ -52,9 +52,11 @@
   /** Valeur d'attribut sûre dans un sélecteur [x="…"] (CSS.escape n'existe pas partout). */
   function attrq(s) { return str(s).replace(/["\\]/g, '\\$&'); }
   function data(num) { const f = registry().fiche2; return f && typeof f === 'object' && f[str(num)] ? f[str(num)] : null; }
-  function testUrl(num, ids) {
+  function testUrl(num, ids, sid) {
     const q = (ids || []).filter(Boolean).map(encodeURIComponent).join(',');
-    return '#/review?mode=item&item=' + encodeURIComponent(num) + (q ? '&objective=' + q : '') + '&autostart=1';
+    // from : la séance finie (ou quittée), on revient sur cette partie de la fiche.
+    const from = sid ? '&from=' + encodeURIComponent('#/item/' + num + '/cours?sec=' + sid) : '';
+    return '#/review?mode=item&item=' + encodeURIComponent(num) + (q ? '&objective=' + q : '') + from + '&autostart=1';
   }
   function itemLabel(num) {
     try { const r = registry(); return typeof r.label === 'function' ? r.label(num) : str(num); } catch (e) { return str(num); }
@@ -234,7 +236,7 @@
       '<p class="f2-quiz__title">' + icon('target') + '<span>Teste-toi sur cette partie</span></p>' +
       '<button type="button" class="btn btn--secondary btn--block" data-qz="start">' + icon('play') + '<span>Mini-quiz · ' + PER_QUIZ + ' questions</span></button>' +
       '<div class="f2-quiz__body" hidden></div>' +
-      '<a class="f2-quiz__all" href="' + esc(testUrl(num, objs)) + '">Faire toutes les questions de cette partie →</a></div>' : '';
+      '<a class="f2-quiz__all" href="' + esc(testUrl(num, objs, s.id)) + '">Faire toutes les questions de cette partie →</a></div>' : '';
     return '<details class="f2-sec' + (read ? ' is-read' : '') + '" data-sid="' + esc(s.id) + '"' + rkAttr(r, sectionHasB(s)) + (read ? '' : ' open') + '>' +
       '<summary class="f2-sec__head"><span class="f2-sec__n" aria-hidden="true">' + (i + 1) + '</span>' +
       '<span class="f2-sec__title">' + inline(s.title) + '</span>' +
@@ -900,6 +902,18 @@
       }
     });
     bindDrag(root);
+    if (q.sec) {
+      // Retour d'une séance lancée depuis une partie : on rouvre cette partie et on la remet à l'écran.
+      const jump = function () {
+        const sec = root.querySelector('.f2-sec[data-sid="' + attrq(q.sec) + '"]');
+        if (!sec || !root.isConnected) return false;
+        sec.open = true;
+        sec.scrollIntoView({ block: 'start', behavior: 'auto' });
+        return true;
+      };
+      let tries = 0;
+      (function wait() { if (!jump() && ++tries < 20) setTimeout(wait, 50); })();
+    }
     return root;
   }
 

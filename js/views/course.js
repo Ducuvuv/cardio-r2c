@@ -207,9 +207,11 @@
 
   function rankPill(rank) { const r = rank === 'B' ? 'B' : 'A'; return h('span', { class: 'pill pill--' + r }, r); }
 
-  function testUrl(num, objectiveIds) {
+  function testUrl(num, objectiveIds, sid) {
     const ids = (objectiveIds || []).filter(Boolean).map(encodeURIComponent).join(',');
-    return '#/review?mode=item&item=' + num + (ids ? '&objective=' + ids : '') + '&autostart=1';
+    // from : la séance finie (ou quittée), on revient sur cette section de la fiche (v1).
+    const from = sid ? '&from=' + encodeURIComponent('#/item/' + num + '/cours?v=1&sec=' + sid) : '';
+    return '#/review?mode=item&item=' + num + (ids ? '&objective=' + ids : '') + from + '&autostart=1';
   }
 
   function sectionEl(num, sec, index, ctx) {
@@ -256,7 +258,7 @@
       h('span', { class: 'fiche__src' }, sec.src ? 'Collège, ' + sec.src : ''),
       h('div', { class: 'fiche__foot-btns' },
         readBtn,
-        h('a', { class: 'btn btn--secondary btn--sm', href: testUrl(num, sec.objectives) }, iconEl('play'), 'Tester cette section'))));
+        h('a', { class: 'btn btn--secondary btn--sm', href: testUrl(num, sec.objectives, sec.id) }, iconEl('play'), 'Tester cette section'))));
 
     det.appendChild(h('summary', {},
       rankPill(sec.rank),
@@ -407,10 +409,11 @@
 
   /* ---------- Rendu ---------- */
 
-  function render(params) {
+  function render(params, query) {
     ensureStyles();
     const num = str((params && (params.num || params.item)) || '');
     const section = params && params.section ? String(params.section) : '';
+    const backSec = query && query.sec ? String(query.sec) : '';
     const reg = registry();
     const meta = reg && typeof reg.item === 'function' ? safe(function () { return reg.item(num); }, null) : null;
     const root = h('div', { class: 'view-course' });
@@ -424,6 +427,15 @@
     }
 
     function show(el) { root.replaceChildren(el); }
+    if (backSec) {
+      // Retour d'une séance lancée depuis une section : on la rouvre et on la remet à l'écran (contenu parfois chargé après).
+      let tries = 0;
+      (function wait() {
+        const det = root.isConnected ? root.querySelector('[id="sec-' + backSec.replace(/["\\]/g, '') + '"]') : null;
+        if (det) { det.open = true; det.scrollIntoView({ block: 'start', behavior: 'auto' }); return; }
+        if (++tries < 60) setTimeout(wait, 50);
+      })();
+    }
 
     function attempt() {
       const r = registry();
