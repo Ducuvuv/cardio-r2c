@@ -398,6 +398,9 @@
     return {
       mode,
       item: o.item ? String(o.item) : null,
+      // plusieurs items (sélection dans la liste) et ordre « au hasard » (tirage anti-répétition)
+      items: (Array.isArray(o.items) ? o.items : (o.items ? String(o.items).split(',') : [])).map((s) => String(s).trim()).filter(Boolean).slice(0, 80),
+      order: o.order === 'random' ? 'random' : null,
       kinds,
       rank: o.rank === 'A' || o.rank === 'B' ? o.rank : (mode === 'rank' ? 'A' : null),
       size,
@@ -420,6 +423,8 @@
     const p = new URLSearchParams();
     p.set('mode', x.mode === 'single' ? 'smart' : x.mode);
     if (x.item) p.set('item', x.item);
+    if (x.items && x.items.length) p.set('items', x.items.join(','));
+    if (x.order) p.set('order', x.order);
     if (x.kinds && x.kinds.length) p.set('kind', x.kinds.join(','));
     if (x.rank && x.mode !== 'rank') p.set('rank', x.rank);
     if (x.size != null && x.mode !== 'exam' && x.mode !== 'endless') p.set('size', x.size === 0 ? 'inf' : String(x.size));
@@ -737,6 +742,11 @@
       warnOnce('registry', 'CARDIO.registry indisponible : impossible de charger le contenu.');
       return Promise.resolve();
     }
+    if (opts.items && opts.items.length) {
+      let done = 0;
+      return Promise.all(opts.items.map((n) => reg.load(n).catch((e) => { console.warn('[quiz] item non chargé', n, e); return null; })
+        .then(() => { done++; if (loader) loader.setProgress(done, opts.items.length); })));
+    }
     if (opts.item) return reg.load(opts.item);
     if (opts.mode === 'errors') {
       const st = ST();
@@ -846,10 +856,36 @@
     return ids.filter((id) => registryCard(id));
   }
 
+  /* Plusieurs items et/ou ordre « au hasard » : file composée ici.
+   * Au hasard : questions jamais servies d'abord, puis les moins récemment servies (store.servedAge), tirage au sort à égalité.
+   * Répétition espacée : dues d'abord, puis nouvelles, puis complément avec les moins récemment servies. */
+  function buildPickQueue(opts) {
+    const reg = RG(), st = ST(), u = U();
+    const nums = opts.items && opts.items.length ? opts.items : (opts.item ? [opts.item] : []);
+    let pool = [];
+    nums.forEach((n) => { try { pool = pool.concat(reg && typeof reg.cards === 'function' ? reg.cards(n) || [] : []); } catch (e) { /* ignore */ } });
+    pool = pool.filter((c) => (opts.kinds.length ? opts.kinds.indexOf(c.kind) >= 0 : c.kind !== 'tree') && (!opts.rank || c.rank === opts.rank));
+    if (opts.objectives.length) pool = pool.filter((c) => opts.objectives.indexOf(c.objective) >= 0);
+    const age = (c) => { try { return st && st.servedAge ? st.servedAge(c.id) : Infinity; } catch (e) { return Infinity; } };
+    const fresh = (list) => (u && u.shuffle ? u.shuffle(list.slice()) : list.slice()).sort((a, b) => age(b) - age(a));
+    const size = effectiveSize(opts) || pool.length;
+    let out;
+    if (opts.order === 'random') out = fresh(pool).slice(0, size);
+    else {
+      const cs = (c) => (st && typeof st.card === 'function' ? st.card(c.id) : null);
+      const due = fresh(pool.filter((c) => isDueState(cs(c))));
+      const neu = fresh(pool.filter((c) => { const s = cs(c); return !s || !s.last; }));
+      out = due.slice(0, size).concat(neu.slice(0, Math.max(0, size - due.length)));
+      if (out.length < size) { const used = new Set(out.map((c) => c.id)); out = out.concat(fresh(pool.filter((c) => !used.has(c.id))).slice(0, size - out.length)); }
+    }
+    return (u && u.shuffle ? u.shuffle(out) : out).map((c) => c.id);
+  }
   function buildQueue(opts) {
     let ids = [];
     if (opts.mode === 'endless') return endlessBatch(opts, null);
-    if (opts.objectives.length && opts.item) {
+    if ((opts.items && opts.items.length) || (opts.order === 'random' && opts.item)) {
+      ids = buildPickQueue(opts);
+    } else if (opts.objectives.length && opts.item) {
       ids = buildObjectiveQueue(opts);
     } else {
       const st = ST();

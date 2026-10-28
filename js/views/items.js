@@ -348,6 +348,34 @@
     pneumo: 'Tout le référentiel de pneumologie, dans l’ordre du livre.'
   };
 
+  /* Réglages d'une séance de questions (type, nombre, ordre), mémorisés ; `params` = items=… ou item=… */
+  const QOPT_KEY = 'cardio.items.qopts';
+  function getQOpts() { try { return Object.assign({ kind: 'qcm,qroc', size: '20', order: 'random' }, JSON.parse(localStorage.getItem(QOPT_KEY) || '{}')); } catch (e) { return { kind: 'qcm,qroc', size: '20', order: 'random' }; } }
+  function qChooser(params, back, total) {
+    const o = getQOpts();
+    const wrap = h('div', { style: 'display:grid;gap:8px' });
+    function chips(label, key, opts) {
+      return h('div', { style: 'display:flex;align-items:center;gap:6px;flex-wrap:wrap' }, h('span', { class: 'secondary muted', style: 'min-width:64px' }, label),
+        opts.map(function (x) {
+          return h('button', { type: 'button', class: 'btn btn--sm ' + (o[key] === x[0] ? 'btn--primary' : 'btn--outline'), on: { click: function () { o[key] = x[0]; try { localStorage.setItem(QOPT_KEY, JSON.stringify(o)); } catch (e) { /* ignore */ } draw(); } } }, x[1]);
+        }));
+    }
+    function draw() {
+      const href = '#/review?mode=item&' + params + (o.kind ? '&kind=' + o.kind : '') + '&size=' + (o.size === 'all' ? 'inf' : o.size) + '&all=1' + (o.order === 'random' ? '&order=random' : '') + '&from=' + encodeURIComponent(back) + '&autostart=1';
+      wrap.replaceChildren(
+        chips('Questions', 'kind', [['qcm,qroc', 'QCM + QROC'], ['qcm', 'QCM'], ['qroc', 'QROC'], ['flash', 'Flashcards'], ['', 'Tout']]),
+        chips('Nombre', 'size', [['10', '10'], ['20', '20'], ['30', '30'], ['50', '50'], ['all', 'Toutes' + (total ? ' (' + total + ')' : '')]]),
+        chips('Ordre', 'order', [['random', 'Au hasard'], ['srs', 'Répétition espacée']]),
+        h('p', { class: 'secondary muted', style: 'margin:0' }, o.order === 'random' ? 'Tirage au hasard à chaque séance : les questions jamais vues ou les moins récemment vues passent d’abord.' : 'Les questions dues d’abord, puis les nouvelles, puis les moins récemment vues.'),
+        h('a', { class: 'btn btn--primary btn--block', href: href }, 'Lancer'));
+    }
+    draw();
+    return wrap;
+  }
+  const ISEL_KEY = 'cardio.items.sel';
+  function getISel() { try { return JSON.parse(sessionStorage.getItem(ISEL_KEY) || '[]') || []; } catch (e) { return []; } }
+  function setISel(a) { try { sessionStorage.setItem(ISEL_KEY, JSON.stringify(a)); } catch (e) { /* ignore */ } }
+  let iselMode = false;
   function buildList() {
     const m = matiere();
     const spe = m ? m.current() : 'all';
@@ -361,6 +389,12 @@
     page.appendChild(h('p', { class: 'items__lead' }, items.length
       ? (available === items.length ? (SPE_LEAD[spe] || SPE_LEAD.all) : available + ' item' + (available > 1 ? 's' : '') + ' disponible' + (available > 1 ? 's' : '') + ' sur ' + items.length + '. Les autres arrivent.')
       : 'Le catalogue n’est pas encore chargé. Recharge la page si cela persiste.'));
+    const sel = getISel();
+    const redraw = function () { const v = page.parentNode; if (v) v.replaceChild(buildList(), page); };
+    page.appendChild(h('div', { class: 'cluster', style: 'margin-bottom:8px' },
+      h('button', { type: 'button', class: 'btn btn--sm ' + (iselMode ? 'btn--primary' : 'btn--outline'), on: { click: function () { iselMode = !iselMode; redraw(); } } },
+        iselMode ? 'Terminer la sélection' : 'Choisir plusieurs items pour m’entraîner'),
+      iselMode && sel.length ? h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: function () { setISel([]); redraw(); } } }, 'Tout décocher') : null));
     let currentSection = null, group = null;
     items.forEach(function (it) {
       if (it.section !== currentSection) {
@@ -370,8 +404,24 @@
         group = h('div', { class: 'items__group' });
         page.appendChild(group);
       }
-      group.appendChild(itemRow(it, due[str(it.num)] || 0));
+      const row = itemRow(it, due[str(it.num)] || 0);
+      if (iselMode && it.available !== false) {
+        const on = sel.indexOf(str(it.num)) >= 0;
+        row.style.position = 'relative';
+        if (on) { row.style.outline = '3px solid var(--accent)'; row.style.outlineOffset = '-1px'; }
+        row.appendChild(h('span', { 'aria-hidden': 'true', style: 'position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;' + (on ? 'background:var(--accent);color:#fff' : 'border:2px solid var(--line);background:var(--surface)') }, on ? '✓' : ''));
+        row.addEventListener('click', function (e) { e.preventDefault(); let s = getISel(); if (on) s = s.filter(function (x) { return x !== str(it.num); }); else s.push(str(it.num)); setISel(s); redraw(); });
+      }
+      group.appendChild(row);
     });
+    if (iselMode || sel.length) {
+      const chosen = allItems().filter(function (it) { return sel.indexOf(str(it.num)) >= 0; });
+      const nQ = chosen.reduce(function (a, it) { const c = it.counts || {}; return a + (Number(c.qcm) || 0) + (Number(c.qroc) || 0); }, 0);
+      page.appendChild(h('div', { class: 'card', style: 'position:sticky;bottom:calc(var(--tabbar-h,60px) + 8px);z-index:6;display:grid;gap:8px;box-shadow:var(--shadow-2);margin-top:12px' },
+        h('b', {}, chosen.length ? chosen.length + ' item' + (chosen.length > 1 ? 's' : '') + ' choisi' + (chosen.length > 1 ? 's' : '') + ' · ' + nQ + ' QCM/QROC' : 'Touche les items à travailler ensemble'),
+        chosen.length ? h('p', { class: 'secondary muted', style: 'margin:0' }, chosen.map(function (it) { return lbl(it) + ' ' + (it.short || ''); }).join(' · ')) : null,
+        chosen.length ? qChooser('items=' + chosen.map(function (it) { return encodeURIComponent(str(it.num)); }).join(','), '#/items', nQ) : null));
+    }
     return page;
   }
 
@@ -800,6 +850,9 @@
     // Tout l'entraînement de l'item : toutes les questions/flashcards (tous niveaux, sans limite) + cartes traitements.
     const allHref = '#/review?mode=item&item=' + it.num + '&size=inf&all=1&from=' + encodeURIComponent('#/item/' + it.num) + '&autostart=1';
     const nT2 = t2Count(it.num);
+    page.appendChild(h('section', { class: 'card hub__all' },
+      h('h3', { class: 'hub__all-title' }, 'Séance sur mesure'),
+      qChooser('item=' + encodeURIComponent(it.num), '#/item/' + it.num, (Number(c.qcm) || 0) + (Number(c.qroc) || 0))));
     page.appendChild(h('section', { class: 'card hub__all' },
       h('h3', { class: 'hub__all-title' }, 'Tout l’entraînement de l’item'),
       h('p', { class: 'secondary' }, 'Toutes les questions et flashcards de l’item d’un coup, tous niveaux confondus, dans un ordre aléatoire.'),
