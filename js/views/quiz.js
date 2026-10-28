@@ -1223,6 +1223,8 @@
       const score = out && out.score != null ? out.score : (res.score != null ? clamp01(res.score) : gradeToScore(res.grade || 3));
       const grade = out && out.grade ? out.grade : (res.grade || suggestGradeRaw(score, ms, card.kind));
       rt.results.push({ cardId: card.id, kind: card.kind, item: card.item, score, grade, ms, xp: out ? out.xpGained || 0 : 0, at: nowMs() });
+      // Méthode des J (views/planj.js) : chaque réponse compte pour la note de l'item (≥ 20 questions dans la journée)
+      try { if (U().emit) U().emit('quiz:answer', { item: card.item, kind: card.kind, score: score, at: nowMs() }); } catch (e) { /* ignore */ }
       if (rt.opts.mode === 'endless' && score < 0.5 && card.kind !== 'case') {
         // Ratée : elle revient une fois, une quinzaine de questions plus tard
         const retries = rt.retries || (rt.retries = {});
