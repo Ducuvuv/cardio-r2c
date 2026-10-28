@@ -88,6 +88,7 @@
     ['#/trees',                   'trees',      'items',    'Arbres décisionnels', true,  { mode: 'library' }],
     ['#/flash',                   'flash',      'items',    'Fiches flash',        true,  {}],
     ['#/pareto',                  'pareto',     'items',    'Récaps Pareto',       true,  {}],
+    ['#/planj',                   'planj',      'home',     'Méthode des J',       true,  {}],
     ['#/algos',                   'algos',      'items',    'Algos de stage',      true,  {}],
     ['#/algos/:id',               'algos',      'items',    'Algo',                true,  {}],
     ['#/parasito',                'parasito',   'items',    'Parasito-myco',       true,  {}],

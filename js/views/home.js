@@ -389,6 +389,7 @@
     const m = matiere();
     const speShort = m ? safe(function () { return m.short(spe); }, spe) : spe;
     const chips = [
+      { label: 'Méthode des J', href: '#/planj', ico: 'calendar', keep: true },
       { label: 'Observation', href: '#/observation', ico: 'case', obs: true },
       { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
       { label: 'Parasito-myco', href: '#/parasito', ico: 'list', parasito: true },
@@ -558,6 +559,8 @@
     const sw = m ? m.switcher({ counts: dueBySpe() }) : null;
     if (sw) page.appendChild(sw);
     page.appendChild(dailyBlock(today, goal, due.length, availableItems));
+    const pj = CARDIO.views && CARDIO.views.planj ? safe(function () { return CARDIO.views.planj.homeCard(); }, null) : null;
+    if (pj) page.appendChild(pj);
     page.appendChild(streakXpBlock());
     page.appendChild(chipsBlock());
     page.appendChild(h('div', { class: 'home__grid' },

@@ -356,7 +356,7 @@
       cards: {}, daily: {},
       streak: { current: 0, best: 0, lastDay: null },
       xp: 0, badges: [],
-      errors: {}, notes: {}, bookmarks: [], itemStats: {}, sessions: []
+      errors: {}, notes: {}, bookmarks: [], itemStats: {}, sessions: [], planJ: null
     };
   }
   function normItemStat(s) {
@@ -465,6 +465,8 @@
       if (isObj(s)) st.itemStats[k] = normItemStat(s);
     });
     st.sessions = trimSessions((Array.isArray(r.sessions) ? r.sessions : []).map(normSession).filter(Boolean));
+    // Méthode des J (views/planj.js normalise le contenu) : copie profonde, sinon rien
+    if (isObj(r.planJ)) { try { st.planJ = JSON.parse(JSON.stringify(r.planJ)); } catch (e) { st.planJ = null; } }
     return st;
   }
 
@@ -552,6 +554,8 @@
       if (!prev || (s.endedAt || 0) > (prev.endedAt || 0) || s.done > prev.done) byId[s.id] = s;
     });
     out.sessions = trimSessions(Object.keys(byId).map(function (k) { return byId[k]; }));
+    // Méthode des J : le planning modifié le plus récemment gagne
+    out.planJ = A.planJ && B.planJ ? ((B.planJ.updatedAt || 0) > (A.planJ.updatedAt || 0) ? B.planJ : A.planJ) : (A.planJ || B.planJ || null);
     out.streak = computeStreak(out.daily, out.profile.dailyGoal, dateKey(nowMs()), { best: Math.max(A.streak.best, B.streak.best) });
     return out;
   }
