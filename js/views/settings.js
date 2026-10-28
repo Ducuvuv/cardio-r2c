@@ -285,6 +285,22 @@
       saveProfile('theme', theme, 'Thème ' + ({ system: 'système', light: 'clair', dark: 'sombre' })[theme] + ' activé.');
     }
 
+    // DA « Fun et rebondi » : couleur principale (html[data-accent], localStorage « cardio.accent »)
+    var ACCENTS = [['indigo', 'Indigo', '#5B4BF0'], ['framboise', 'Framboise', '#E5397A'], ['corail', 'Corail', '#FF6B4A'], ['turquoise', 'Turquoise', '#0FB5AE'], ['vert', 'Vert', '#4CB51C'], ['rouge', 'Rouge', '#E23246']];
+    var curAcc = document.documentElement.getAttribute('data-accent') || 'indigo';
+    var accBtns = [];
+    var accRow = h('div', { style: 'display:flex;gap:10px;flex-wrap:wrap', role: 'radiogroup', 'aria-label': 'Couleur' }, ACCENTS.map(function (a) {
+      var b = h('button', { type: 'button', role: 'radio', 'aria-checked': curAcc === a[0] ? 'true' : 'false', 'aria-label': a[1], title: a[1],
+        style: 'width:40px;height:40px;border-radius:50%;cursor:pointer;background:' + a[2] + ';border:3px solid ' + (curAcc === a[0] ? 'var(--ink)' : 'transparent') + ';box-shadow:0 3px 0 rgba(0,0,0,.18)',
+        on: { click: function () {
+          try { localStorage.setItem('cardio.accent', a[0]); } catch (e) { /* ignore */ }
+          document.documentElement.setAttribute('data-accent', a[0]);
+          accBtns.forEach(function (x) { var on = x.getAttribute('aria-label') === a[1]; x.style.borderColor = on ? 'var(--ink)' : 'transparent'; x.setAttribute('aria-checked', on ? 'true' : 'false'); });
+          toast('Couleur ' + a[1].toLowerCase() + ' activée.');
+        } } });
+      accBtns.push(b);
+      return b;
+    }));
     var bedOn = (function () { try { return localStorage.getItem('cardio.bed') === '1'; } catch (e) { return false; } })();
     var bed = switchCtl('set-bed', bedOn, function (on) {
       try { localStorage.setItem('cardio.bed', on ? '1' : '0'); } catch (e) { /* ignore */ }
@@ -304,6 +320,7 @@
       row('Nouvelles cartes par jour', 'Au-delà des cartes dues, combien de cartes jamais vues ajouter.', newPer, true),
       row('Rétention cible', 'Probabilité de te souvenir d’une carte au moment où elle revient : plus elle est haute, plus les révisions sont rapprochées.', ret, true),
       row('Thème', null, seg),
+      row('Couleur', 'La couleur principale de l’app (boutons, barres, onglets).', accRow),
       row('Mode lit', 'Réviser allongé, d’une main : QROC sans clavier (tu réponds de tête puis tu révèles) et texte agrandi. Associe-le au thème sombre le soir.', bed),
       row('Sons', 'Petit son à la validation.', sound),
       row('Vibrations', 'Retour haptique sur téléphone.', hapt)

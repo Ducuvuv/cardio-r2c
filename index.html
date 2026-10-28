@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="Révision active du Collège de cardiologie (R2C/EDN) : fiches flash, QCM, QROC, arbres décisionnels, traitements, dossiers progressifs, ECG et échographies, avec répétition espacée.">
+<script>try{document.documentElement.setAttribute("data-accent",localStorage.getItem("cardio.accent")||"indigo")}catch(e){document.documentElement.setAttribute("data-accent","indigo")}</script>
 <title>CardioR2C</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -55,6 +56,29 @@
   --ecg-grid:#4A2A2E; --ecg-grid-strong:#6B3A40; --ecg-trace:#F1E6E6; --shadow-1: 0 1px 2px rgba(0,0,0,.5);
   --shadow-2: 0 8px 24px rgba(0,0,0,.5); --scrim: rgba(0,0,0,.6);
 }
+
+
+/* ---------- 1b. DA « Fun et rebondi » : couleur principale au choix (html[data-accent], Réglages) ---------- */
+:root { --accent: #5B4BF0; --accent-soft: #ECEAFF; --accent-deep: #3F31C9; --bg: #F5F5FF; --line: #E2E2F3; --surface-2: #EEEEFA; --surface-3: #E3E3F5; --r-s: 14px; --r-m: 20px; --r-l: 26px; }
+:root[data-accent="framboise"] { --accent: #E5397A; --accent-soft: #FDE6EF; --accent-deep: #B81F5A; --bg: #FFF5F9; --line: #F3DFE8; --surface-2: #FBEEF3; --surface-3: #F5E1EA; }
+:root[data-accent="corail"] { --accent: #FF6B4A; --accent-soft: #FFEAE4; --accent-deep: #D9482A; --bg: #FFF7F3; --line: #F4E2DA; --surface-2: #FCEFE9; --surface-3: #F6E2D9; }
+:root[data-accent="turquoise"] { --accent: #0FB5AE; --accent-soft: #DDF6F4; --accent-deep: #0A8A84; --bg: #F2FBFA; --line: #D9EEEC; --surface-2: #E7F5F3; --surface-3: #D8ECEA; }
+:root[data-accent="vert"] { --accent: #4CB51C; --accent-soft: #E6F6DA; --accent-deep: #3A8E12; --bg: #F5FCEF; --line: #DCEFCF; --surface-2: #ECF7E3; --surface-3: #DFEFD3; }
+:root[data-accent="rouge"] { --accent: #E23246; --accent-soft: #FCE4E7; --accent-deep: #B01E30; --bg: #FFF5F6; --line: #F2DDE0; --surface-2: #FAEDEF; --surface-3: #F3E0E3; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --accent: #8E82FF; --accent-soft: #26224D; --accent-deep: #5B4BF0; --bg: #0F0E1C; --surface: #18172B; --surface-2: #211F3A; --surface-3: #2C2A4A; --line: #2E2C4C; }
+  :root:not([data-theme="light"])[data-accent="framboise"] { --accent: #FF6FA3; --accent-soft: #3D1828; --accent-deep: #C2306A; --bg: #160D12; --surface: #21141B; --surface-2: #2C1A24; --surface-3: #3A2330; --line: #3D2633; }
+  :root:not([data-theme="light"])[data-accent="corail"] { --accent: #FF8A6E; --accent-soft: #3D1E15; --accent-deep: #D9482A; --bg: #160F0C; --surface: #211713; --surface-2: #2D1F19; --surface-3: #3A2921; --line: #3E2C24; }
+  :root:not([data-theme="light"])[data-accent="turquoise"] { --accent: #3DD6CE; --accent-soft: #0F3533; --accent-deep: #0A8A84; --bg: #0B1514; --surface: #12201F; --surface-2: #192B2A; --surface-3: #223836; --line: #243A38; }
+  :root:not([data-theme="light"])[data-accent="vert"] { --accent: #7AD94A; --accent-soft: #1C3312; --accent-deep: #3A8E12; --bg: #0E140B; --surface: #161F12; --surface-2: #1F2A19; --surface-3: #2A3722; --line: #2C3A24; }
+  :root:not([data-theme="light"])[data-accent="rouge"] { --accent: #FF5C6E; --accent-soft: #3A1A20; --accent-deep: #B01E30; --bg: #150D0F; --surface: #201417; --surface-2: #2B1A1F; --surface-3: #382228; --line: #3B262B; }
+}
+:root[data-theme="dark"] { --accent: #8E82FF; --accent-soft: #26224D; --accent-deep: #5B4BF0; --bg: #0F0E1C; --surface: #18172B; --surface-2: #211F3A; --surface-3: #2C2A4A; --line: #2E2C4C; }
+:root[data-theme="dark"][data-accent="framboise"] { --accent: #FF6FA3; --accent-soft: #3D1828; --accent-deep: #C2306A; --bg: #160D12; --surface: #21141B; --surface-2: #2C1A24; --surface-3: #3A2330; --line: #3D2633; }
+:root[data-theme="dark"][data-accent="corail"] { --accent: #FF8A6E; --accent-soft: #3D1E15; --accent-deep: #D9482A; --bg: #160F0C; --surface: #211713; --surface-2: #2D1F19; --surface-3: #3A2921; --line: #3E2C24; }
+:root[data-theme="dark"][data-accent="turquoise"] { --accent: #3DD6CE; --accent-soft: #0F3533; --accent-deep: #0A8A84; --bg: #0B1514; --surface: #12201F; --surface-2: #192B2A; --surface-3: #223836; --line: #243A38; }
+:root[data-theme="dark"][data-accent="vert"] { --accent: #7AD94A; --accent-soft: #1C3312; --accent-deep: #3A8E12; --bg: #0E140B; --surface: #161F12; --surface-2: #1F2A19; --surface-3: #2A3722; --line: #2C3A24; }
+:root[data-theme="dark"][data-accent="rouge"] { --accent: #FF5C6E; --accent-soft: #3A1A20; --accent-deep: #B01E30; --bg: #150D0F; --surface: #201417; --surface-2: #2B1A1F; --surface-3: #382228; --line: #3B262B; }
 
 /* ---------- 2. Base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
@@ -729,6 +753,28 @@ textarea.input { min-height: 96px; resize: vertical; line-height: 1.5; }
   .fiche details { break-inside: avoid; }
   a { color: inherit; text-decoration: none; }
 }
+
+/* ---------- DA « Fun et rebondi » : composants (boutons en relief, cartes rondes à bordure épaisse) ---------- */
+.btn { border-radius: var(--r-s); font-weight: 700; border-width: 2px; }
+.btn--primary { background: var(--accent); color: #fff; border-color: transparent; box-shadow: 0 4px 0 var(--accent-deep); }
+.btn--primary:hover { background: var(--accent); filter: brightness(1.05); }
+.btn--primary:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--accent-deep); }
+.btn--secondary, .btn--outline { background: var(--surface); border: 2px solid var(--line); box-shadow: 0 3px 0 var(--line); }
+.btn--secondary:active, .btn--outline:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--line); }
+.btn--ok { box-shadow: 0 3px 0 rgba(0,0,0,.08); }
+.card { border-radius: var(--r-m); box-shadow: none; border: 2px solid var(--line); }
+.card--accent { border-color: transparent; box-shadow: 0 5px 0 var(--accent-deep); }
+.card--soft { border-color: transparent; }
+.pill { border-radius: 999px; }
+.pj-row { border-width: 2px; border-radius: 16px; }
+.pj-tabs a { border-width: 2px; font-weight: 700; }
+.pj-tabs a.is-on { box-shadow: 0 3px 0 var(--accent-deep); }
+.pj-chips button { border-width: 2px; }
+.pj-chips button.is-on { box-shadow: 0 3px 0 var(--accent-deep); }
+.pj-bar__track { height: 14px; border-radius: 999px; }
+.pj-bar__fill { border-radius: 999px; }
+.pj-kpi { border-width: 2px; border-radius: 16px; }
+.opt { border-radius: 16px !important; border-width: 2px !important; }
 </style>
 </head>
 <body>
