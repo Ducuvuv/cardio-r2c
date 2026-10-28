@@ -21,11 +21,11 @@
   const RHYTHMS = {
     classique: { label: 'Classique', offsets: [1, 3, 7, 15, 30, 60], desc: 'J1, J3, J7, J15, J30, J60 : le rythme de référence.' },
     long: { label: 'Long terme', offsets: [1, 3, 7, 15, 30, 60, 120, 240], desc: 'Classique prolongé à J120 et J240, pour tenir jusqu’à l’EDN.' },
-    allegee: { label: 'Allégé', offsets: [1, 7, 21, 45], desc: 'Moins de révisions, pour les périodes chargées (stage, partiels).' },
+    allegee: { label: 'Allégé (par défaut)', offsets: [1, 7, 21, 45, 90], desc: 'J1, J7, J21, J45, J90 : peu de révisions, tient sur la durée sans te noyer.' },
     intensive: { label: 'Intensif', offsets: [1, 2, 4, 7, 12, 20, 30], desc: 'Les dernières semaines avant l’examen.' },
     adaptative: { label: 'Adaptatif', offsets: [1, 3, 7, 15, 30, 60, 120], adaptive: true, desc: 'Selon ta note : Facile espace plus (× 1,6), Difficile revient demain.' }
   };
-  const ORDER = ['classique', 'long', 'allegee', 'intensive', 'adaptative'];
+  const ORDER = ['allegee', 'classique', 'long', 'intensive', 'adaptative'];
   const GRADES = { difficile: { label: 'Difficile', v: 0.2, tone: 'bad' }, moyen: { label: 'Moyen', v: 0.6, tone: 'warn' }, facile: { label: 'Facile', v: 1, tone: 'ok' } };
   const HORIZON = 21;
   const LEVELS = { 1: { label: 'Vu 1 fois, flou', v: 0.15 }, 2: { label: 'Les bases', v: 0.45 }, 3: { label: 'Bien', v: 0.7 }, 4: { label: 'Maîtrisé', v: 0.95 } };
@@ -91,12 +91,13 @@
   }
 
   /* ---------- données ---------- */
-  function blank() { return { v: 1, rhythm: 'classique', capacity: 12, updatedAt: 0, courses: {}, freq: {}, tours: null, template: normTemplate(null), day: null }; }
+  function blank() { return { v: 1, rhythm: 'allegee', rhythmSet: false, capacity: 12, updatedAt: 0, courses: {}, freq: {}, tours: null, template: normTemplate(null), tplStage: normTemplate(null, STAGE_TEMPLATE), stage: false, day: null }; }
   function load() {
     const raw = CARDIO.store && typeof CARDIO.store.get === 'function' ? CARDIO.store.get('planJ') : null;
     const d = blank();
     if (!raw || typeof raw !== 'object') return d;
-    if (RHYTHMS[raw.rhythm]) d.rhythm = raw.rhythm;
+    // Allégé par défaut tant que l'utilisateur n'a pas choisi lui-même un rythme
+    if (raw.rhythmSet && RHYTHMS[raw.rhythm]) { d.rhythm = raw.rhythm; d.rhythmSet = true; }
     d.capacity = Math.max(2, Math.min(60, Math.round(Number(raw.capacity)) || 12));
     d.updatedAt = Number(raw.updatedAt) || 0;
     if (raw.freq && typeof raw.freq === 'object') Object.keys(raw.freq).forEach(function (k) { const v = Math.round(Number(raw.freq[k])); if (/^[ipc]:/.test(k) && v >= 1 && v <= 3) d.freq[k] = v; });
@@ -104,6 +105,8 @@
     // ancien modèle (v51, sans durées) → nouveau modèle par défaut
     d.template = normTemplate(Array.isArray(raw.template) && raw.template.some(function (s) { return s && s.min; }) ? raw.template : null);
     d.day = normDay(raw.day);
+    d.stage = !!raw.stage;
+    d.tplStage = normTemplate(Array.isArray(raw.tplStage) ? raw.tplStage : null, STAGE_TEMPLATE);
     const t = today();
     const cs = raw.courses && typeof raw.courses === 'object' ? raw.courses : {};
     Object.keys(cs).forEach(function (k) {
@@ -339,18 +342,24 @@
     { g: 'Parasito-myco', m: 'auto', min: 20 }, { g: 'Parasito-myco', m: 'auto', min: 20 },
     { g: 'Bactério / viro (hors app)', m: 'memo', min: 20 }
   ];
+  // Mode stage : journée allégée d'environ 3 h (un seul créneau par pôle, révisions d'abord)
+  const STAGE_TEMPLATE = [
+    { g: 'Dermato', m: 'auto', min: 40 }, { g: 'Pneumo', m: 'auto', min: 35 }, { g: 'Cardio', m: 'auto', min: 35 },
+    { g: 'Pneumo', m: 'rev', min: 30 }, { g: 'Parasito-myco', m: 'auto', min: 20 },
+    { g: 'Bactério / viro (hors app)', m: 'memo', min: 15 }
+  ];
   const MODES = { auto: 'Auto', new: 'Découvrir', rev: 'Revoir', memo: 'Rappel (hors app)' };
   function mode(x) { return x === 'new' || x === 'rev' || x === 'memo' ? x : 'auto'; }
   function mins(x, m) { const n = Math.round(Number(x)); return n >= 5 && n <= 240 ? n : (m === 'new' ? 45 : m === 'rev' ? 30 : m === 'memo' ? 20 : 40); }
-  function normTemplate(x) {
-    if (!Array.isArray(x)) return DEFAULT_TEMPLATE.map(function (s) { return { g: s.g, m: s.m, min: s.min }; });
+  function normTemplate(x, def) {
+    if (!Array.isArray(x)) return (def || DEFAULT_TEMPLATE).map(function (s) { return { g: s.g, m: s.m, min: s.min }; });
     const out = x.filter(function (s) { return s && typeof s.g === 'string' && s.g; }).slice(0, 20)
       .map(function (s) { const m = mode(s.m); return { g: s.g.slice(0, 40), m: m, min: mins(s.min, m) }; });
     return out;
   }
   function normDay(x) {
     if (!x || typeof x !== 'object' || !valid(x.date) || !Array.isArray(x.slots)) return null;
-    return { date: x.date, slots: x.slots.filter(function (s) { return s && typeof s.g === 'string'; }).slice(0, 20).map(function (s) {
+    return { date: x.date, stage: !!x.stage, heavy: !!x.heavy, dueN: Math.max(0, Math.round(Number(x.dueN)) || 0), caught: Math.max(0, Math.round(Number(x.caught)) || 0), slots: x.slots.filter(function (s) { return s && typeof s.g === 'string'; }).slice(0, 20).map(function (s) {
       const m = mode(s.m);
       return { g: s.g, m: m, min: mins(s.min, m), why: typeof s.why === 'string' ? s.why.slice(0, 60) : '', key: typeof s.key === 'string' ? s.key : null, done: !!s.done, grade: GRADES[s.grade] ? s.grade : null };
     }) };
@@ -375,15 +384,20 @@
       const rest = metas.filter(function (m) { const c = d.courses[m.key]; return m.group === g && c && c.state === 'active' && !used[m.key]; }).sort(function (a, b) { return pr(b) - pr(a); });
       return rest[0] ? { m: rest[0], why: 'le plus fragile du pôle' } : null;
     }
-    const slots = d.template.map(function (s) {
+    const dueN = list(d).filter(function (c) { return c.state === 'active' && c.due && c.due <= t; }).length;
+    const tpl = d.stage ? d.tplStage : d.template;
+    const autoN = tpl.filter(function (s) { return s.m !== 'memo'; }).length;
+    const heavy = !!d.stage || dueN > Math.max(autoN, Math.round(d.capacity * 0.8));
+    const slots = tpl.map(function (s) {
       if (s.m === 'memo') return { g: s.g, m: 'memo', min: s.min, why: '', key: null, done: false, grade: null };
-      const order = s.m === 'new' ? [pickNew, pickDue, pickWeak] : s.m === 'rev' ? [pickDue, pickWeak, pickNew] : [pickDue, pickNew, pickWeak];
+      // Charge trop lourde (trop de J dus) : les créneaux « Auto » revoient au lieu de découvrir
+      const order = s.m === 'new' ? [pickNew, pickDue, pickWeak] : s.m === 'rev' ? [pickDue, pickWeak, pickNew] : heavy ? [pickDue, pickWeak, pickNew] : [pickDue, pickNew, pickWeak];
       let r = null;
       for (let i = 0; i < order.length && !r; i++) r = order[i](s.g);
       if (r) used[r.m.key] = 1;
       return { g: s.g, m: s.m, min: s.min, why: r ? r.why : '', key: r ? r.m.key : null, done: false, grade: null };
     });
-    return { date: t, slots: slots };
+    return { date: t, slots: slots, heavy: heavy, dueN: dueN, stage: !!d.stage };
   }
 
   /* ---------- méthode des tours ---------- */
@@ -505,6 +519,7 @@
     function rerender() {
       const d = load();
       const cat = catalog();
+      if (list(d).length) ensureDay(d, cat);
       root.replaceChildren.apply(root, [tabs(), kpis(d)].concat(state.tab === 'today' ? viewToday(d, cat)
         : state.tab === 'cours' ? viewCourses(d, cat) : state.tab === 'prio' ? viewPrio(d, cat) : state.tab === 'tours' ? viewTours(d, cat) : state.tab === 'plan' ? viewPlan(d, cat) : viewSettings(d)).filter(Boolean));
     }
@@ -554,7 +569,7 @@
       if (!cs.length) {
         out.push(h('div', { class: 'card stack' },
           h('p', { class: 'pj-h' }, 'Place tes cours pour démarrer'),
-          h('p', { class: 'secondary muted' }, 'Dans « Mes cours », indique pour chaque item (et chaque fiche parasito) si tu l’as déjà vu, quand, et combien de fois. L’app calcule ensuite toute seule quand le revoir : J1, J3, J7, J15, J30, J60…'),
+          h('p', { class: 'secondary muted' }, 'Dans « Mes cours », indique pour chaque item (et chaque fiche parasito) si tu l’as déjà vu, quand, et combien de fois. L’app calcule ensuite toute seule quand le revoir (rythme allégé : J1, J7, J21, J45, J90).'),
           btn('Placer mes cours', 'btn--primary', function () { go('cours'); }, 'plus')));
         out.push(dayBlock(d, cat));
         out.push(mini);
@@ -781,9 +796,17 @@
     }
 
     /* --- Programme du jour (dans « Aujourd'hui ») --- */
+    function ensureDay(d, cat) {
+      const t = today();
+      if (d.day && d.day.date === t && !!d.day.stage === !!d.stage) return;
+      // Nouveau jour : si le retard dépasse la capacité, on l'étale automatiquement (les plus fragiles d'abord)
+      const late = list(d).filter(function (c) { return c.state === 'active' && c.due && c.due < t; }).length;
+      const caught = late > d.capacity ? catchUp(d) : 0;
+      d.day = buildDay(d, cat); d.day.caught = caught; save(d);
+    }
     function dayBlock(d, cat) {
       const t = today();
-      if (!d.day || d.day.date !== t) { d.day = buildDay(d, cat); save(d); }
+      ensureDay(d, cat);
       const day = d.day;
       const rows = [];
       const nDone = day.slots.filter(function (s) { return s.done; }).length;
@@ -821,7 +844,7 @@
           }
           acts.push(btn('Changer', 'btn--ghost btn--sm', function () {
             const others = day.slots.map(function (x) { return x.key; });
-            const tmp = buildDay(Object.assign({}, d, { template: [{ g: s.g, m: s.m, min: s.min }] }), cat.filter(function (x) { return others.indexOf(x.key) < 0; }));
+            const tmp = buildDay(Object.assign({}, d, { stage: false, template: [{ g: s.g, m: s.m, min: s.min }] }), cat.filter(function (x) { return others.indexOf(x.key) < 0; }));
             const nk = tmp.slots[0] && tmp.slots[0].key;
             if (!nk || others.indexOf(nk) >= 0) { toast('Pas d’autre cours à proposer dans ce pôle', 'warn'); return; }
             s.key = nk; s.why = tmp.slots[0].why; save(d); rerender();
@@ -845,9 +868,18 @@
       const byG = {};
       day.slots.forEach(function (s) { byG[s.g] = (byG[s.g] || 0) + 1; });
       return h('div', { class: 'card stack' },
-        h('p', { class: 'pj-h', style: 'font-size:17px' }, '1 · Ma journée type (' + nDone + '/' + day.slots.length + ' créneaux)'),
+        h('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' },
+          h('p', { class: 'pj-h', style: 'font-size:17px;flex:1;margin:0' }, '1 · ' + (d.stage ? 'Journée de stage' : 'Ma journée type') + ' (' + nDone + '/' + day.slots.length + ' créneaux)'),
+          btn(d.stage ? 'Mode stage : activé' : 'Mode stage', d.stage ? 'btn--primary btn--sm' : 'btn--outline btn--sm', function () {
+            // Bascule : la journée est recomposée tout de suite ; les créneaux déjà faits restent comptés dans les J
+            d.stage = !d.stage; d.day = null; ensureDay(d, cat); save(d);
+            toast(d.stage ? 'Mode stage : journée allégée (~3 h), révisions d’abord' : 'Retour à ta journée type', 'ok'); rerender();
+          }, 'clock')),
         h('p', { class: 'secondary muted' }, 'Objectif : ' + Object.keys(byG).map(function (g) { return byG[g] + ' ' + g; }).join(' · ') + ' · environ ' + hm(tot) + (nDone ? ' (reste ' + hm(left) + ')' : '') + '. Dans chaque créneau, l’app choisit le cours du jour du pôle : un J dû d’abord, sinon un cours à découvrir, sinon ton cours le plus fragile.'),
         h('div', { class: 'pj-bar__track' }, h('div', { class: 'pj-bar__fill', style: 'width:' + Math.round((tot - left) / Math.max(1, tot) * 100) + '%' })),
+        day.heavy || day.caught ? h('div', { class: 'pj-banner' }, h('span', null,
+          (day.caught ? plural(day.caught, 'révision en retard étalée', 'révisions en retard étalées') + ' automatiquement sur les prochains jours. ' : '') +
+          (day.stage ? 'Mode stage : journée allégée (environ 3 h), révisions d’abord ; une découverte seulement s’il n’y a rien à revoir dans le pôle. ' : day.heavy ? 'Beaucoup de J dus (' + day.dueN + ') : les créneaux « Auto » revoient au lieu de découvrir aujourd’hui. Les découvertes reprennent quand la charge baisse.' : ''))) : null,
         h('div', { class: 'pj-grp' }, rows),
         h('div', { class: 'pj-row__acts' }, btn('Recomposer le programme', null, function () { d.day = buildDay(d, cat); save(d); rerender(); }, 'refresh'),
           btn('Modifier mon modèle', null, function () { go('regl'); }, 'edit')));
@@ -858,7 +890,7 @@
       const groups = {};
       allMetas(d, cat).forEach(function (m) { groups[m.group] = 1; });
       const gs = Object.keys(groups);
-      const T = d.template;
+      const T = d.stage ? d.tplStage : d.template;
       const rows = T.map(function (s, i) {
         const sel = s.m === 'memo'
           ? h('input', { type: 'text', maxlength: '40', value: s.g, 'aria-label': 'Nom du rappel', on: { change: function (e) { s.g = e.target.value.trim() || 'Rappel'; save(d); } } })
@@ -874,13 +906,14 @@
           btn('↓', 'btn--ghost btn--sm', function () { if (i < T.length - 1) { T.splice(i + 1, 0, T.splice(i, 1)[0]); save(d); rerender(); } }),
           btn('✕', 'btn--ghost btn--sm', function () { T.splice(i, 1); save(d); rerender(); }));
       });
-      return [h('p', { class: 'pj-h' }, 'Mon modèle de journée'),
+      return [h('p', { class: 'pj-h' }, d.stage ? 'Mon modèle de journée de stage (mode stage activé)' : 'Mon modèle de journée'),
+        h('div', { class: 'pj-row__acts' }, btn(d.stage ? 'Désactiver le mode stage' : 'Activer le mode stage', d.stage ? 'btn--primary btn--sm' : 'btn--outline btn--sm', function () { d.stage = !d.stage; d.day = null; save(d); rerender(); }, 'clock')),
         h('p', { class: 'secondary muted' }, 'L’ordre de ta journée, créneau par créneau, avec sa durée. « Auto » (conseillé) : J dû du pôle d’abord, sinon un cours à découvrir, sinon le plus fragile. « Découvrir » : un cours jamais placé en priorité. « Revoir » : un cours déjà placé seulement. Les changements valent au prochain programme (ou touche « Recomposer »).'),
         h('div', { class: 'pj-grp' }, rows),
         h('div', { class: 'pj-row__acts' },
           btn('Ajouter un créneau', null, function () { T.push({ g: gs[0] || 'Cardio', m: 'auto', min: 40 }); save(d); rerender(); }, 'plus'),
           btn('Ajouter un rappel (hors app)', null, function () { T.push({ g: 'Bactério / viro (hors app)', m: 'memo', min: 20 }); save(d); rerender(); }, 'note'),
-          btn('Modèle par défaut', 'btn--ghost btn--sm', function () { d.template = DEFAULT_TEMPLATE.map(function (s) { return { g: s.g, m: s.m, min: s.min }; }); save(d); rerender(); }),
+          btn('Modèle par défaut', 'btn--ghost btn--sm', function () { if (d.stage) d.tplStage = normTemplate(null, STAGE_TEMPLATE); else d.template = normTemplate(null); save(d); rerender(); }),
           btn('Recomposer aujourd’hui', null, function () { d.day = buildDay(d, cat); save(d); toast('Programme du jour recomposé', 'ok'); }, 'refresh'))];
     }
 
@@ -1019,7 +1052,7 @@
       out.push(h('p', { class: 'pj-h' }, 'Rythme'));
       out.push(h('div', { class: 'pj-grp' }, ORDER.map(function (id) {
         const r = RHYTHMS[id];
-        return h('div', { class: 'pj-row', style: 'cursor:pointer' + (d.rhythm === id ? ';border-color:var(--accent)' : ''), on: { click: function () { setRhythm(d, id); save(d); toast('Rythme ' + r.label + ' : planning recalculé', 'ok'); rerender(); } } },
+        return h('div', { class: 'pj-row', style: 'cursor:pointer' + (d.rhythm === id ? ';border-color:var(--accent)' : ''), on: { click: function () { setRhythm(d, id); d.rhythmSet = true; save(d); toast('Rythme ' + r.label + ' : planning recalculé', 'ok'); rerender(); } } },
           h('span', { class: 'pj-dot ' + (d.rhythm === id ? 'pj-dot--ok' : '') }),
           h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, r.label), h('div', { class: 'pj-row__s' }, r.desc)));
       })));
@@ -1056,7 +1089,7 @@
   }
   function homeCard() {
     const s = summary();
-    const text = !s.placed ? 'Place tes cours : l’app te dit quoi revoir chaque jour (J1, J3, J7…).'
+    const text = !s.placed ? 'Place tes cours : l’app te dit quoi revoir chaque jour.'
       : s.due ? plural(s.due, 'cours à revoir', 'cours à revoir') + ' aujourd’hui' + (s.late ? ' dont ' + s.late + ' en retard' : '') : 'Rien à revoir aujourd’hui : avance un nouveau cours.';
     return h('a', { class: 'card', href: '#/planj', style: 'display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit' },
       h('span', { class: 'pj-dot ' + (s.late ? 'pj-dot--bad' : s.due ? 'pj-dot--mid' : 'pj-dot--ok'), style: 'width:16px;height:16px' }),
