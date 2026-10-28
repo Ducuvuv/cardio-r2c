@@ -121,13 +121,72 @@
             sta ? h('span', { class: 'pill ' + sta.cls }, sta.t) : null),
           h('div', { class: 'pz-card__title' }, str(p.title)),
           p.agent ? h('div', { class: 'pz-card__agent' }, str(p.agent)) : null,
-          p.hook ? h('div', { class: 'pz-card__hook' }, str(p.hook)) : null);
+          p.hook ? h('div', { class: 'pz-card__hook' }, str(p.hook)) : null,
+          pjStatus(p.id, false));
       })));
     });
     if (noA().length) {
       page.appendChild(h('p', { class: 'secondary muted' }, 'Sans rien en rouge dans le poly (donc pas de fiche) : ' + noA().join(', ') + '.'));
     }
     return page;
+  }
+
+  /* ---------- zones de fragilité (estimées) ----------
+   * Les cartes ne sont pas rattachées à une partie de la fiche : on les range dans la partie dont les points partagent le
+   * plus de mots significatifs avec la question + la réponse. Score d'une partie = moyenne des derniers résultats
+   * (Su = 1, À revoir = 0) de ses cartes déjà faites ; fragile si ≥ 3 cartes faites et < 70 %. */
+  function words(s) {
+    const n = (util().normalize ? util().normalize(str(s).replace(/\*\*/g, '')) : str(s).toLowerCase());
+    return n.split(' ').filter(function (w) { return w.length >= 5; });
+  }
+  function sectionScores(p) {
+    const secs = (p.sections || []).map(function (s, i) {
+      const set = {};
+      words((s.h || '') + ' ' + (s.points || []).join(' ')).forEach(function (w) { set[w] = 1; });
+      return { i: i, title: str(s.h || ('Partie ' + (i + 1))), set: set, n: 0, sum: 0, total: 0 };
+    });
+    if (!secs.length) return [];
+    const srs = loadSrs();
+    cardsOf(p).forEach(function (c) {
+      const ws = words(c.q + ' ' + c.a);
+      let best = null, bs = 0;
+      secs.forEach(function (s) { let k = 0; ws.forEach(function (w) { if (s.set[w]) k++; }); if (k > bs) { bs = k; best = s; } });
+      if (!best) return;
+      best.total++;
+      const e = srs[c.id];
+      if (e) { best.n++; best.sum += e.r != null ? e.r : (e.b > 0 ? 1 : 0); }
+    });
+    return secs.map(function (s) { return { i: s.i, title: s.title, seen: s.n, total: s.total, pct: s.n ? Math.round(s.sum / s.n * 100) : null }; });
+  }
+  function fragileBlock(p) {
+    const ss = sectionScores(p);
+    if (!ss.length) return null;
+    const tested = ss.filter(function (s) { return s.seen >= 3; }).sort(function (a, b) { return a.pct - b.pct; });
+    const fragile = tested.filter(function (s) { return s.pct < 70; });
+    const go = function (i) { const el = document.getElementById('pz-s' + i); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    const rowOf = function (s, tone) {
+      const col = tone === 'bad' ? 'var(--bad)' : tone === 'ok' ? 'var(--ok)' : 'var(--muted)';
+      return h('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line)' },
+        h('b', { style: 'min-width:74px;color:' + col }, (tone === 'bad' ? '⚠ ' : '') + (s.seen >= 3 ? s.pct + ' %' : 'pas encore testé')),
+        h('span', { style: 'flex:1;min-width:140px;font-size:14px' }, s.title),
+        h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: function () { go(s.i); } } }, 'Revoir'));
+    };
+    return h('div', { class: 'card', style: 'padding:12px 14px' },
+      h('b', {}, fragile.length ? 'À revoir en priorité (' + fragile.length + ')' : 'Zones de fragilité'),
+      h('p', { class: 'secondary muted', style: 'margin:4px 0 6px' }, fragile.length ? 'Les parties de la fiche où tu rates le plus de cartes (estimé d’après le contenu des cartes).' : tested.length ? 'Aucune partie sous 70 % : bravo.' : 'Fais les cartes de la fiche : les parties où tu bloques apparaîtront ici.'),
+      [].concat(fragile.map(function (s) { return rowOf(s, 'bad'); }), tested.filter(function (s) { return s.pct >= 70; }).slice(0, 2).map(function (s) { return rowOf(s, 'ok'); })));
+  }
+  function pjStatus(id, withProgress) {
+    const pj = CARDIO.views && CARDIO.views.planj;
+    if (!pj || typeof pj.statusFor !== 'function') return null;
+    const s = pj.statusFor('p:' + id);
+    const out = [];
+    if (s && s.course) out.push(s.el);
+    if (withProgress && pj.quizProgress) {
+      const q = pj.quizProgress('p:' + id);
+      if (q) out.push(h('p', { class: 'secondary muted', style: 'margin:4px 0 0' }, q.applied ? '📝 Note du jour : ' + q.pct + ' % sur ' + q.n + ' cartes.' : '📝 ' + q.n + '/' + q.min + ' cartes aujourd’hui' + (q.n ? ' (' + q.pct + ' %)' : '') + ' : à ' + q.min + ', ta note compte comme une révision.'));
+    }
+    return out.length ? h('div', {}, out) : null;
   }
 
   /* ---------- fiche ---------- */
@@ -221,6 +280,10 @@
         h('h2', { style: 'margin:4px 0 0' }, str(p.title)),
         p.agent ? h('p', { class: 'pz-card__agent', style: 'margin-top:2px' }, str(p.agent)) : null),
       p.hook ? h('div', { class: 'pz-hook' }, str(p.hook)) : null,
+      h('a', { class: 'card', href: '#/planj?tab=cours', style: 'display:block;padding:12px 14px;text-decoration:none;color:inherit' },
+        h('div', { style: 'display:flex;justify-content:space-between;gap:8px' }, h('b', {}, 'Méthode des J'), h('span', { class: 'secondary muted' }, 'Modifier')),
+        pjStatus(p.id, true) || h('p', { class: 'secondary muted', style: 'margin:4px 0 0' }, 'Pas encore placée dans ton planning.')),
+      fragileBlock(p),
       trainBlock(p), seg, toc, body, after);
     setMode(hasX ? 'explain' : 'read');
     root.appendChild(page);
@@ -273,7 +336,7 @@
   function grade(id, ok) {
     const st = loadSrs(), cur = st[id] || { b: 0 };
     const b = ok ? Math.min(STEPS.length - 1, (cur.b || 0) + 1) : 0;
-    st[id] = { b: b, d: ok ? Date.now() + STEPS[b] * DAY : Date.now() + 10 * 60000 };
+    st[id] = { b: b, d: ok ? Date.now() + STEPS[b] * DAY : Date.now() + 10 * 60000, r: ok ? 1 : 0 };   // r : dernier résultat (zones de fragilité)
     saveSrs(st);
   }
   /* Indice : nombre d'éléments attendus + première lettre de chaque mot-clé ; chiffres remplacés par « ? ». */
@@ -352,6 +415,8 @@
     function answer(c, ok) {
       if (!missed[c.id]) {
         grade(c.id, ok);
+        // Méthode des J (views/planj.js) : 20 cartes d'une fiche dans la journée → note de la fiche
+        try { const u = util(); if (u.emit && c.fiche) u.emit('quiz:answer', { pkey: 'p:' + c.fiche.id, kind: 'parasito', score: ok ? 1 : 0, at: Date.now() }); } catch (e) { /* ignore */ }
         if (ok) good++;
         done++;
         if (!ok) { missed[c.id] = 1; queue.push(c); }
@@ -436,5 +501,11 @@
     return root;
   }
 
-  CARDIO.views.parasito = { render: render, available: function () { return list().length > 0; } };
+  /* Pour la méthode des J : parties fragiles d'une fiche (au moins 3 cartes faites, < 70 %), les plus faibles d'abord. */
+  function fragileOf(id) {
+    const p = list().find(function (x) { return x.id === id; });
+    if (!p) return [];
+    return sectionScores(p).filter(function (s) { return s.seen >= 3 && s.pct < 70; }).sort(function (a, b) { return a.pct - b.pct; });
+  }
+  CARDIO.views.parasito = { render: render, available: function () { return list().length > 0; }, fragileOf: fragileOf };
 })();

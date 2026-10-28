@@ -687,7 +687,7 @@
           h('div', { class: 'pj-row__t' }, m.title),
           h('div', { class: 'pj-row__s' }, h('span', { class: 'pj-tag' }, jLabel(d.rhythm, c.step)), ' ', lateN ? h('span', { class: 'pj-tag pj-tag--late' }, 'retard ' + lateN + ' j') : null, ' ', m.group),
           statusEl(c, d, { noLevel: true }),
-          c.key.charAt(0) === 'i' ? fragileEl(c.key.slice(2), rerenderSoon, 2) : null,
+          c.key.charAt(0) === 'i' ? fragileEl(c.key.slice(2), rerenderSoon, 2) : c.key.charAt(0) === 'p' ? fragileEl(c.key, null, 2) : null,
           h('div', { class: 'pj-row__acts' },
             m.href ? h('a', { class: 'btn btn--ghost btn--sm', href: m.href }, icon('book'), 'Revoir le cours') : null,
             m.train ? h('a', { class: 'btn btn--ghost btn--sm', href: m.train }, icon('play'), 'S’entraîner') : null),
@@ -946,7 +946,7 @@
             h('div', { class: 'pj-row__t' }, m.title),
             h('div', { class: 'pj-row__s' }, tag + (s.done && s.grade ? ' · ' + GRADES[s.grade].label : '')),
             statusEl(c, d, { noLevel: true }),
-            !s.done && s.key.charAt(0) === 'i' ? fragileEl(s.key.slice(2), rerenderSoon, 2) : null,
+            !s.done ? (s.key.charAt(0) === 'i' ? fragileEl(s.key.slice(2), rerenderSoon, 2) : s.key.charAt(0) === 'p' ? fragileEl(s.key, null, 2) : null) : null,
             acts.length ? h('div', { class: 'pj-row__acts' }, acts) : null)));
         const nextS = day.slots[i + 1];
         if (s.g === 'Parasito-myco' && (!nextS || nextS.g !== 'Parasito-myco')) {
@@ -1198,11 +1198,11 @@
    * sinon difficile = demain) ; J pas encore dû → note enregistrée, et rappel avancé à demain si < 50 %.
    * Cours pas encore placé → placé (vu aujourd'hui). Cours acquis → réactivé si < 65 %. La note est affichée sur le
    * planning et pèse dans la maîtrise (pastille, priorités). */
-  const QUIZ_KINDS = { qcm: 1, qroc: 1, open: 1, kfp: 1, tcs: 1, case: 1, cases: 1, ecg: 1, echo: 1 };
+  const QUIZ_KINDS = { qcm: 1, qroc: 1, open: 1, kfp: 1, tcs: 1, case: 1, cases: 1, ecg: 1, echo: 1, parasito: 1 };
   const QUIZ_MIN = 20;
   function gradeOfPct(p) { return p >= 85 ? 'facile' : p >= 65 ? 'moyen' : 'difficile'; }
-  function applyQuiz(d, num, acc) {
-    const t = today(); const key = 'i:' + num;
+  function applyQuiz(d, key, acc) {
+    const t = today();
     const pct = Math.round(acc.sum / Math.max(1, acc.n) * 100);
     const g = gradeOfPct(pct);
     let c = d.courses[key];
@@ -1227,23 +1227,23 @@
   }
   function onQuizAnswer(p) {
     try {
-      if (!p || !p.item || !QUIZ_KINDS[p.kind]) return;
+      if (!p || !QUIZ_KINDS[p.kind] || !(p.item || p.pkey)) return;
+      const key = p.pkey && /^p:/.test(p.pkey) ? String(p.pkey) : 'i:' + String(p.item);
       const d = load(); const t = today();
       if (!d.qacc || d.qacc.date !== t) d.qacc = { date: t, items: {} };
-      const num = String(p.item);
-      const acc = d.qacc.items[num] || (d.qacc.items[num] = { n: 0, sum: 0, applied: false });
+      const acc = d.qacc.items[key] || (d.qacc.items[key] = { n: 0, sum: 0, applied: false });
       acc.n += 1; acc.sum += Math.max(0, Math.min(1, Number(p.score) || 0));
       let r = null;
-      if (acc.n >= QUIZ_MIN && !acc.applied) { acc.applied = true; r = applyQuiz(d, num, acc); }
-      else if (acc.applied && d.courses['i:' + num]) {
+      if (acc.n >= QUIZ_MIN && !acc.applied) { acc.applied = true; r = applyQuiz(d, key, acc); }
+      else if (acc.applied && d.courses[key]) {
         // au-delà de 20 : la note du jour se met à jour (sans nouvelle révision)
-        d.courses['i:' + num].qnote = { date: t, pct: Math.round(acc.sum / acc.n * 100), n: acc.n };
+        d.courses[key].qnote = { date: t, pct: Math.round(acc.sum / acc.n * 100), n: acc.n };
       }
       save(d);
       if (r) {
-        const lab = (CARDIO.registry && typeof CARDIO.registry.label === 'function') ? CARDIO.registry.label(num) : num;
-        xp(XP[r.grade] || 20, 'Note item');
-        toastG('📝 Item ' + lab + ' : ' + r.msg, r.pct >= 65 ? 'ok' : 'warn');
+        const m = meta(d.courses[key] || { key: key });
+        xp(XP[r.grade] || 20, 'Note');
+        toastG('📝 ' + m.title + ' : ' + r.msg, r.pct >= 65 ? 'ok' : 'warn');
       }
     } catch (e) { console.warn('[planj] quiz → planning', e); }
   }
@@ -1325,7 +1325,20 @@
       test: '#/review?mode=item&item=' + encodeURIComponent(num) + '&objective=' + s.objectives.map(encodeURIComponent).join(',') + '&from=' + back + '&autostart=1'
     };
   }
+  function fragileParasito(id, max) {
+    const pz = CARDIO.views && CARDIO.views.parasito;
+    const fr = pz && typeof pz.fragileOf === 'function' ? pz.fragileOf(id) : [];
+    if (!fr.length) return null;
+    return h('div', { class: 'pj-frag' }, fr.slice(0, max || 2).map(function (s) {
+      return h('div', { class: 'pj-frag__row' },
+        h('span', { class: 'pj-st', style: 'background:var(--bad-soft);color:var(--bad)' }, '⚠ ' + s.pct + ' %'),
+        h('span', { class: 'pj-frag__t' }, s.title),
+        h('a', { class: 'btn btn--ghost btn--sm', href: '#/parasito/' + encodeURIComponent(id) }, 'Revoir'),
+        h('a', { class: 'btn btn--outline btn--sm', href: '#/parasito/' + encodeURIComponent(id) + '/cartes' }, 'Me tester'));
+    }));
+  }
   function fragileEl(num, onReady, max) {
+    if (/^p:/.test(String(num))) return fragileParasito(String(num).slice(2), max);
     const fr = fragileOf(num, onReady);
     if (!fr || !fr.length) return null;
     return h('div', { class: 'pj-frag' }, fr.slice(0, max || 2).map(function (s) {
@@ -1343,7 +1356,7 @@
     try { const d = load(); return { course: d.courses[key] || null, el: statusEl(d.courses[key] || null, d, { next: true }), mastery: mastery(d.courses[key] || null, d) }; } catch (e) { return null; }
   }
   function quizProgress(num) {
-    try { const d = load(); const a = d.qacc && d.qacc.date === today() ? d.qacc.items[String(num)] : null; return a ? { n: a.n, pct: Math.round(a.sum / Math.max(1, a.n) * 100), applied: !!a.applied, min: QUIZ_MIN } : { n: 0, pct: 0, applied: false, min: QUIZ_MIN }; } catch (e) { return null; }
+    try { const d = load(); const k = /^[ipc]:/.test(String(num)) ? String(num) : 'i:' + String(num); const a = d.qacc && d.qacc.date === today() ? (d.qacc.items[k] || d.qacc.items[String(num)]) : null; return a ? { n: a.n, pct: Math.round(a.sum / Math.max(1, a.n) * 100), applied: !!a.applied, min: QUIZ_MIN } : { n: 0, pct: 0, applied: false, min: QUIZ_MIN }; } catch (e) { return null; }
   }
   CARDIO.views.planj = { render: render, summary: summary, statusFor: function (k) { ensureStyles(); return statusFor(k); }, quizProgress: quizProgress,
     weakSections: weakSections, fragileOf: fragileOf, sectionLinks: sectionLinks, homeCard: function () { ensureStyles(); return homeCard(); } };
