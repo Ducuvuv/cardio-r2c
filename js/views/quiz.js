@@ -350,7 +350,7 @@
     if (!rt || !rt.id) return;
     ls().set(LS_PREFIX + rt.id, {
       id: rt.id, queue: rt.queue, idx: rt.idx, opts: rt.opts, results: rt.results, startedAt: rt.startedAt, requeued: rt.requeued || {},
-      masteryBefore: rt.masteryBefore, ended: !!rt.ended, summary: rt.summary || null, savedAt: nowMs()
+      masteryBefore: rt.masteryBefore, ended: !!rt.ended, summary: rt.summary || null, pending: rt.pending || null, savedAt: nowMs()
     });
   }
   function loadRt(id) {
@@ -360,7 +360,8 @@
       id: String(id), queue: raw.queue.map(String), idx: Math.max(0, Number(raw.idx) || 0),
       opts: normOpts(raw.opts || {}), results: Array.isArray(raw.results) ? raw.results : [],
       startedAt: Number(raw.startedAt) || nowMs(), masteryBefore: raw.masteryBefore || {},
-      ended: !!raw.ended, summary: raw.summary || null
+      ended: !!raw.ended, summary: raw.summary || null,
+      pending: raw.pending && typeof raw.pending.id === 'string' ? { id: raw.pending.id, score: Number.isFinite(raw.pending.score) ? raw.pending.score : null } : null
     };
   }
   function dropRt(id) { ls().remove(LS_PREFIX + id); delete runtimes[id]; }
@@ -1204,6 +1205,7 @@
     function finishCard(cur, res) {
       if (cur.recorded) return;
       cur.recorded = true;
+      if (rt.pending) { rt.pending = null; saveRt(rt); }
       cur.gradeKeys = null;
       cur.keyHandler = null;
       const card = cur.card;
@@ -1280,6 +1282,20 @@
     }
 
     /* Barre de grades Encore / Difficile / Bien / Facile avec aperçu des intervalles. */
+    /* Partie de la fiche qui traite la question (section de fiche2 rattachée à l'objectif), avec retour à la séance. */
+    function pointUrl(card) {
+      if (!card || !card.item) return null;
+      const num = String(card.item);
+      const obj = card.data && card.data.objective;
+      let sid = '';
+      try {
+        const f2 = RG() && RG().fiche2 && RG().fiche2[num];
+        const secs = f2 && Array.isArray(f2.sections) ? f2.sections : [];
+        const s = obj ? secs.find((x) => Array.isArray(x.objectives) && x.objectives.indexOf(obj) >= 0) : null;
+        if (s && s.id) sid = String(s.id);
+      } catch (e) { sid = ''; }
+      return '#/item/' + encodeURIComponent(num) + '/cours?' + (sid ? 'sec=' + encodeURIComponent(sid) + '&' : '') + 'ret=' + encodeURIComponent('#/session/' + rt.id);
+    }
     function gradeBar(ctx, o) {
       const st = ST(), S = SR();
       const cardId = ctx.card.id;
@@ -1315,7 +1331,10 @@
       ctx.setGradeKeys((k) => { const d = GRADE_DEFS.find((x) => x.key === k); if (d) pick(d.g); });
       const hintFor = (g) => 'Entrée = ' + gradeLabel(g);
       action.set({ label: 'Suivant', onClick: () => pick(suggested), hint: hintFor(suggested) });
-      const el = h('div', { class: 'stack stack--sm qz-grades' }, h('div', { class: 'caption' }, o.title || 'Comment ça s’est passé ?'), wrap);
+      const purl = pointUrl(ctx.card);
+      const plink = purl ? h('a', { class: 'btn btn--ghost btn--sm qz-point', href: purl, on: { click: () => { rt.pending = { id: cardId, score: Number.isFinite(score) ? score : null }; saveRt(rt); } } },
+        icon('book'), 'Voir le point de cours', h('small', { class: 'secondary muted', style: 'margin-left:6px' }, 'puis reviens ici')) : null;
+      const el = h('div', { class: 'stack stack--sm qz-grades' }, plink, h('div', { class: 'caption' }, o.title || 'Comment ça s’est passé ?'), wrap);
       el.setScore = (s) => {
         score = s;
         suggested = suggestGradeRaw(score, ms, ctx.card.kind, cardId);
@@ -1352,6 +1371,21 @@
       );
       action.set({ label: 'Valider', disabled: true });
       let el;
+      if (rt.pending && rt.pending.id === id) {
+        // Retour du point de cours : la réponse a déjà été donnée, il ne reste qu'à se noter pour passer à la suite.
+        const ps = rt.pending.score;
+        const grades = ctx.gradeBar({ score: ps, title: 'Tu reviens du point de cours : comment ça s’était passé ?', onGrade: (g) => ctx.finish({ score: ps == null ? gradeToScore(g) : ps, grade: g }) });
+        el = h('div', { class: 'stack' },
+          h('div', { class: 'card qz-card' }, h('span', { class: 'caption' }, 'Question déjà répondue'),
+            md(card.data && (card.data.stem || card.data.question || card.data.q) || '', 'qz-stem'),
+            ps != null ? h('p', { class: 'secondary muted' }, 'Ton résultat : ' + Math.round(ps * 100) + ' %') : null),
+          grades,
+          h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: () => { rt.pending = null; saveRt(rt); renderCurrent(); } } }, icon('refresh'), 'Refaire la question'));
+        stage.replaceChildren(el);
+        try { window.scrollTo(0, 0); } catch (e) { /* ignore */ }
+        startTimer(); updateChrome();
+        return;
+      }
       try {
         const fn = RENDERERS[card.kind];
         el = fn ? fn(card, ctx) : renderUnknown(card, ctx);

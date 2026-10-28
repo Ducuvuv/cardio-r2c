@@ -859,6 +859,13 @@
     ensureStyles();
 
     const root = h('div', { class: 'view-fiche2' });
+    // Venu d'une question (« Voir le point de cours ») : bouton fixe pour y revenir et passer à la suite.
+    const ret = typeof q.ret === 'string' && /^#\/session\/[A-Za-z0-9_-]+$/.test(q.ret) ? q.ret : null;
+    if (ret) {
+      root.appendChild(h('a', { class: 'btn btn--primary', href: ret,
+        style: 'position:sticky;top:8px;z-index:20;display:flex;justify-content:center;margin:0 0 10px;box-shadow:var(--shadow-2)' },
+      '← Revenir à la question'));
+    }
     const page = h('div', { class: 'page f2', dataset: { rank: 'all' } });
     page.innerHTML = ficheHtml(num, f);
     root.appendChild(page);

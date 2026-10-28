@@ -91,7 +91,7 @@
   }
 
   /* ---------- données ---------- */
-  function blank() { return { v: 1, rhythm: 'classique', capacity: 12, updatedAt: 0, courses: {}, freq: {}, tours: null }; }
+  function blank() { return { v: 1, rhythm: 'classique', capacity: 12, updatedAt: 0, courses: {}, freq: {}, tours: null, template: normTemplate(null), day: null }; }
   function load() {
     const raw = CARDIO.store && typeof CARDIO.store.get === 'function' ? CARDIO.store.get('planJ') : null;
     const d = blank();
@@ -101,6 +101,8 @@
     d.updatedAt = Number(raw.updatedAt) || 0;
     if (raw.freq && typeof raw.freq === 'object') Object.keys(raw.freq).forEach(function (k) { const v = Math.round(Number(raw.freq[k])); if (/^[ipc]:/.test(k) && v >= 1 && v <= 3) d.freq[k] = v; });
     d.tours = toursNorm(raw.tours);
+    d.template = normTemplate(raw.template);
+    d.day = normDay(raw.day);
     const t = today();
     const cs = raw.courses && typeof raw.courses === 'object' ? raw.courses : {};
     Object.keys(cs).forEach(function (k) {
@@ -327,6 +329,52 @@
     return { score: Math.round(s), why: why, mastery: ms, freq: f };
   }
 
+  /* ---------- programme du jour ---------- */
+  /* Modèle de journée : une suite de créneaux {g: groupe/pôle, m: 'new' (découvrir un cours jamais placé) | 'rev' (revoir un
+   * cours déjà placé : J dû d'abord, sinon le plus prioritaire)}. Le programme est composé une fois par jour puis figé. */
+  const DEFAULT_TEMPLATE = [
+    { g: 'Dermato', m: 'new' }, { g: 'Dermato', m: 'new' },
+    { g: 'Pneumo', m: 'rev' }, { g: 'Cardio', m: 'rev' }, { g: 'Pneumo', m: 'rev' }, { g: 'Cardio', m: 'rev' },
+    { g: 'Parasito-myco', m: 'new' }, { g: 'Parasito-myco', m: 'new' }
+  ];
+  function normTemplate(x) {
+    if (!Array.isArray(x)) return DEFAULT_TEMPLATE.map(function (s) { return { g: s.g, m: s.m }; });
+    const out = x.filter(function (s) { return s && typeof s.g === 'string' && s.g; }).slice(0, 20)
+      .map(function (s) { return { g: s.g.slice(0, 40), m: s.m === 'new' ? 'new' : 'rev' }; });
+    return out;
+  }
+  function normDay(x) {
+    if (!x || typeof x !== 'object' || !valid(x.date) || !Array.isArray(x.slots)) return null;
+    return { date: x.date, slots: x.slots.filter(function (s) { return s && typeof s.g === 'string'; }).slice(0, 20).map(function (s) {
+      return { g: s.g, m: s.m === 'new' ? 'new' : 'rev', key: typeof s.key === 'string' ? s.key : null, done: !!s.done, grade: GRADES[s.grade] ? s.grade : null };
+    }) };
+  }
+  function buildDay(d, cat) {
+    const t = today(); const tiers = weightTiers(cat);
+    const metas = cat.concat(list(d).filter(function (c) { return c.key.charAt(0) === 'c'; }).map(function (c) { return { key: c.key, group: c.group || 'Mes cours', title: c.title, weight: 0 }; }));
+    const used = {};
+    const pr = function (m) { return priority(d, m, tiers).score; };
+    function pickNew(g) {
+      const c = metas.filter(function (m) { return m.group === g && !d.courses[m.key] && !used[m.key]; }).sort(function (a, b) { return pr(b) - pr(a); });
+      return c[0] || null;
+    }
+    function pickRev(g) {
+      const inG = metas.filter(function (m) { const c = d.courses[m.key]; return m.group === g && c && c.state === 'active' && !used[m.key]; });
+      const due = inG.filter(function (m) { const c = d.courses[m.key]; return c.due && c.due <= t; })
+        .sort(function (a, b) { const ca = d.courses[a.key], cb = d.courses[b.key]; return (ca.due < cb.due ? -1 : ca.due > cb.due ? 1 : 0) || ca.step - cb.step; });
+      if (due.length) return due[0];
+      const rest = inG.sort(function (a, b) { return pr(b) - pr(a); });
+      return rest[0] || null;
+    }
+    const slots = d.template.map(function (s) {
+      let m = s.m === 'new' ? pickNew(s.g) : pickRev(s.g);
+      if (!m) m = s.m === 'new' ? pickRev(s.g) : pickNew(s.g);   // rien à découvrir → on revoit, et inversement
+      if (m) used[m.key] = 1;
+      return { g: s.g, m: s.m, key: m ? m.key : null, done: false, grade: null };
+    });
+    return { date: t, slots: slots };
+  }
+
   /* ---------- méthode des tours ---------- */
   /* Tout le programme choisi, cours après cours, en N jours (tour 1) ; chaque tour suivant va plus vite
    * (jours × 0,6, minimum 3). L'ordre d'un tour est figé à son début : par priorité ou ordre du programme. */
@@ -470,14 +518,35 @@
     }
 
     /* --- Aujourd'hui --- */
+    function miniBlock() {
+      const ret = encodeURIComponent('#/planj');
+      const S = [
+        ['Mix du jour · 10 cartes', '#/review?mode=smart&size=10&from=' + ret + '&autostart=1', 'shuffle', 'les cartes dues, toutes formes'],
+        ['Flashcards · 10', '#/review?mode=smart&kind=flash&size=10&from=' + ret + '&autostart=1', 'flash', '≈ 3 min'],
+        ['QCM · 10', '#/review?mode=smart&kind=qcm&size=10&from=' + ret + '&autostart=1', 'qcm', '≈ 5 min'],
+        ['QROC · 10', '#/review?mode=smart&kind=qroc&size=10&from=' + ret + '&autostart=1', 'edit', '≈ 5 min'],
+        ['Mes erreurs', '#/errors', 'refresh', 'refaire ce que tu as raté'],
+        ['Parasito · cartes', '#/parasito/toutes/cartes', 'list', 'répétition espacée']
+      ];
+      return h('div', { class: 'card stack' },
+        h('p', { class: 'pj-h' }, '2 · Mini-sessions du jour (quelques minutes)'),
+        h('p', { class: 'secondary muted' }, 'À faire en plus des cours, dans les petits moments. Après chaque question : « Voir le point de cours », puis « Revenir à la question » pour passer à la suite.'),
+        h('div', { class: 'pj-grp' }, S.map(function (x) {
+          return h('a', { class: 'pj-row', href: x[1], style: 'text-decoration:none;color:inherit' }, icon(x[2]),
+            h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, x[0]), h('div', { class: 'pj-row__s' }, x[3])), icon('play'));
+        })));
+    }
     function viewToday(d, cat) {
       const t = today(); const out = [];
       const cs = list(d);
+      const mini = miniBlock();
       if (!cs.length) {
         out.push(h('div', { class: 'card stack' },
           h('p', { class: 'pj-h' }, 'Place tes cours pour démarrer'),
           h('p', { class: 'secondary muted' }, 'Dans « Mes cours », indique pour chaque item (et chaque fiche parasito) si tu l’as déjà vu, quand, et combien de fois. L’app calcule ensuite toute seule quand le revoir : J1, J3, J7, J15, J30, J60…'),
           btn('Placer mes cours', 'btn--primary', function () { go('cours'); }, 'plus')));
+        out.push(dayBlock(d, cat));
+        out.push(mini);
         return out;
       }
       const late = cs.filter(function (c) { return c.state === 'active' && c.due && c.due < t; });
@@ -492,9 +561,18 @@
               shiftAll(d, n); save(d); toast('Tout est décalé de ' + plural(n, 'jour', 'jours'), 'ok'); rerender();
             }, 'calendar'))));
       }
-      const due = cs.filter(function (c) { return c.state === 'active' && c.due && c.due <= t; })
+      let due = cs.filter(function (c) { return c.state === 'active' && c.due && c.due <= t; })
         .sort(function (a, b) { return (a.due < t ? 0 : 1) - (b.due < t ? 0 : 1) || a.step - b.step || (a.due < b.due ? -1 : 1); });
-      out.push(h('p', { class: 'pj-h' }, due.length ? 'À revoir aujourd’hui (' + due.length + ')' : 'Rien à revoir aujourd’hui'));
+      out.push(dayBlock(d, cat));
+      const inDay = d.day ? d.day.slots.map(function (s) { return s.key; }) : [];
+      due = due.filter(function (c) { return inDay.indexOf(c.key) < 0; });
+      out.push(h('p', { class: 'pj-h' }, due.length ? 'Autres révisions J dues aujourd’hui (' + due.length + ')' : 'Pas d’autre révision J aujourd’hui'));
+      if (d.tours) {
+        const td = tourToday(d.tours);
+        const left = td.items.filter(function (x) { return !x.done; }).length;
+        out.push(h('a', { class: 'pj-row', href: '#/planj?tab=tours', style: 'text-decoration:none;color:inherit', on: { click: function (e) { e.preventDefault(); go('tours'); } } }, icon('layers'),
+          h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, 'Tour ' + d.tours.tour + ' : ' + (td.finished ? 'terminé aujourd’hui' : left ? plural(left, 'cours à passer', 'cours à passer') + ' aujourd’hui' : 'quota du jour fait')), h('div', { class: 'pj-row__s' }, 'Ouvre l’onglet Tours')), icon('play')));
+      }
       if (!due.length) {
         const nxt = cs.filter(function (c) { return c.state === 'active' && c.due; }).sort(function (a, b) { return a.due < b.due ? -1 : 1; })[0];
         out.push(h('p', { class: 'secondary muted' }, nxt ? 'Prochaine révision : ' + meta(nxt, cat).title + ', ' + nice(nxt.due) + '. Tu peux avancer un nouveau cours dans « Mes cours ».' : 'Tous tes cours placés sont acquis ou en pause.'));
@@ -505,12 +583,13 @@
         out.push(h('p', { class: 'pj-h' }, 'Faits aujourd’hui (' + done.length + ')'));
         out.push(h('div', { class: 'pj-grp' }, done.map(function (c) {
           const x = c.history[c.history.length - 1]; const m = meta(c, cat);
-          return h('div', { class: 'pj-row' }, dot(mastery(c, d)),
+          return h('div', { class: 'pj-row', style: 'opacity:.75' }, dot(mastery(c, d)),
             h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, m.title),
               h('div', { class: 'pj-row__s' }, jLabel(d.rhythm, x.step) + ' · ' + GRADES[x.grade].label + (x.note != null ? ' · ' + x.note + ' %' : '') + (c.state === 'acquis' ? ' · acquis' : c.due ? ' · prochain ' + nice(c.due) : ''))),
             btn('Annuler', null, function () { undo(d, c); save(d); rerender(); }));
         })));
       }
+      out.push(mini);
       return out;
     }
     function undo(d, c) {
@@ -566,6 +645,13 @@
         const items = groups[g];
         const placed = items.filter(function (m) { return d.courses[m.key]; }).length;
         out.push(h('p', { class: 'pj-h' }, g + ' · ' + placed + '/' + items.length + ' placés'));
+        if (state.classify) out.push(h('div', { class: 'pj-row', style: 'flex-wrap:wrap;background:var(--surface-2)' }, h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, 'Tout le pôle ' + g), h('div', { class: 'pj-row__s' }, 'Classe d’un coup les ' + items.length + ' cours affichés, puis ajuste un par un.')),
+          h('div', { style: 'flex-basis:100%' }, levelChips(0, function (lv) {
+            if (!lv) return;
+            if (!window.confirm('Classer les ' + items.length + ' cours de « ' + g + ' » en « ' + LEVELS[lv].label + ' » ? (les cours pas encore placés seront placés)')) return;
+            items.forEach(function (m) { let c = d.courses[m.key]; if (!c) c = place(d, m.key, { start: today(), passes: lv - 1 }); c.level = lv; });
+            save(d); toast(items.length + ' cours classés « ' + LEVELS[lv].label + ' »', 'ok'); rerender();
+          }))));
         out.push(h('div', { class: 'pj-grp' }, items.map(function (m) {
           const c = d.courses[m.key];
           const rows = [courseRow(d, m, c)];
@@ -681,6 +767,94 @@
             save(d); state.sel = {}; state.bulk = false; toast(plural(keys.length, 'cours placé', 'cours placés'), 'ok'); rerender();
           }, 'check'),
           btn('Annuler', null, function () { state.sel = {}; state.bulk = false; rerender(); })));
+    }
+
+    /* --- Programme du jour (dans « Aujourd'hui ») --- */
+    function dayBlock(d, cat) {
+      const t = today();
+      if (!d.day || d.day.date !== t) { d.day = buildDay(d, cat); save(d); }
+      const day = d.day;
+      const rows = [];
+      const nDone = day.slots.filter(function (s) { return s.done; }).length;
+      day.slots.forEach(function (s, i) {
+        const c = s.key ? d.courses[s.key] : null;
+        const m = s.key ? meta(c || { key: s.key }, cat) : null;
+        const tag = s.g + ' · ' + (s.m === 'new' ? 'découverte' : 'révision');
+        if (!m) {
+          rows.push(h('div', { class: 'pj-row', style: 'opacity:.6' }, h('b', { style: 'width:22px;text-align:right;color:var(--muted)' }, String(i + 1)),
+            h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, tag), h('div', { class: 'pj-row__s' }, 'Rien à proposer dans ce pôle (tout est découvert ou acquis).'))));
+          return;
+        }
+        const acts = [];
+        if (!s.done) {
+          if (m.href) acts.push(h('a', { class: 'btn btn--ghost btn--sm', href: m.href }, icon('book'), 'Cours'));
+          if (m.train) acts.push(h('a', { class: 'btn btn--ghost btn--sm', href: m.train }, icon('play'), 'S’entraîner'));
+          if (s.m === 'new' && !c) {
+            acts.push(btn('Découvert ✓', 'btn--primary btn--sm', function () { place(d, s.key, { start: t, passes: 0 }); s.done = true; save(d); toast(m.title + ' découvert : J1 demain', 'ok'); rerender(); }));
+          } else {
+            ['difficile', 'moyen', 'facile'].forEach(function (g) {
+              acts.push(btn(GRADES[g].label, g === 'facile' ? 'btn--primary btn--sm' : 'btn--outline btn--sm', function () {
+                let cc = d.courses[s.key];
+                if (!cc) cc = place(d, s.key, { start: t, passes: 0 });
+                if (cc.state !== 'active') { cc.state = 'active'; cc.due = t; }
+                const msg = review(d, s.key, g, null);
+                s.done = true; s.grade = g; save(d); toast(msg || 'Enregistré', g === 'difficile' ? 'warn' : 'ok'); rerender();
+              }));
+            });
+          }
+          acts.push(btn('Changer', 'btn--ghost btn--sm', function () {
+            const others = day.slots.map(function (x) { return x.key; });
+            const tmp = buildDay(Object.assign({}, d, { template: [{ g: s.g, m: s.m }] }), cat.filter(function (x) { return others.indexOf(x.key) < 0; }));
+            const nk = tmp.slots[0] && tmp.slots[0].key;
+            if (!nk || others.indexOf(nk) >= 0) { toast('Pas d’autre cours à proposer dans ce pôle', 'warn'); return; }
+            s.key = nk; save(d); rerender();
+          }, 'shuffle'));
+        }
+        rows.push(h('div', { class: 'pj-row', style: 'align-items:flex-start' + (s.done ? ';opacity:.6' : '') },
+          h('b', { style: 'width:22px;text-align:right;color:var(--muted)' }, s.done ? '✓' : String(i + 1)), dot(mastery(c, d)),
+          h('div', { class: 'pj-row__main' },
+            h('div', { class: 'pj-row__t' }, m.title),
+            h('div', { class: 'pj-row__s' }, tag + (c && c.state === 'active' && c.due ? ' · ' + jLabel(d.rhythm, c.step) + (c.due < t ? ' en retard' : c.due === t ? ' dû aujourd’hui' : '') : '') + (s.done && s.grade ? ' · ' + GRADES[s.grade].label : '')),
+            acts.length ? h('div', { class: 'pj-row__acts' }, acts) : null)));
+        const nextS = day.slots[i + 1];
+        if (s.g === 'Parasito-myco' && (!nextS || nextS.g !== 'Parasito-myco')) {
+          rows.push(h('a', { class: 'pj-row', href: '#/parasito/toutes/cartes', style: 'text-decoration:none;color:inherit' }, icon('refresh'),
+            h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, 'Revoir rapidement les anciennes fiches parasito'), h('div', { class: 'pj-row__s' }, 'cartes dues, répétition espacée · quelques minutes')), icon('play')));
+        }
+      });
+      return h('div', { class: 'card stack' },
+        h('p', { class: 'pj-h', style: 'font-size:17px' }, '1 · Programme du jour (' + nDone + '/' + day.slots.length + ')'),
+        h('p', { class: 'secondary muted' }, 'Composé à partir de ton modèle de journée (Réglages) : découvertes et révisions dans ton ordre, choisies selon tes J, ta maîtrise et ce qui tombe souvent.'),
+        h('div', { class: 'pj-grp' }, rows),
+        h('div', { class: 'pj-row__acts' }, btn('Recomposer le programme', null, function () { d.day = buildDay(d, cat); save(d); rerender(); }, 'refresh'),
+          btn('Modifier mon modèle', null, function () { go('regl'); }, 'edit')));
+    }
+
+    /* --- Éditeur du modèle de journée (dans « Réglages ») --- */
+    function templateEditor(d, cat) {
+      const groups = {};
+      allMetas(d, cat).forEach(function (m) { groups[m.group] = 1; });
+      const gs = Object.keys(groups);
+      const T = d.template;
+      const rows = T.map(function (s, i) {
+        const sel = h('select', { on: { change: function (e) { s.g = e.target.value; save(d); rerender(); } } }, gs.map(function (g) { return h('option', { value: g, selected: g === s.g }, g); }));
+        return h('div', { class: 'pj-row', style: 'flex-wrap:wrap' },
+          h('b', { style: 'width:22px;text-align:right;color:var(--muted)' }, String(i + 1)),
+          h('label', { class: 'pj-field', style: 'flex:1;min-width:140px' }, sel),
+          h('div', { class: 'pj-chips' },
+            h('button', { type: 'button', class: s.m === 'new' ? 'is-on' : '', on: { click: function () { s.m = 'new'; save(d); rerender(); } } }, 'Découvrir'),
+            h('button', { type: 'button', class: s.m === 'rev' ? 'is-on' : '', on: { click: function () { s.m = 'rev'; save(d); rerender(); } } }, 'Revoir')),
+          btn('↑', 'btn--ghost btn--sm', function () { if (i > 0) { T.splice(i - 1, 0, T.splice(i, 1)[0]); save(d); rerender(); } }),
+          btn('↓', 'btn--ghost btn--sm', function () { if (i < T.length - 1) { T.splice(i + 1, 0, T.splice(i, 1)[0]); save(d); rerender(); } }),
+          btn('✕', 'btn--ghost btn--sm', function () { T.splice(i, 1); save(d); rerender(); }));
+      });
+      return [h('p', { class: 'pj-h' }, 'Mon modèle de journée'),
+        h('p', { class: 'secondary muted' }, 'L’ordre de ta journée, créneau par créneau. « Découvrir » prend un cours jamais placé du pôle (le plus prioritaire) ; « Revoir » prend un cours déjà placé (J dû d’abord, sinon le moins maîtrisé). Les changements valent à partir du prochain programme (ou touche « Recomposer »).'),
+        h('div', { class: 'pj-grp' }, rows),
+        h('div', { class: 'pj-row__acts' },
+          btn('Ajouter un créneau', null, function () { T.push({ g: gs[0] || 'Cardio', m: 'rev' }); save(d); rerender(); }, 'plus'),
+          btn('Modèle par défaut', 'btn--ghost btn--sm', function () { d.template = DEFAULT_TEMPLATE.map(function (s) { return { g: s.g, m: s.m }; }); save(d); rerender(); }),
+          btn('Recomposer aujourd’hui', null, function () { d.day = buildDay(d, cat); save(d); toast('Programme du jour recomposé', 'ok'); }, 'refresh'))];
     }
 
     /* --- Priorités --- */
@@ -814,7 +988,7 @@
 
     /* --- Réglages --- */
     function viewSettings(d) {
-      const out = [];
+      const out = templateEditor(d, catalog());
       out.push(h('p', { class: 'pj-h' }, 'Rythme'));
       out.push(h('div', { class: 'pj-grp' }, ORDER.map(function (id) {
         const r = RHYTHMS[id];
