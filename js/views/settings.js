@@ -301,6 +301,21 @@
       accBtns.push(b);
       return b;
     }));
+    // Style visuel : Aurora (dégradés, verre), Fun et rebondi (boutons en relief), Sobre (d'origine)
+    var STYLES = [['aurora', 'Aurora'], ['fun', 'Fun et rebondi'], ['sobre', 'Sobre']];
+    var curSty = document.documentElement.getAttribute('data-style') || 'aurora';
+    var styBtns = {};
+    var styRow = h('div', { class: 'set-seg', role: 'radiogroup', 'aria-label': 'Style' }, STYLES.map(function (s) {
+      var b = h('button', { type: 'button', role: 'radio', 'aria-checked': curSty === s[0] ? 'true' : 'false', class: curSty === s[0] ? 'is-on' : '',
+        on: { click: function () {
+          try { localStorage.setItem('cardio.style', s[0]); } catch (e) { /* ignore */ }
+          document.documentElement.setAttribute('data-style', s[0]);
+          Object.keys(styBtns).forEach(function (k) { styBtns[k].classList.toggle('is-on', k === s[0]); styBtns[k].setAttribute('aria-checked', k === s[0] ? 'true' : 'false'); });
+          toast('Style ' + s[1] + ' activé.');
+        } } }, s[1]);
+      styBtns[s[0]] = b;
+      return b;
+    }));
     var bedOn = (function () { try { return localStorage.getItem('cardio.bed') === '1'; } catch (e) { return false; } })();
     var bed = switchCtl('set-bed', bedOn, function (on) {
       try { localStorage.setItem('cardio.bed', on ? '1' : '0'); } catch (e) { /* ignore */ }
@@ -320,6 +335,7 @@
       row('Nouvelles cartes par jour', 'Au-delà des cartes dues, combien de cartes jamais vues ajouter.', newPer, true),
       row('Rétention cible', 'Probabilité de te souvenir d’une carte au moment où elle revient : plus elle est haute, plus les révisions sont rapprochées.', ret, true),
       row('Thème', null, seg),
+      row('Style', 'L’ambiance visuelle de l’app.', styRow),
       row('Couleur', 'La couleur principale de l’app (boutons, barres, onglets).', accRow),
       row('Mode lit', 'Réviser allongé, d’une main : QROC sans clavier (tu réponds de tête puis tu révèles) et texte agrandi. Associe-le au thème sombre le soir.', bed),
       row('Sons', 'Petit son à la validation.', sound),

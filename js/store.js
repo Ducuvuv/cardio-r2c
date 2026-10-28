@@ -826,6 +826,28 @@
     };
   }
 
+  /* ---------- XP et badges hors cartes (méthode des J, journée type…) ---------- */
+  function gainXp(n, reason) {
+    const v = Math.max(0, Math.min(1000, Math.round(Number(n) || 0)));
+    if (!v) return 0;
+    const before = level().n;
+    const k = today();
+    const d = state.daily[k] || (state.daily[k] = emptyDaily());
+    d.xp += v;
+    state.xp += v;
+    changed('xp', 'xp');
+    emit('store:xp', { xp: v, reason: String(reason || ''), total: state.xp });
+    const lv = level();
+    if (lv.n > before) emit('store:xplevel', { level: lv.n, name: lv.name });
+    return v;
+  }
+  function grantBadge(id) {
+    const l = [];
+    const ok = award(String(id || ''), l, nowMs());
+    if (ok) changed('badges', 'badge');
+    return ok;
+  }
+
   /* ---------- badges (SPEC §6) ---------- */
 
   function award(id, list, now) {
@@ -1719,7 +1741,7 @@
     ready: null,
     get: get, set: set, update: update,
     card: card, setCard: setCard,
-    recordAttempt: recordAttempt,
+    recordAttempt: recordAttempt, gainXp: gainXp, grantBadge: grantBadge,
     todayStats: todayStats, streak: streak, xp: xp, level: level, forecast: forecast, errorsList: errorsList,
     mastery: mastery,
     dueCards: dueCards, newCards: newCards, buildSession: buildSession, prepareSession: prepareSession,

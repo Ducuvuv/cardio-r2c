@@ -552,7 +552,23 @@
       { id: 'errors-cleared', t: 'Cahier vidé', c: 'Refais toutes les cartes du cahier d’erreurs.', i: 'check' },
       { id: 'exam-80', t: 'Examen blanc 80 %', c: 'Obtiens ≥ 80 % à un examen blanc.', i: 'target' },
       { id: 'early-bird', t: 'Lève-tôt', c: 'Révise avant 7 h du matin.', i: 'clock' },
-      { id: 'night-owl', t: 'Oiseau de nuit', c: 'Révise après 23 h.', i: 'clock' }
+      { id: 'night-owl', t: 'Oiseau de nuit', c: 'Révise après 23 h.', i: 'clock' },
+      { id: 'pj-day-1', t: 'Première journée bouclée', c: 'Termine tous les créneaux de ta journée type.', i: 'calendar' },
+      { id: 'pj-day-7', t: '7 journées bouclées', c: 'Boucle 7 journées types.', i: 'calendar' },
+      { id: 'pj-day-30', t: '30 journées bouclées', c: 'Boucle 30 journées types.', i: 'calendar' },
+      { id: 'pj-day-100', t: '100 journées bouclées', c: 'Boucle 100 journées types.', i: 'trophy' },
+      { id: 'pj-stage', t: 'Stage tenu', c: 'Boucle une journée en mode stage.', i: 'case' },
+      { id: 'pj-placed-20', t: '20 cours placés', c: 'Place 20 cours dans la méthode des J.', i: 'layers' },
+      { id: 'pj-placed-all', t: 'Tout est placé', c: 'Place tous les items et toutes les fiches parasito.', i: 'layers' },
+      { id: 'pj-acquis-1', t: 'Premier cours acquis', c: 'Va au bout des J sur un cours.', i: 'star' },
+      { id: 'pj-acquis-10', t: '10 cours acquis', c: 'Va au bout des J sur 10 cours.', i: 'star' },
+      { id: 'pj-acquis-50', t: '50 cours acquis', c: 'Va au bout des J sur 50 cours.', i: 'trophy' },
+      { id: 'pj-review-100', t: '100 révisions J', c: 'Note 100 révisions dans la méthode des J.', i: 'refresh' },
+      { id: 'pj-tour-1', t: 'Premier tour terminé', c: 'Termine un tour complet du programme.', i: 'target' },
+      { id: 'pj-pole-Cardio', t: 'Pôle cardio solide', c: 'Tous les items de cardio en vert.', i: 'heart' },
+      { id: 'pj-pole-Dermato', t: 'Pôle dermato solide', c: 'Tous les items de dermato en vert.', i: 'star' },
+      { id: 'pj-pole-Pneumo', t: 'Pôle pneumo solide', c: 'Tous les items de pneumo en vert.', i: 'star' },
+      { id: 'pj-pole-Parasito-myco', t: 'Pôle parasito solide', c: 'Toutes les fiches parasito en vert.', i: 'star' }
     ];
     manifestItems().forEach(function (it) {
       defs.push({ id: 'item-mastered-' + it.num, t: 'Item ' + (it.label || it.num) + ' maîtrisé',

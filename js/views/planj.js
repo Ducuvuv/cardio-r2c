@@ -59,6 +59,31 @@
   function plural(n, one, many) { return n + ' ' + (n > 1 ? many : one); }
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
+  /* ---------- XP et badges (CARDIO.store.gainXp / grantBadge, effets dans js/fx.js) ---------- */
+  const XP = { discover: 40, difficile: 15, moyen: 25, facile: 30, memo: 15, tour: 20, day: 100, place: 5 };
+  function xp(n, why) { try { if (CARDIO.store && CARDIO.store.gainXp) CARDIO.store.gainXp(n, why); } catch (e) { /* ignore */ } }
+  function badge(id) { try { if (CARDIO.store && CARDIO.store.grantBadge) CARDIO.store.grantBadge(id); } catch (e) { /* ignore */ } }
+  /* Badges d'avancement calculés sur l'état du planning (appelé après chaque changement). */
+  function checkBadges(d, cat) {
+    const cs = list(d);
+    const placed = cs.length, acq = cs.filter(function (c) { return c.state === 'acquis'; }).length;
+    const reviews = cs.reduce(function (a, c) { return a + c.history.length; }, 0);
+    if (placed >= 20) badge('pj-placed-20');
+    if (cat && cat.length && cat.every(function (m) { return d.courses[m.key]; })) badge('pj-placed-all');
+    if (acq >= 1) badge('pj-acquis-1'); if (acq >= 10) badge('pj-acquis-10'); if (acq >= 50) badge('pj-acquis-50');
+    if (reviews >= 100) badge('pj-review-100');
+    const n = Number(d.daysDone) || 0;
+    if (n >= 1) badge('pj-day-1'); if (n >= 7) badge('pj-day-7'); if (n >= 30) badge('pj-day-30'); if (n >= 100) badge('pj-day-100');
+    if (cat) {
+      const groups = {};
+      cat.forEach(function (m) { (groups[m.group] = groups[m.group] || []).push(m); });
+      Object.keys(groups).forEach(function (g) {
+        const ok = groups[g].length >= 3 && groups[g].every(function (m) { const c = d.courses[m.key]; const ms = mastery(c, d); return ms.lvl === 'ok' || ms.lvl === 'acq'; });
+        if (ok) badge('pj-pole-' + encodeURIComponent(g));
+      });
+    }
+  }
+
   /* ---------- rythme ---------- */
   function rh(id) { return RHYTHMS[id] || RHYTHMS.classique; }
   function offs(id) { return rh(id).offsets; }
@@ -91,7 +116,7 @@
   }
 
   /* ---------- données ---------- */
-  function blank() { return { v: 1, rhythm: 'allegee', rhythmSet: false, capacity: 12, updatedAt: 0, courses: {}, freq: {}, tours: null, template: normTemplate(null), tplStage: normTemplate(null, STAGE_TEMPLATE), stage: false, day: null, plans: {}, caughtAt: null }; }
+  function blank() { return { v: 1, rhythm: 'allegee', rhythmSet: false, capacity: 12, updatedAt: 0, courses: {}, freq: {}, tours: null, daysDone: 0, template: normTemplate(null), tplStage: normTemplate(null, STAGE_TEMPLATE), stage: false, day: null, plans: {}, caughtAt: null }; }
   function load() {
     const raw = CARDIO.store && typeof CARDIO.store.get === 'function' ? CARDIO.store.get('planJ') : null;
     const d = blank();
@@ -111,6 +136,7 @@
     { const x = normDay(raw.day); if (x && x.date >= t0 && !d.plans[x.date]) d.plans[x.date] = x; }
     d.day = d.plans[t0] || null;
     d.caughtAt = valid(raw.caughtAt) ? raw.caughtAt : null;
+    d.daysDone = Math.max(0, Math.round(Number(raw.daysDone)) || 0);
     d.stage = !!raw.stage;
     d.tplStage = normTemplate(Array.isArray(raw.tplStage) ? raw.tplStage : null, STAGE_TEMPLATE);
     const t = today();
@@ -366,7 +392,7 @@
   }
   function normDay(x) {
     if (!x || typeof x !== 'object' || !valid(x.date) || !Array.isArray(x.slots)) return null;
-    return { date: x.date, stage: !!x.stage, heavy: !!x.heavy, dueN: Math.max(0, Math.round(Number(x.dueN)) || 0), caught: Math.max(0, Math.round(Number(x.caught)) || 0), slots: x.slots.filter(function (s) { return s && typeof s.g === 'string'; }).slice(0, 20).map(function (s) {
+    return { date: x.date, bonus: !!x.bonus, stage: !!x.stage, heavy: !!x.heavy, dueN: Math.max(0, Math.round(Number(x.dueN)) || 0), caught: Math.max(0, Math.round(Number(x.caught)) || 0), slots: x.slots.filter(function (s) { return s && typeof s.g === 'string'; }).slice(0, 20).map(function (s) {
       const m = mode(s.m);
       return { g: s.g, m: m, min: mins(s.min, m), why: typeof s.why === 'string' ? s.why.slice(0, 60) : '', key: typeof s.key === 'string' ? s.key : null, done: !!s.done, grade: GRADES[s.grade] ? s.grade : null };
     }) };
@@ -509,6 +535,10 @@
       '.pj-check{width:22px;height:22px;flex:0 0 auto}',
       '.pj-search{min-height:42px;border:1px solid var(--line);border-radius:12px;padding:0 12px;background:var(--surface);color:var(--ink);font-size:15px;width:100%}',
       '.pj-bulk{position:sticky;bottom:calc(var(--tabbar-h,64px) + 8px);z-index:5;box-shadow:var(--shadow-2)}',
+      '.pj-xpline{display:flex;gap:6px;flex-wrap:wrap}',
+      '.pj-xpchip{font-weight:800;font-size:13px;padding:5px 11px;border-radius:999px;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-2,var(--accent)))}',
+      '.pj-xpchip--lvl{background:var(--surface-2);color:var(--ink)}',
+      '.pj-xpchip--fire{background:linear-gradient(135deg,#F97316,#FBBF24)}',
       '@media (max-width:420px){.pj-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}'
     ].join('\n');
     document.head.appendChild(s);
@@ -636,7 +666,7 @@
       const t = today(); const m = meta(c, cat); const ms = mastery(c, d);
       const lateN = c.due < t ? diff(c.due, t) : 0;
       const note = h('input', { class: 'pj-note', type: 'number', min: '0', max: '100', inputmode: 'numeric', placeholder: 'note %', 'aria-label': 'Ma note en % (facultatif)' });
-      function grade(g) { const msg = review(d, c.key, g, note.value); save(d); toast(msg || 'Enregistré', g === 'difficile' ? 'warn' : 'ok'); rerender(); }
+      function grade(g) { const msg = review(d, c.key, g, note.value); save(d); xp(XP[g], 'Révision J'); checkBadges(d, cat); toast(msg || 'Enregistré', g === 'difficile' ? 'warn' : 'ok'); rerender(); }
       return h('div', { class: 'pj-row', style: 'align-items:flex-start' }, dot(ms),
         h('div', { class: 'pj-row__main' },
           h('div', { class: 'pj-row__t' }, m.title),
@@ -685,7 +715,7 @@
             if (!lv) return;
             if (!window.confirm('Classer les ' + items.length + ' cours de « ' + g + ' » en « ' + LEVELS[lv].label + ' » ? (les cours pas encore placés seront placés)')) return;
             items.forEach(function (m) { let c = d.courses[m.key]; if (!c) c = place(d, m.key, { start: today(), passes: lv - 1 }); c.level = lv; });
-            save(d); toast(items.length + ' cours classés « ' + LEVELS[lv].label + ' »', 'ok'); rerender();
+            save(d); checkBadges(d, catalog()); toast(items.length + ' cours classés « ' + LEVELS[lv].label + ' »', 'ok'); rerender();
           }))));
         out.push(h('div', { class: 'pj-grp' }, items.map(function (m) {
           const c = d.courses[m.key];
@@ -799,12 +829,14 @@
           btn('Placer la sélection', 'btn--primary btn--sm', function () {
             if (!keys.length) { toast('Coche d’abord des cours', 'warn'); return; }
             keys.forEach(function (k) { place(d, k, { start: start.value, passes: loc.passes }); });
-            save(d); state.sel = {}; state.bulk = false; toast(plural(keys.length, 'cours placé', 'cours placés'), 'ok'); rerender();
+            save(d); checkBadges(d, catalog()); state.sel = {}; state.bulk = false; toast(plural(keys.length, 'cours placé', 'cours placés'), 'ok'); rerender();
           }, 'check'),
           btn('Annuler', null, function () { state.sel = {}; state.bulk = false; rerender(); })));
     }
 
     /* --- Programme du jour (dans « Aujourd'hui ») --- */
+    function todayXp() { try { const st = CARDIO.store; const dd = st.get('daily.' + st.today()); return dd && dd.xp ? dd.xp : 0; } catch (e) { return 0; } }
+    function levelLabel() { try { const lv = CARDIO.store.level(); return 'Niv. ' + lv.n + ' · ' + Math.round(lv.progress * 100) + ' %'; } catch (e) { return ''; } }
     function ensureDay(d, cat, date) {
       const t = today(); const dt = date || t;
       let caught = 0;
@@ -829,6 +861,16 @@
         h('button', { type: 'button', class: cur === add(t, 1) ? 'is-on' : '', on: { click: function () { state.date = add(t, 1); rerender(); } } }, 'Demain'),
         inp);
     }
+    function dayDone(d, cat, day) {
+      if (!day || day.bonus || day.date !== today()) return;
+      if (!day.slots.length || !day.slots.every(function (s) { return s.done || !s.key && s.m !== 'memo'; })) return;
+      day.bonus = true; d.daysDone = (Number(d.daysDone) || 0) + 1;
+      save(d);
+      xp(XP.day, 'Journée bouclée');
+      if (day.stage) badge('pj-stage');
+      checkBadges(d, cat);
+      try { if (CARDIO.fx) CARDIO.fx.celebrate('Journée bouclée !', '+' + XP.day + ' XP bonus · ' + d.daysDone + ' journée' + (d.daysDone > 1 ? 's' : '') + ' au total'); } catch (e) { /* ignore */ }
+    }
     function dayBlock(d, cat) {
       const t = today();
       const date = state.date && state.date >= t ? state.date : t;
@@ -844,7 +886,7 @@
         if (s.m === 'memo') {
           rows.push(h('div', { class: 'pj-row', style: s.done ? 'opacity:.6' : null }, h('b', { style: 'width:22px;text-align:right;color:var(--muted)' }, s.done ? '✓' : String(i + 1)), icon('note'),
             h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, s.g), h('div', { class: 'pj-row__s' }, (s.min || 20) + ' min · rappel, à faire en dehors de l’app')),
-            btn(s.done ? 'Annuler' : 'Fait ✓', s.done ? 'btn--ghost btn--sm' : 'btn--outline btn--sm', function () { s.done = !s.done; save(d); rerender(); })));
+            btn(s.done ? 'Annuler' : 'Fait ✓', s.done ? 'btn--ghost btn--sm' : 'btn--outline btn--sm', function () { s.done = !s.done; save(d); if (s.done) { xp(XP.memo, s.g); dayDone(d, cat, day); } rerender(); })));
           return;
         }
         if (!m) {
@@ -859,7 +901,7 @@
           if (!isToday) {
             /* jour préparé à l'avance : on peut changer les cours, la note se fera le jour J */
           } else if (!c) {
-            acts.push(btn('Découvert ✓', 'btn--primary btn--sm', function () { place(d, s.key, { start: t, passes: 0 }); s.done = true; save(d); toast(m.title + ' découvert : J1 demain', 'ok'); rerender(); }));
+            acts.push(btn('Découvert ✓', 'btn--primary btn--sm', function () { place(d, s.key, { start: t, passes: 0 }); s.done = true; save(d); xp(XP.discover, 'Découverte'); checkBadges(d, cat); dayDone(d, cat, day); toast(m.title + ' découvert : J1 demain', 'ok'); rerender(); }));
           } else {
             ['difficile', 'moyen', 'facile'].forEach(function (g) {
               acts.push(btn(GRADES[g].label, g === 'facile' ? 'btn--primary btn--sm' : 'btn--outline btn--sm', function () {
@@ -867,7 +909,7 @@
                 if (!cc) cc = place(d, s.key, { start: t, passes: 0 });
                 if (cc.state !== 'active') { cc.state = 'active'; cc.due = t; }
                 const msg = review(d, s.key, g, null);
-                s.done = true; s.grade = g; save(d); toast(msg || 'Enregistré', g === 'difficile' ? 'warn' : 'ok'); rerender();
+                s.done = true; s.grade = g; save(d); xp(XP[g], 'Révision'); checkBadges(d, cat); dayDone(d, cat, day); toast(msg || 'Enregistré', g === 'difficile' ? 'warn' : 'ok'); rerender();
               }));
             });
           }
@@ -904,6 +946,7 @@
             d.stage = !d.stage; delete d.plans[date]; if (isToday) d.day = null; ensureDay(d, cat, date); save(d);
             toast(d.stage ? 'Mode stage : journée allégée (~3 h), révisions d’abord' : 'Retour à ta journée type', 'ok'); rerender();
           }, 'clock')),
+        h('div', { class: 'pj-xpline' }, h('span', { class: 'pj-xpchip' }, '⚡ ' + todayXp() + ' XP aujourd’hui'), h('span', { class: 'pj-xpchip pj-xpchip--lvl' }, levelLabel()), h('span', { class: 'pj-xpchip pj-xpchip--fire' }, '🏁 ' + (Number(d.daysDone) || 0) + ' journées bouclées')),
         h('p', { class: 'secondary muted' }, 'Objectif : ' + Object.keys(byG).map(function (g) { return byG[g] + ' ' + g; }).join(' · ') + ' · environ ' + hm(tot) + (nDone ? ' (reste ' + hm(left) + ')' : '') + '. Dans chaque créneau, l’app choisit le cours du jour du pôle : un J dû d’abord, sinon un cours à découvrir, sinon ton cours le plus fragile.'),
         h('div', { class: 'pj-bar__track' }, h('div', { class: 'pj-bar__fill', style: 'width:' + Math.round((tot - left) / Math.max(1, tot) * 100) + '%' })),
         day.heavy || day.caught ? h('div', { class: 'pj-banner' }, h('span', null,
@@ -1039,7 +1082,7 @@
               !it.done ? h('div', { class: 'pj-row__acts' },
                 m.href ? h('a', { class: 'btn btn--ghost btn--sm', href: m.href }, icon('book'), 'Cours') : null,
                 m.train ? h('a', { class: 'btn btn--ghost btn--sm', href: m.train }, icon('play'), 'S’entraîner') : null,
-                isNext ? btn('Fait', 'btn--primary btn--sm', function () { const msg = tourDone(d, cat); save(d); toast(msg || 'Coché', 'ok'); rerender(); }, 'check') : null) : null));
+                isNext ? btn('Fait', 'btn--primary btn--sm', function () { const msg = tourDone(d, cat); save(d); xp(XP.tour, 'Tour'); if (msg) { badge('pj-tour-1'); try { CARDIO.fx && CARDIO.fx.celebrate('Tour terminé !', msg); } catch (e) { /* ignore */ } } toast(msg || 'Coché', 'ok'); rerender(); }, 'check') : null) : null));
         })));
         if (td.items.length && td.items.every(function (x) { return x.done; })) {
           out.push(h('p', { class: 'secondary muted' }, 'Quota du jour fait. Tu peux t’arrêter là ou avancer le cours suivant.'));
