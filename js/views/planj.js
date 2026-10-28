@@ -101,7 +101,8 @@
     d.updatedAt = Number(raw.updatedAt) || 0;
     if (raw.freq && typeof raw.freq === 'object') Object.keys(raw.freq).forEach(function (k) { const v = Math.round(Number(raw.freq[k])); if (/^[ipc]:/.test(k) && v >= 1 && v <= 3) d.freq[k] = v; });
     d.tours = toursNorm(raw.tours);
-    d.template = normTemplate(raw.template);
+    // ancien modèle (v51, sans durées) → nouveau modèle par défaut
+    d.template = normTemplate(Array.isArray(raw.template) && raw.template.some(function (s) { return s && s.min; }) ? raw.template : null);
     d.day = normDay(raw.day);
     const t = today();
     const cs = raw.courses && typeof raw.courses === 'object' ? raw.courses : {};
@@ -333,20 +334,25 @@
   /* Modèle de journée : une suite de créneaux {g: groupe/pôle, m: 'new' (découvrir un cours jamais placé) | 'rev' (revoir un
    * cours déjà placé : J dû d'abord, sinon le plus prioritaire)}. Le programme est composé une fois par jour puis figé. */
   const DEFAULT_TEMPLATE = [
-    { g: 'Dermato', m: 'new' }, { g: 'Dermato', m: 'new' },
-    { g: 'Pneumo', m: 'rev' }, { g: 'Cardio', m: 'rev' }, { g: 'Pneumo', m: 'rev' }, { g: 'Cardio', m: 'rev' },
-    { g: 'Parasito-myco', m: 'new' }, { g: 'Parasito-myco', m: 'new' }
+    { g: 'Dermato', m: 'auto', min: 45 }, { g: 'Dermato', m: 'auto', min: 45 },
+    { g: 'Pneumo', m: 'auto', min: 40 }, { g: 'Cardio', m: 'auto', min: 40 }, { g: 'Pneumo', m: 'auto', min: 40 }, { g: 'Cardio', m: 'auto', min: 40 },
+    { g: 'Parasito-myco', m: 'auto', min: 20 }, { g: 'Parasito-myco', m: 'auto', min: 20 },
+    { g: 'Bactério / viro (hors app)', m: 'memo', min: 20 }
   ];
+  const MODES = { auto: 'Auto', new: 'Découvrir', rev: 'Revoir', memo: 'Rappel (hors app)' };
+  function mode(x) { return x === 'new' || x === 'rev' || x === 'memo' ? x : 'auto'; }
+  function mins(x, m) { const n = Math.round(Number(x)); return n >= 5 && n <= 240 ? n : (m === 'new' ? 45 : m === 'rev' ? 30 : m === 'memo' ? 20 : 40); }
   function normTemplate(x) {
-    if (!Array.isArray(x)) return DEFAULT_TEMPLATE.map(function (s) { return { g: s.g, m: s.m }; });
+    if (!Array.isArray(x)) return DEFAULT_TEMPLATE.map(function (s) { return { g: s.g, m: s.m, min: s.min }; });
     const out = x.filter(function (s) { return s && typeof s.g === 'string' && s.g; }).slice(0, 20)
-      .map(function (s) { return { g: s.g.slice(0, 40), m: s.m === 'new' ? 'new' : 'rev' }; });
+      .map(function (s) { const m = mode(s.m); return { g: s.g.slice(0, 40), m: m, min: mins(s.min, m) }; });
     return out;
   }
   function normDay(x) {
     if (!x || typeof x !== 'object' || !valid(x.date) || !Array.isArray(x.slots)) return null;
     return { date: x.date, slots: x.slots.filter(function (s) { return s && typeof s.g === 'string'; }).slice(0, 20).map(function (s) {
-      return { g: s.g, m: s.m === 'new' ? 'new' : 'rev', key: typeof s.key === 'string' ? s.key : null, done: !!s.done, grade: GRADES[s.grade] ? s.grade : null };
+      const m = mode(s.m);
+      return { g: s.g, m: m, min: mins(s.min, m), why: typeof s.why === 'string' ? s.why.slice(0, 60) : '', key: typeof s.key === 'string' ? s.key : null, done: !!s.done, grade: GRADES[s.grade] ? s.grade : null };
     }) };
   }
   function buildDay(d, cat) {
@@ -356,21 +362,26 @@
     const pr = function (m) { return priority(d, m, tiers).score; };
     function pickNew(g) {
       const c = metas.filter(function (m) { return m.group === g && !d.courses[m.key] && !used[m.key]; }).sort(function (a, b) { return pr(b) - pr(a); });
-      return c[0] || null;
+      return c[0] ? { m: c[0], why: 'à découvrir' } : null;
     }
-    function pickRev(g) {
-      const inG = metas.filter(function (m) { const c = d.courses[m.key]; return m.group === g && c && c.state === 'active' && !used[m.key]; });
-      const due = inG.filter(function (m) { const c = d.courses[m.key]; return c.due && c.due <= t; })
+    function pickDue(g) {
+      const due = metas.filter(function (m) { const c = d.courses[m.key]; return m.group === g && c && c.state === 'active' && c.due && c.due <= t && !used[m.key]; })
         .sort(function (a, b) { const ca = d.courses[a.key], cb = d.courses[b.key]; return (ca.due < cb.due ? -1 : ca.due > cb.due ? 1 : 0) || ca.step - cb.step; });
-      if (due.length) return due[0];
-      const rest = inG.sort(function (a, b) { return pr(b) - pr(a); });
-      return rest[0] || null;
+      if (!due.length) return null;
+      const c = d.courses[due[0].key];
+      return { m: due[0], why: jLabel(d.rhythm, c.step) + (c.due < t ? ' en retard' : ' prévu aujourd’hui') };
+    }
+    function pickWeak(g) {
+      const rest = metas.filter(function (m) { const c = d.courses[m.key]; return m.group === g && c && c.state === 'active' && !used[m.key]; }).sort(function (a, b) { return pr(b) - pr(a); });
+      return rest[0] ? { m: rest[0], why: 'le plus fragile du pôle' } : null;
     }
     const slots = d.template.map(function (s) {
-      let m = s.m === 'new' ? pickNew(s.g) : pickRev(s.g);
-      if (!m) m = s.m === 'new' ? pickRev(s.g) : pickNew(s.g);   // rien à découvrir → on revoit, et inversement
-      if (m) used[m.key] = 1;
-      return { g: s.g, m: s.m, key: m ? m.key : null, done: false, grade: null };
+      if (s.m === 'memo') return { g: s.g, m: 'memo', min: s.min, why: '', key: null, done: false, grade: null };
+      const order = s.m === 'new' ? [pickNew, pickDue, pickWeak] : s.m === 'rev' ? [pickDue, pickWeak, pickNew] : [pickDue, pickNew, pickWeak];
+      let r = null;
+      for (let i = 0; i < order.length && !r; i++) r = order[i](s.g);
+      if (r) used[r.m.key] = 1;
+      return { g: s.g, m: s.m, min: s.min, why: r ? r.why : '', key: r ? r.m.key : null, done: false, grade: null };
     });
     return { date: t, slots: slots };
   }
@@ -779,7 +790,13 @@
       day.slots.forEach(function (s, i) {
         const c = s.key ? d.courses[s.key] : null;
         const m = s.key ? meta(c || { key: s.key }, cat) : null;
-        const tag = s.g + ' · ' + (s.m === 'new' ? 'découverte' : 'révision');
+        const tag = s.g + ' · ' + (s.min || 40) + ' min' + (s.why ? ' · ' + s.why : '');
+        if (s.m === 'memo') {
+          rows.push(h('div', { class: 'pj-row', style: s.done ? 'opacity:.6' : null }, h('b', { style: 'width:22px;text-align:right;color:var(--muted)' }, s.done ? '✓' : String(i + 1)), icon('note'),
+            h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, s.g), h('div', { class: 'pj-row__s' }, (s.min || 20) + ' min · rappel, à faire en dehors de l’app')),
+            btn(s.done ? 'Annuler' : 'Fait ✓', s.done ? 'btn--ghost btn--sm' : 'btn--outline btn--sm', function () { s.done = !s.done; save(d); rerender(); })));
+          return;
+        }
         if (!m) {
           rows.push(h('div', { class: 'pj-row', style: 'opacity:.6' }, h('b', { style: 'width:22px;text-align:right;color:var(--muted)' }, String(i + 1)),
             h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, tag), h('div', { class: 'pj-row__s' }, 'Rien à proposer dans ce pôle (tout est découvert ou acquis).'))));
@@ -789,7 +806,7 @@
         if (!s.done) {
           if (m.href) acts.push(h('a', { class: 'btn btn--ghost btn--sm', href: m.href }, icon('book'), 'Cours'));
           if (m.train) acts.push(h('a', { class: 'btn btn--ghost btn--sm', href: m.train }, icon('play'), 'S’entraîner'));
-          if (s.m === 'new' && !c) {
+          if (!c) {
             acts.push(btn('Découvert ✓', 'btn--primary btn--sm', function () { place(d, s.key, { start: t, passes: 0 }); s.done = true; save(d); toast(m.title + ' découvert : J1 demain', 'ok'); rerender(); }));
           } else {
             ['difficile', 'moyen', 'facile'].forEach(function (g) {
@@ -804,10 +821,10 @@
           }
           acts.push(btn('Changer', 'btn--ghost btn--sm', function () {
             const others = day.slots.map(function (x) { return x.key; });
-            const tmp = buildDay(Object.assign({}, d, { template: [{ g: s.g, m: s.m }] }), cat.filter(function (x) { return others.indexOf(x.key) < 0; }));
+            const tmp = buildDay(Object.assign({}, d, { template: [{ g: s.g, m: s.m, min: s.min }] }), cat.filter(function (x) { return others.indexOf(x.key) < 0; }));
             const nk = tmp.slots[0] && tmp.slots[0].key;
             if (!nk || others.indexOf(nk) >= 0) { toast('Pas d’autre cours à proposer dans ce pôle', 'warn'); return; }
-            s.key = nk; save(d); rerender();
+            s.key = nk; s.why = tmp.slots[0].why; save(d); rerender();
           }, 'shuffle'));
         }
         rows.push(h('div', { class: 'pj-row', style: 'align-items:flex-start' + (s.done ? ';opacity:.6' : '') },
@@ -822,9 +839,15 @@
             h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, 'Revoir rapidement les anciennes fiches parasito'), h('div', { class: 'pj-row__s' }, 'cartes dues, répétition espacée · quelques minutes')), icon('play')));
         }
       });
+      const tot = day.slots.reduce(function (a, s) { return a + (s.min || 40); }, 0);
+      const left = day.slots.reduce(function (a, s) { return a + (s.done ? 0 : (s.min || 40)); }, 0);
+      const hm = function (n) { return Math.floor(n / 60) + ' h ' + pad(n % 60); };
+      const byG = {};
+      day.slots.forEach(function (s) { byG[s.g] = (byG[s.g] || 0) + 1; });
       return h('div', { class: 'card stack' },
-        h('p', { class: 'pj-h', style: 'font-size:17px' }, '1 · Programme du jour (' + nDone + '/' + day.slots.length + ')'),
-        h('p', { class: 'secondary muted' }, 'Composé à partir de ton modèle de journée (Réglages) : découvertes et révisions dans ton ordre, choisies selon tes J, ta maîtrise et ce qui tombe souvent.'),
+        h('p', { class: 'pj-h', style: 'font-size:17px' }, '1 · Ma journée type (' + nDone + '/' + day.slots.length + ' créneaux)'),
+        h('p', { class: 'secondary muted' }, 'Objectif : ' + Object.keys(byG).map(function (g) { return byG[g] + ' ' + g; }).join(' · ') + ' · environ ' + hm(tot) + (nDone ? ' (reste ' + hm(left) + ')' : '') + '. Dans chaque créneau, l’app choisit le cours du jour du pôle : un J dû d’abord, sinon un cours à découvrir, sinon ton cours le plus fragile.'),
+        h('div', { class: 'pj-bar__track' }, h('div', { class: 'pj-bar__fill', style: 'width:' + Math.round((tot - left) / Math.max(1, tot) * 100) + '%' })),
         h('div', { class: 'pj-grp' }, rows),
         h('div', { class: 'pj-row__acts' }, btn('Recomposer le programme', null, function () { d.day = buildDay(d, cat); save(d); rerender(); }, 'refresh'),
           btn('Modifier mon modèle', null, function () { go('regl'); }, 'edit')));
@@ -837,23 +860,27 @@
       const gs = Object.keys(groups);
       const T = d.template;
       const rows = T.map(function (s, i) {
-        const sel = h('select', { on: { change: function (e) { s.g = e.target.value; save(d); rerender(); } } }, gs.map(function (g) { return h('option', { value: g, selected: g === s.g }, g); }));
+        const sel = s.m === 'memo'
+          ? h('input', { type: 'text', maxlength: '40', value: s.g, 'aria-label': 'Nom du rappel', on: { change: function (e) { s.g = e.target.value.trim() || 'Rappel'; save(d); } } })
+          : h('select', { on: { change: function (e) { s.g = e.target.value; save(d); rerender(); } } }, gs.map(function (g) { return h('option', { value: g, selected: g === s.g }, g); }));
         return h('div', { class: 'pj-row', style: 'flex-wrap:wrap' },
           h('b', { style: 'width:22px;text-align:right;color:var(--muted)' }, String(i + 1)),
           h('label', { class: 'pj-field', style: 'flex:1;min-width:140px' }, sel),
-          h('div', { class: 'pj-chips' },
-            h('button', { type: 'button', class: s.m === 'new' ? 'is-on' : '', on: { click: function () { s.m = 'new'; save(d); rerender(); } } }, 'Découvrir'),
-            h('button', { type: 'button', class: s.m === 'rev' ? 'is-on' : '', on: { click: function () { s.m = 'rev'; save(d); rerender(); } } }, 'Revoir')),
+          h('div', { class: 'pj-chips' }, ['auto', 'new', 'rev', 'memo'].map(function (mm) {
+            return h('button', { type: 'button', class: s.m === mm ? 'is-on' : '', on: { click: function () { s.m = mm; save(d); rerender(); } } }, MODES[mm]);
+          })),
+          h('input', { class: 'pj-note', type: 'number', min: '5', max: '240', value: String(s.min || 40), 'aria-label': 'Durée en minutes', on: { change: function (e) { s.min = mins(e.target.value, s.m); save(d); } } }), h('span', { class: 'secondary muted' }, 'min'),
           btn('↑', 'btn--ghost btn--sm', function () { if (i > 0) { T.splice(i - 1, 0, T.splice(i, 1)[0]); save(d); rerender(); } }),
           btn('↓', 'btn--ghost btn--sm', function () { if (i < T.length - 1) { T.splice(i + 1, 0, T.splice(i, 1)[0]); save(d); rerender(); } }),
           btn('✕', 'btn--ghost btn--sm', function () { T.splice(i, 1); save(d); rerender(); }));
       });
       return [h('p', { class: 'pj-h' }, 'Mon modèle de journée'),
-        h('p', { class: 'secondary muted' }, 'L’ordre de ta journée, créneau par créneau. « Découvrir » prend un cours jamais placé du pôle (le plus prioritaire) ; « Revoir » prend un cours déjà placé (J dû d’abord, sinon le moins maîtrisé). Les changements valent à partir du prochain programme (ou touche « Recomposer »).'),
+        h('p', { class: 'secondary muted' }, 'L’ordre de ta journée, créneau par créneau, avec sa durée. « Auto » (conseillé) : J dû du pôle d’abord, sinon un cours à découvrir, sinon le plus fragile. « Découvrir » : un cours jamais placé en priorité. « Revoir » : un cours déjà placé seulement. Les changements valent au prochain programme (ou touche « Recomposer »).'),
         h('div', { class: 'pj-grp' }, rows),
         h('div', { class: 'pj-row__acts' },
-          btn('Ajouter un créneau', null, function () { T.push({ g: gs[0] || 'Cardio', m: 'rev' }); save(d); rerender(); }, 'plus'),
-          btn('Modèle par défaut', 'btn--ghost btn--sm', function () { d.template = DEFAULT_TEMPLATE.map(function (s) { return { g: s.g, m: s.m }; }); save(d); rerender(); }),
+          btn('Ajouter un créneau', null, function () { T.push({ g: gs[0] || 'Cardio', m: 'auto', min: 40 }); save(d); rerender(); }, 'plus'),
+          btn('Ajouter un rappel (hors app)', null, function () { T.push({ g: 'Bactério / viro (hors app)', m: 'memo', min: 20 }); save(d); rerender(); }, 'note'),
+          btn('Modèle par défaut', 'btn--ghost btn--sm', function () { d.template = DEFAULT_TEMPLATE.map(function (s) { return { g: s.g, m: s.m, min: s.min }; }); save(d); rerender(); }),
           btn('Recomposer aujourd’hui', null, function () { d.day = buildDay(d, cat); save(d); toast('Programme du jour recomposé', 'ok'); }, 'refresh'))];
     }
 
