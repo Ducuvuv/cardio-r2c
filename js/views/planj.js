@@ -115,6 +115,14 @@
     return { step: step, due: t };
   }
 
+  /* « Vu N fois au total, la dernière fois le L » → { start, passes } : la 1re lecture est remontée de l'écart du dernier J fait. */
+  function fromSeen(id, times, lastDate) {
+    const o = offs(id);
+    const passes = Math.max(0, Math.min(o.length, Math.round(Number(times) || 1) - 1));
+    const L = valid(lastDate) && lastDate <= today() ? lastDate : today();
+    return { start: passes > 0 ? add(L, -o[Math.min(passes, o.length) - 1]) : L, passes: passes };
+  }
+
   /* ---------- données ---------- */
   function blank() { return { v: 1, rhythm: 'allegee', rhythmSet: false, capacity: 12, updatedAt: 0, courses: {}, freq: {}, tours: null, daysDone: 0, template: normTemplate(null), tplStage: normTemplate(null, STAGE_TEMPLATE), stage: false, day: null, plans: {}, caughtAt: null }; }
   function load() {
@@ -614,6 +622,45 @@
             h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, x[0]), h('div', { class: 'pj-row__s' }, x[3])), icon('play'));
         })));
     }
+    /* « Changer » un créneau : liste de TOUS les cours du pôle (ou de tous les pôles), à choisir soi-même.
+     * Ordre : J dus, à découvrir (par priorité), en cours (par priorité), acquis ; recherche par mot. */
+    function coursePicker(d, cat, day, s, date) {
+      const tiers = weightTiers(cat);
+      const custom = list(d).filter(function (c) { return c.key.charAt(0) === 'c'; }).map(function (c) { return { key: c.key, group: c.group || 'Mes cours', title: c.title, weight: 0 }; });
+      const taken = {}; day.slots.forEach(function (x) { if (x !== s && x.key) taken[x.key] = 1; });
+      const all = !!state.pick.all;
+      const ms = cat.concat(custom).filter(function (m) { return (all || m.group === s.g) && !taken[m.key]; });
+      const rows = ms.map(function (m) {
+        const c = d.courses[m.key];
+        const cls = !c ? 1 : c.state === 'active' && c.due && c.due <= date ? 0 : c.state === 'active' ? 2 : 3;
+        const why = cls === 0 ? jLabel(d.rhythm, c.step) + (c.due < today() ? ' en retard' : ' dû') : cls === 1 ? 'à découvrir' : cls === 2 ? 'prochain ' + jLabel(d.rhythm, c.step) + ' le ' + nice(c.due) : c.state === 'paused' ? 'en pause' : 'acquis';
+        return { m: m, c: c, cls: cls, why: why, p: priority(d, m, tiers).score };
+      }).sort(function (a, b) { return a.cls - b.cls || b.p - a.p; });
+      const listEl = h('div', { style: 'display:grid;gap:4px;max-height:360px;overflow:auto;margin-top:6px' });
+      function fill(qs) {
+        const n = U().normalize ? U().normalize(qs || '') : String(qs || '').toLowerCase();
+        const shown = rows.filter(function (r) { const tt = U().normalize ? U().normalize(r.m.title + ' ' + r.m.key) : (r.m.title + ' ' + r.m.key).toLowerCase(); return !n || tt.indexOf(n) >= 0; });
+        listEl.replaceChildren.apply(listEl, shown.length ? shown.map(function (r) {
+          const cur = r.m.key === s.key;
+          return h('button', { type: 'button', class: 'pj-row', style: 'width:100%;text-align:left;cursor:pointer;padding:8px 10px;border-radius:12px;border:1px solid ' + (cur ? 'var(--accent)' : 'var(--line)') + ';background:var(--surface)',
+            on: { click: function () {
+              if (!cur) { s.key = r.m.key; s.why = 'choisi par toi'; save(d); toast(r.m.title + ' : placé dans ce créneau', 'ok'); }
+              state.pick = null; rerender();
+            } } },
+            dot(mastery(r.c, d)),
+            h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, r.m.title + (cur ? ' (actuel)' : '')),
+              h('div', { class: 'pj-row__s' }, (all ? r.m.group + ' · ' : '') + r.why)));
+        }) : [h('p', { class: 'secondary muted', style: 'margin:4px 0' }, 'Aucun cours ne correspond.')]);
+      }
+      const search = h('input', { type: 'search', class: 'input', placeholder: 'Chercher un cours (nom ou numéro)…', style: 'width:100%', on: { input: function (e) { fill(e.target.value); } } });
+      fill('');
+      return h('div', { class: 'card', style: 'margin-top:8px;padding:10px;display:grid;gap:6px' },
+        h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' },
+          h('b', { style: 'flex:1;min-width:140px' }, 'Choisis le cours de ce créneau'),
+          btn('Ce pôle', !all ? 'btn--primary btn--sm' : 'btn--outline btn--sm', function () { state.pick.all = false; rerender(); }),
+          btn('Tous les pôles', all ? 'btn--primary btn--sm' : 'btn--outline btn--sm', function () { state.pick.all = true; rerender(); })),
+        search, listEl);
+    }
     function viewToday(d, cat) {
       const t = today(); const out = [];
       const cs = list(d);
@@ -760,7 +807,7 @@
       return h('div', { class: 'pj-row' },
         state.bulk ? h('input', { type: 'checkbox', class: 'pj-check', checked: !!state.sel[m.key], on: { change: toggle }, 'aria-label': 'Sélectionner ' + m.title }) : dot(ms),
         main,
-        !state.bulk && !c ? btn('Vu aujourd’hui', 'btn--outline btn--sm', function () { place(d, m.key, { start: today(), passes: 0 }); save(d); toast(m.title + ' placé : J1 demain', 'ok'); rerender(); }, 'plus') : null);
+        !state.bulk ? btn(c ? 'Vu combien ?' : 'Déjà vu…', 'btn--outline btn--sm', function () { state.open = state.open === m.key ? null : m.key; rerender(); }, c ? 'edit' : 'plus') : null);
     }
     function levelChips(val, onPick) {
       return h('div', { class: 'pj-chips' }, [1, 2, 3, 4].map(function (lv) {
@@ -780,6 +827,12 @@
         return h('button', { type: 'button', class: f.v === v ? 'is-on' : '', on: { click: function () { if (d.freq[m.key] === v) delete d.freq[m.key]; else d.freq[m.key] = v; save(d); rerender(); } } }, FREQ[v] + (f.v === v && f.est ? ' (estimé)' : ''));
       }));
     }
+    function timesChips(val, onPick) {
+      const opts = [[1, '1× (juste lu)'], [2, '2×'], [3, '3×'], [4, '4×'], [5, '5×'], [6, '6× et +']];
+      return h('div', { class: 'pj-chips' }, opts.map(function (o) {
+        return h('button', { type: 'button', class: val === o[0] ? 'is-on' : '', on: { click: function () { onPick(o[0]); } } }, o[1]);
+      }));
+    }
     function passChips(val, onPick) {
       const opts = [[0, 'Juste lu'], [1, 'Revu 1×'], [2, 'Revu 2×'], [3, '3×'], [4, '4× et +']];
       return h('div', { class: 'pj-chips' }, opts.map(function (o) {
@@ -789,23 +842,26 @@
     function sheet(d, m, cat) {
       const isNew = !m;
       const c = m ? d.courses[m.key] : null;
-      const loc = { start: c ? c.start : today(), passes: c ? Math.min(4, c.step) : 0 };
+      const o0 = offs(d.rhythm);
+      const loc = { times: c ? Math.min(6, (c.state === 'acquis' ? o0.length : c.step) + 1) : 1 };
       const title = h('input', { type: 'text', maxlength: '100', placeholder: 'Ex. Item 152 · Endocardite (cours fac)' });
       const group = h('input', { type: 'text', maxlength: '40', placeholder: 'Ex. Néphro, Gynéco…', value: 'Mes cours' });
-      const start = h('input', { type: 'date', value: loc.start, max: today() });
+      const lastSeen = c && c.history && c.history.length ? c.history[c.history.length - 1].date : c ? (c.step > 0 ? add(c.start, o0[Math.min(c.step, o0.length) - 1]) : c.start) : today();
+      const start = h('input', { type: 'date', value: lastSeen > today() ? today() : lastSeen, max: today() });
       const chips = h('div');
-      function drawChips() { chips.replaceChildren(passChips(loc.passes, function (p) { loc.passes = p; drawChips(); preview(); })); }
+      function drawChips() { chips.replaceChildren(timesChips(loc.times, function (n) { loc.times = n; drawChips(); preview(); })); }
       const prev = h('p', { class: 'secondary muted' });
+      function plan() { const f = fromSeen(d.rhythm, loc.times, start.value); return { f: f, p: initialPlan(d.rhythm, f.start, f.passes, today()) }; }
       function preview() {
-        const p = initialPlan(d.rhythm, start.value || today(), loc.passes, today());
-        prev.textContent = p.acquis ? 'Il sera marqué acquis.' : 'Prochaine révision : ' + jLabel(d.rhythm, p.step) + ', ' + nice(p.due) + '.';
+        const x = plan();
+        prev.textContent = x.p.acquis ? 'Vu assez de fois : il sera marqué acquis.' : 'Je recalcule : prochaine révision ' + jLabel(d.rhythm, x.p.step) + ', ' + nice(x.p.due).replace(/\.$/, '') + (x.p.due <= today() ? ' (à faire aujourd’hui)' : '') + '.';
       }
       start.addEventListener('change', preview);
       drawChips(); preview();
       const body = [h('p', { class: 'pj-h' }, isNew ? 'Nouveau cours perso' : m.title)];
       if (isNew) body.push(h('label', { class: 'pj-field' }, 'Nom du cours', title), h('label', { class: 'pj-field' }, 'Matière (groupe)', group));
-      body.push(h('label', { class: 'pj-field' }, 'Première lecture le', start),
-        h('div', { class: 'pj-field' }, 'Déjà revu combien de fois depuis ?', chips), prev);
+      body.push(h('div', { class: 'pj-field' }, 'Tu l’as vu combien de fois en tout (1re lecture comprise) ?', chips),
+        h('label', { class: 'pj-field' }, 'La dernière fois, c’était le', start), prev);
       if (m) {
         body.push(h('div', { class: 'pj-field' }, 'Ma maîtrise (mon propre classement)', levelChips(c && c.level, function (lv) { setLevel(d, m, lv); rerender(); })));
         body.push(h('div', { class: 'pj-field' }, 'Aux examens, ce cours…', freqChips(d, m, cat)));
@@ -813,7 +869,8 @@
       const acts = [btn(c ? 'Replacer' : 'Placer', 'btn--primary btn--sm', function () {
         let k = m ? m.key : 'c:' + uid();
         if (isNew && !title.value.trim()) { toast('Donne un nom au cours', 'warn'); return; }
-        const cc = place(d, k, { start: start.value, passes: loc.passes, title: isNew ? title.value.trim() : undefined, group: isNew ? (group.value.trim() || 'Mes cours') : undefined });
+        const f = plan().f;
+        const cc = place(d, k, { start: f.start, passes: f.passes, title: isNew ? title.value.trim() : undefined, group: isNew ? (group.value.trim() || 'Mes cours') : undefined });
         save(d); state.open = null; toast((isNew ? cc.title : m.title) + (cc.state === 'acquis' ? ' : acquis' : ' : ' + jLabel(d.rhythm, cc.step) + ' ' + nice(cc.due)), 'ok'); rerender();
       }, 'check')];
       if (c && c.state === 'active') {
@@ -835,19 +892,20 @@
     }
     function bulkBar(d) {
       const keys = Object.keys(state.sel).filter(function (k) { return state.sel[k]; });
-      const loc = { passes: 0 };
+      const loc = { times: 1 };
       const start = h('input', { type: 'date', value: today(), max: today() });
       const chips = h('div');
-      function draw() { chips.replaceChildren(passChips(loc.passes, function (p) { loc.passes = p; draw(); })); }
+      function draw() { chips.replaceChildren(timesChips(loc.times, function (n) { loc.times = n; draw(); })); }
       draw();
       return h('div', { class: 'pj-sheet pj-bulk' },
         h('b', null, plural(keys.length, 'cours sélectionné', 'cours sélectionnés')),
-        h('label', { class: 'pj-field' }, 'Première lecture le', start),
-        h('div', { class: 'pj-field' }, 'Déjà revus combien de fois ?', chips),
+        h('div', { class: 'pj-field' }, 'Vus combien de fois en tout (1re lecture comprise) ?', chips),
+        h('label', { class: 'pj-field' }, 'La dernière fois, c’était le', start),
         h('div', { class: 'pj-row__acts' },
           btn('Placer la sélection', 'btn--primary btn--sm', function () {
             if (!keys.length) { toast('Coche d’abord des cours', 'warn'); return; }
-            keys.forEach(function (k) { place(d, k, { start: start.value, passes: loc.passes }); });
+            const f = fromSeen(d.rhythm, loc.times, start.value);
+            keys.forEach(function (k) { place(d, k, { start: f.start, passes: f.passes }); });
             save(d); checkBadges(d, catalog()); state.sel = {}; state.bulk = false; toast(plural(keys.length, 'cours placé', 'cours placés'), 'ok'); rerender();
           }, 'check'),
           btn('Annuler', null, function () { state.sel = {}; state.bulk = false; rerender(); })));
@@ -932,14 +990,12 @@
               }));
             });
           }
-          acts.push(btn('Changer', 'btn--ghost btn--sm', function () {
-            const others = day.slots.map(function (x) { return x.key; });
-            const tmp = buildDay(Object.assign({}, d, { stage: false, template: [{ g: s.g, m: s.m, min: s.min }] }), cat.filter(function (x) { return others.indexOf(x.key) < 0; }), date);
-            const nk = tmp.slots[0] && tmp.slots[0].key;
-            if (!nk || others.indexOf(nk) >= 0) { toast('Pas d’autre cours à proposer dans ce pôle', 'warn'); return; }
-            s.key = nk; s.why = tmp.slots[0].why; save(d); rerender();
+          const pickOpen = state.pick && state.pick.date === date && state.pick.i === i;
+          acts.push(btn(pickOpen ? 'Fermer' : 'Changer', pickOpen ? 'btn--primary btn--sm' : 'btn--ghost btn--sm', function () {
+            state.pick = pickOpen ? null : { date: date, i: i, all: false }; rerender();
           }, 'shuffle'));
         }
+        const picker = !s.done && state.pick && state.pick.date === date && state.pick.i === i ? coursePicker(d, cat, day, s, date) : null;
         rows.push(h('div', { class: 'pj-row', style: 'align-items:flex-start' + (s.done ? ';opacity:.6' : '') },
           h('b', { style: 'width:22px;text-align:right;color:var(--muted)' }, s.done ? '✓' : String(i + 1)), dot(mastery(c, d)),
           h('div', { class: 'pj-row__main' },
@@ -947,7 +1003,8 @@
             h('div', { class: 'pj-row__s' }, tag + (s.done && s.grade ? ' · ' + GRADES[s.grade].label : '')),
             statusEl(c, d, { noLevel: true }),
             !s.done ? (s.key.charAt(0) === 'i' ? fragileEl(s.key.slice(2), rerenderSoon, 2) : s.key.charAt(0) === 'p' ? fragileEl(s.key, null, 2) : null) : null,
-            acts.length ? h('div', { class: 'pj-row__acts' }, acts) : null)));
+            acts.length ? h('div', { class: 'pj-row__acts' }, acts) : null,
+            picker)));
         const nextS = day.slots[i + 1];
         if (s.g === 'Parasito-myco' && (!nextS || nextS.g !== 'Parasito-myco')) {
           rows.push(h('a', { class: 'pj-row', href: '#/parasito/toutes/cartes', style: 'text-decoration:none;color:inherit' }, icon('refresh'),
@@ -1046,7 +1103,7 @@
             h('div', { class: 'pj-row__acts' },
               m.href ? h('a', { class: 'btn btn--ghost btn--sm', href: m.href }, icon('book'), 'Cours') : null,
               m.train ? h('a', { class: 'btn btn--ghost btn--sm', href: m.train }, icon('play'), 'S’entraîner') : null,
-              !c ? btn('Vu aujourd’hui', 'btn--outline btn--sm', function () { place(d, m.key, { start: today(), passes: 0 }); save(d); toast(m.title + ' placé : J1 demain', 'ok'); rerender(); }, 'plus')
+              !c ? btn('Déjà vu…', 'btn--outline btn--sm', function () { state.tab = 'cours'; state.open = m.key; state.filter = ''; rerender(); }, 'plus')
                 : btn('Régler', null, function () { state.tab = 'cours'; state.open = m.key; state.filter = ''; rerender(); }, 'edit'))));
       })));
       if (!ranked.length) out.push(h('p', { class: 'secondary muted' }, 'Aucun cours placé dans ces matières. Place ou classe tes cours dans « Mes cours », ou inclus les cours pas encore vus.'));
