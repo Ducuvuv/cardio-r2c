@@ -87,6 +87,15 @@
     document.head.appendChild(st);
   }
 
+  /* Pertinence EDN + pratique de la fiche (1-3), partagée avec la Méthode des J (estimation, ou ton réglage « Aux examens »). */
+  function rel(id) {
+    const pj = CARDIO.views && CARDIO.views.planj;
+    try { return pj && pj.relevance ? pj.relevance('p:' + id).v : 2; } catch (e) { return 2; }
+  }
+  const REL_PILL = { 3: ['pill--warn', 'Incontournable'], 2: ['pill--info', 'Important'] };
+  /* Ordre de travail : jamais ouverte d'abord, puis à revoir, puis lue, puis sue ; à égalité la plus pertinente. */
+  function workRank(id) { const s = status(id); return !s ? 0 : s.t === 'à revoir' ? 1 : s.t === 'lu' ? 2 : 3; }
+  function byWork(a, b) { return workRank(a.id) - workRank(b.id) || rel(b.id) - rel(a.id); }
   function status(id) {
     const s = loadState()[id];
     if (!s) return null;
@@ -144,8 +153,22 @@
         selMode ? 'Terminer la sélection' : 'Choisir plusieurs fiches pour m’entraîner'),
       selMode && sel.length ? h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: function () { setSel([]); redraw(); } } }, 'Tout décocher') : null));
     const st = loadState();
+    // Par où commencer : les fiches jamais ouvertes les plus pertinentes, puis celles à revoir
+    const next = all.slice().sort(byWork).filter(function (p) { return workRank(p.id) <= 1; }).slice(0, 4);
+    if (next.length && !selMode) {
+      page.appendChild(h('div', { class: 'card', style: 'padding:12px 14px;display:grid;gap:6px' },
+        h('b', {}, 'Par où commencer'),
+        h('p', { class: 'secondary muted', style: 'margin:0' }, 'Les fiches jamais ouvertes d’abord, les plus utiles pour l’EDN et la pratique en premier (estimation, réglable dans la Méthode des J).'),
+        next.map(function (p) {
+          const r = rel(p.id), s = status(p.id);
+          return h('a', { href: '#/parasito/' + encodeURIComponent(p.id), style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line);text-decoration:none;color:inherit' },
+            h('span', { style: 'flex:1;min-width:150px;font-weight:600' }, str(p.title)),
+            REL_PILL[r] ? h('span', { class: 'pill ' + REL_PILL[r][0] }, REL_PILL[r][1]) : null,
+            h('span', { class: 'secondary muted' }, s ? s.t : 'jamais ouverte'));
+        })));
+    }
     GROUPS.forEach(function (g) {
-      const group = all.filter(function (p) { return p.group === g[0]; });
+      const group = all.filter(function (p) { return p.group === g[0]; }).sort(byWork);
       if (!group.length) return;
       const done = group.filter(function (p) { return st[p.id] && st[p.id].ok === true; }).length;
       const allIn = group.every(function (p) { return sel.indexOf(p.id) >= 0; });
@@ -166,6 +189,7 @@
           h('div', { class: 'pz-card__top' },
             h('span', { class: 'pill pill--A' }, 'Rang A'),
             h('span', { class: 'pill pill--kind' }, count(p) + ' points'),
+            REL_PILL[rel(p.id)] ? h('span', { class: 'pill ' + REL_PILL[rel(p.id)][0] }, REL_PILL[rel(p.id)][1]) : null,
             sta ? h('span', { class: 'pill ' + sta.cls }, sta.t) : null),
           h('div', { class: 'pz-card__title' }, str(p.title)),
           p.agent ? h('div', { class: 'pz-card__agent' }, str(p.agent)) : null,
@@ -386,8 +410,10 @@
   function markShown(id) { try { const s = loadShown(); s[id] = Date.now(); localStorage.setItem(LS_SHOWN, JSON.stringify(s)); } catch (e) { /* ignore */ } }
   /* Les moins récemment montrées d'abord (jamais montrées en tête), tirage au hasard à égalité. */
   function byFreshness(list, shown) {
-    return shuffle(list.slice()).map(function (c) { return { c: c, t: shown[c.id] || 0 }; })
-      .sort(function (a, b) { return a.t - b.t; }).map(function (x) { return x.c; });
+    // à égalité (ex. jamais montrées), les cartes des fiches les plus pertinentes passent devant
+    const rc = {}; const rv = function (c) { const id = c.fiche && c.fiche.id; if (!(id in rc)) rc[id] = id ? rel(id) : 2; return rc[id]; };
+    return shuffle(list.slice()).map(function (c) { return { c: c, t: shown[c.id] || 0, r: rv(c) }; })
+      .sort(function (a, b) { return a.t - b.t || b.r - a.r; }).map(function (x) { return x.c; });
   }
   function buildSession(scope, size, type, order) {
     const st = loadSrs(), now = Date.now(), shown = loadShown();

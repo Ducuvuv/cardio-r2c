@@ -1435,5 +1435,8 @@
     try { const d = load(); const k = /^[ipc]:/.test(String(num)) ? String(num) : 'i:' + String(num); const a = d.qacc && d.qacc.date === today() ? (d.qacc.items[k] || d.qacc.items[String(num)]) : null; return a ? { n: a.n, pct: Math.round(a.sum / Math.max(1, a.n) * 100), applied: !!a.applied, min: QUIZ_MIN } : { n: 0, pct: 0, applied: false, min: QUIZ_MIN }; } catch (e) { return null; }
   }
   CARDIO.views.planj = { render: render, summary: summary, statusFor: function (k) { ensureStyles(); return statusFor(k); }, quizProgress: quizProgress,
-    weakSections: weakSections, fragileOf: fragileOf, sectionLinks: sectionLinks, homeCard: function () { ensureStyles(); return homeCard(); } };
+    weakSections: weakSections, fragileOf: fragileOf, sectionLinks: sectionLinks,
+    // pertinence EDN + pratique 1-3 (ton réglage « Aux examens » s'il existe, sinon l'estimation) et si elle est estimée
+    relevance: function (key) { try { return freqOf(load(), { key: String(key), weight: 0 }, null); } catch (e) { return { v: 2, est: true }; } },
+    homeCard: function () { ensureStyles(); return homeCard(); } };
 })();
