@@ -362,8 +362,27 @@
     const ws = cat.map(function (m) { return m.weight || 0; }).filter(function (w) { return w > 0; }).sort(function (a, b) { return a - b; });
     return { lo: ws[Math.floor(ws.length / 3)] || 0, hi: ws[Math.floor((ws.length * 2) / 3)] || 0 };
   }
+  /* Pertinence EDN + pratique (estimation, pas une statistique officielle) : 3 = incontournable (urgence vitale, très fréquent
+   * en pratique, transversal), 2 = important, 1 = plus rare / plus spécialisé. Remplacée par ton propre réglage « Aux examens ». */
+  const REL = {
+    'i:339': 3, 'i:224': 3, 'i:234': 3, 'i:226': 3, 'i:232': 3, 'i:230': 3, 'i:331': 3, 'i:330': 3,
+    'i:222': 2, 'i:223': 2, 'i:231': 2, 'i:203': 2, 'i:342': 2, 'i:225': 2, 'i:233': 2, 'i:152': 2, 'i:236': 2, 'i:237': 2, 'i:235': 2,
+    'i:221': 1, 'i:153': 1, 'i:238': 1,
+    'i:d350': 3, 'i:d115': 3, 'i:d168': 3, 'i:d187': 3, 'i:d302': 3, 'i:d162': 3, 'i:d215': 3,
+    'i:d111': 2, 'i:d117': 2, 'i:d155': 2, 'i:d171': 2, 'i:d228': 2, 'i:d330': 2, 'i:d114': 2, 'i:d116': 2, 'i:d112': 2, 'i:d169': 2,
+    'i:d113': 1, 'i:d194': 1, 'i:d201': 1, 'i:d211': 1, 'i:d239': 1, 'i:d319': 1,
+    'i:p154': 3, 'i:p188': 3, 'i:p209': 3, 'i:p226': 3, 'i:p338': 3, 'i:p359': 3, 'i:p75': 3,
+    'i:p159': 2, 'i:p203': 2, 'i:p206': 2, 'i:p309': 2, 'i:p360': 2, 'i:p230': 2, 'i:p186': 2, 'i:p204': 2, 'i:p205': 2, 'i:p359bis': 2,
+    'i:p110': 1, 'i:p207': 1, 'i:p208': 1, 'i:p210': 1, 'i:p211': 1,
+    'p:paludisme': 3, 'p:toxoplasmose': 3, 'p:candidoses': 3, 'p:gale-ou-scabiose': 3, 'p:dermatophytoses': 3, 'p:pneumocystose': 3,
+    'p:generalites': 2, 'p:introduction-a-la-mycologie': 2, 'p:amoebose': 2, 'p:giardiose': 2, 'p:oxyurose': 2, 'p:taeniasis-et-cysticercose': 2,
+    'p:aspergilloses-et-autres-champignons-fila': 2, 'p:cryptococcose': 2, 'p:anguillulose-ou-strongyloidose': 2, 'p:schistosomoses-ou-bilharzioses': 2,
+    'p:leishmanioses': 2, 'p:poux-puces-punaises-et-tiques': 2, 'p:ascaridiose': 2, 'p:infections-a-malassezia': 2
+  };
   function freqOf(d, m, tiers) {
     if (d.freq[m.key]) return { v: d.freq[m.key], est: false };
+    if (REL[m.key]) return { v: REL[m.key], est: true };
+    if (m.key.charAt(0) === 'p') return { v: 1, est: true };
     if (!m.weight || !tiers) return { v: 2, est: true };
     return { v: m.weight >= tiers.hi ? 3 : m.weight >= tiers.lo ? 2 : 1, est: true };
   }
@@ -378,7 +397,7 @@
     else if (c.state === 'acquis') { s -= 30; }
     else if (c.state === 'active' && c.due && c.due < t) { s += Math.min(20, diff(c.due, t) * 2); why.push('en retard'); }
     if (ms.lvl === 'bad') why.push('fragile');
-    if (f.v === 3) why.push(f.est ? 'gros item' : 'tombe souvent');
+    if (f.v === 3) why.push(f.est ? 'incontournable EDN' : 'tombe souvent');
     return { score: Math.round(s), why: why, mastery: ms, freq: f };
   }
 
@@ -420,11 +439,11 @@
     const pr = function (m) { return priority(d, m, tiers).score; };
     function pickNew(g) {
       const c = metas.filter(function (m) { return m.group === g && !d.courses[m.key] && !used[m.key]; }).sort(function (a, b) { return pr(b) - pr(a); });
-      return c[0] ? { m: c[0], why: 'à découvrir' } : null;
+      return c[0] ? { m: c[0], why: 'jamais vu' + (freqOf(d, c[0], tiers).v === 3 ? ' · incontournable' : '') } : null;
     }
     function pickDue(g) {
       const due = metas.filter(function (m) { const c = d.courses[m.key]; return m.group === g && c && c.state === 'active' && c.due && c.due <= t && !used[m.key]; })
-        .sort(function (a, b) { const ca = d.courses[a.key], cb = d.courses[b.key]; return (ca.due < cb.due ? -1 : ca.due > cb.due ? 1 : 0) || ca.step - cb.step; });
+        .sort(function (a, b) { const ca = d.courses[a.key], cb = d.courses[b.key]; return pr(b) - pr(a) || (ca.due < cb.due ? -1 : ca.due > cb.due ? 1 : 0) || ca.step - cb.step; });
       if (!due.length) return null;
       const c = d.courses[due[0].key];
       return { m: due[0], why: jLabel(d.rhythm, c.step) + (c.due < today() ? ' en retard' : c.due === today() ? ' prévu aujourd’hui' : ' prévu ce jour-là') };
@@ -440,7 +459,7 @@
     const slots = tpl.map(function (s) {
       if (s.m === 'memo') return { g: s.g, m: 'memo', min: s.min, why: '', key: null, done: false, grade: null };
       // Charge trop lourde (trop de J dus) : les créneaux « Auto » revoient au lieu de découvrir
-      const order = s.m === 'new' ? [pickNew, pickDue, pickWeak] : s.m === 'rev' ? [pickDue, pickWeak, pickNew] : heavy ? [pickDue, pickWeak, pickNew] : [pickDue, pickNew, pickWeak];
+      const order = s.m === 'new' ? [pickNew, pickDue, pickWeak] : s.m === 'rev' ? [pickDue, pickWeak, pickNew] : heavy ? [pickDue, pickWeak, pickNew] : [pickNew, pickDue, pickWeak];
       let r = null;
       for (let i = 0; i < order.length && !r; i++) r = order[i](s.g);
       if (r) used[r.m.key] = 1;
@@ -688,7 +707,7 @@
             }, 'calendar'))));
       }
       let due = cs.filter(function (c) { return c.state === 'active' && c.due && c.due <= t; })
-        .sort(function (a, b) { return (a.due < t ? 0 : 1) - (b.due < t ? 0 : 1) || a.step - b.step || (a.due < b.due ? -1 : 1); });
+        .sort(function (a, b) { const tiers = weightTiers(cat); return priority(d, meta(b, cat), tiers).score - priority(d, meta(a, cat), tiers).score || (a.due < b.due ? -1 : 1); });
       out.push(dateBar());
       out.push(dayBlock(d, cat));
       const inDay = d.day ? d.day.slots.map(function (s) { return s.key; }) : [];
@@ -1025,7 +1044,7 @@
             toast(d.stage ? 'Mode stage : journée allégée (~3 h), révisions d’abord' : 'Retour à ta journée type', 'ok'); rerender();
           }, 'clock')),
         h('div', { class: 'pj-xpline' }, h('span', { class: 'pj-xpchip' }, '⚡ ' + todayXp() + ' XP aujourd’hui'), h('span', { class: 'pj-xpchip pj-xpchip--lvl' }, levelLabel()), h('span', { class: 'pj-xpchip pj-xpchip--fire' }, '🏁 ' + (Number(d.daysDone) || 0) + ' journées bouclées')),
-        h('p', { class: 'secondary muted' }, 'Objectif : ' + Object.keys(byG).map(function (g) { return byG[g] + ' ' + g; }).join(' · ') + ' · environ ' + hm(tot) + (nDone ? ' (reste ' + hm(left) + ')' : '') + '. Dans chaque créneau, l’app choisit le cours du jour du pôle : un J dû d’abord, sinon un cours à découvrir, sinon ton cours le plus fragile.'),
+        h('p', { class: 'secondary muted' }, 'Objectif : ' + Object.keys(byG).map(function (g) { return byG[g] + ' ' + g; }).join(' · ') + ' · environ ' + hm(tot) + (nDone ? ' (reste ' + hm(left) + ')' : '') + '. Dans chaque créneau, l’app choisit le cours du pôle : un cours jamais vu d’abord, sinon un J dû, sinon ton cours le plus fragile ; à chaque fois le plus pertinent pour l’EDN et la pratique en premier (les jours chargés, les révisions passent avant).'),
         h('div', { class: 'pj-bar__track' }, h('div', { class: 'pj-bar__fill', style: 'width:' + Math.round((tot - left) / Math.max(1, tot) * 100) + '%' })),
         day.heavy || day.caught ? h('div', { class: 'pj-banner' }, h('span', null,
           (day.caught ? plural(day.caught, 'révision en retard étalée', 'révisions en retard étalées') + ' automatiquement sur les prochains jours. ' : '') +
