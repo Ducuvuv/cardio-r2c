@@ -147,6 +147,9 @@
     d.daysDone = Math.max(0, Math.round(Number(raw.daysDone)) || 0);
     // Questions faites dans la journée, par item : {date, items: {num: {n, sum, applied}}}
     d.qacc = raw.qacc && typeof raw.qacc === 'object' && raw.qacc.date === t0 && raw.qacc.items && typeof raw.qacc.items === 'object' ? raw.qacc : { date: t0, items: {} };
+    // Tour de révision du jour (même jour, ne fait pas avancer les J) : {date, done: {clé: 'ok' | 'flou'}}
+    d.recap = { date: t0, done: {} };
+    if (raw.recap && raw.recap.date === t0 && raw.recap.done && typeof raw.recap.done === 'object') Object.keys(raw.recap.done).forEach(function (k) { if (/^[ipc]:/.test(k) && (raw.recap.done[k] === 'ok' || raw.recap.done[k] === 'flou')) d.recap.done[k] = raw.recap.done[k]; });
     d.stage = !!raw.stage;
     d.tplStage = normTemplate(Array.isArray(raw.tplStage) ? raw.tplStage : null, STAGE_TEMPLATE);
     const t = today();
@@ -710,6 +713,7 @@
         .sort(function (a, b) { const tiers = weightTiers(cat); return priority(d, meta(b, cat), tiers).score - priority(d, meta(a, cat), tiers).score || (a.due < b.due ? -1 : 1); });
       out.push(dateBar());
       out.push(dayBlock(d, cat));
+      if (!state.date || state.date <= t) { const rc = recapBlock(d, cat); if (rc) out.push(rc); }
       const inDay = d.day ? d.day.slots.map(function (s) { return s.key; }) : [];
       due = due.filter(function (c) { return inDay.indexOf(c.key) < 0; });
       out.push(h('p', { class: 'pj-h' }, due.length ? 'Autres révisions J dues aujourd’hui (' + due.length + ')' : 'Pas d’autre révision J aujourd’hui'));
@@ -947,6 +951,51 @@
       const plan = buildDay(d, cat, dt); plan.caught = caught;
       d.plans[dt] = plan; if (dt === t) d.day = plan;
       save(d);
+    }
+    /* Tour de révision du jour : les cours vus aujourd'hui (découverts ou revus) à repasser une 2e fois le soir.
+     * Ne fait pas avancer les J (une relecture le même jour ne remplace pas l'espacement) ; « Encore flou » ramène le
+     * prochain J à demain. Bouton pour une séance de questions mélangée sur tous ces cours. */
+    function recapBlock(d, cat) {
+      const t = today();
+      if (!d.recap || d.recap.date !== t) d.recap = { date: t, done: {} };
+      const seen = list(d).filter(function (c) { return c.start === t || (c.history.length && c.history[c.history.length - 1].date === t); });
+      if (!seen.length) return null;
+      const items = seen.filter(function (c) { return c.key.charAt(0) === 'i'; }).map(function (c) { return c.key.slice(2); });
+      const paras = seen.filter(function (c) { return c.key.charAt(0) === 'p'; }).map(function (c) { return c.key.slice(2); });
+      const nDone = seen.filter(function (c) { return d.recap.done[c.key]; }).length;
+      const from = encodeURIComponent('#/planj');
+      const quiz = [];
+      if (items.length) quiz.push(h('a', { class: 'btn btn--primary btn--sm', href: '#/review?mode=item&items=' + items.map(encodeURIComponent).join(',') + '&kind=qcm,qroc&size=' + Math.min(30, 10 * items.length) + '&all=1&order=random&from=' + from + '&autostart=1' }, icon('play'), 'Questions sur ' + plural(items.length, 'item', 'items') + ' du jour'));
+      if (paras.length) quiz.push(h('a', { class: 'btn btn--outline btn--sm', href: '#/parasito/choix/cartes?ids=' + paras.map(encodeURIComponent).join(',') + '&size=' + Math.min(30, 10 * paras.length) + '&order=random' }, icon('play'), 'Cartes parasito du jour'));
+      const rows = seen.map(function (c) {
+        const m = meta(c, cat); const r = d.recap.done[c.key];
+        const mark = function (v) {
+          return function () {
+            const was = d.recap.done[c.key];
+            if (was === v) { delete d.recap.done[c.key]; save(d); rerender(); return; }
+            d.recap.done[c.key] = v;
+            if (v === 'flou' && c.state === 'active' && (!c.due || c.due > add(t, 1))) { c.due = add(t, 1); delete c.planned; toast(m.title + ' : prochain passage demain', 'warn'); }
+            else toast(m.title + ' : 2e tour fait', 'ok');
+            if (!was) xp(10, '2e tour');
+            save(d); rerender();
+          };
+        };
+        return h('div', { class: 'pj-row', style: 'align-items:flex-start' + (r ? ';opacity:.7' : '') },
+          h('b', { style: 'width:22px;text-align:right;color:var(--muted)' }, r ? '✓' : '·'), dot(mastery(c, d)),
+          h('div', { class: 'pj-row__main' },
+            h('div', { class: 'pj-row__t' }, m.title),
+            h('div', { class: 'pj-row__s' }, (c.start === t && c.history.length === 0 ? 'découvert aujourd’hui' : 'revu aujourd’hui') + (r ? ' · 2e tour : ' + (r === 'ok' ? 'ça tient' : 'encore flou') : '')),
+            h('div', { class: 'pj-row__acts' },
+              m.href ? h('a', { class: 'btn btn--ghost btn--sm', href: m.href }, icon('book'), 'Relire') : null,
+              m.train ? h('a', { class: 'btn btn--ghost btn--sm', href: m.train.replace(/size=inf&all=1/, 'size=10&order=random') }, icon('play'), '10 questions') : null,
+              btn('Ça tient ✓', r === 'ok' ? 'btn--primary btn--sm' : 'btn--outline btn--sm', mark('ok')),
+              btn('Encore flou', r === 'flou' ? 'btn--primary btn--sm' : 'btn--outline btn--sm', mark('flou')))));
+      });
+      return h('div', { class: 'card stack' },
+        h('p', { class: 'pj-h', style: 'font-size:17px;margin:0' }, 'Tour de révision du jour (' + nDone + '/' + seen.length + ')'),
+        h('p', { class: 'secondary muted', style: 'margin:0' }, 'Repasse rapidement ce que tu as vu aujourd’hui, en fin de journée : relecture des points clés ou quelques questions. Ça consolide sans changer tes J ; si c’est encore flou, le cours revient dès demain.'),
+        quiz.length ? h('div', { class: 'pj-row__acts' }, quiz) : null,
+        h('div', { class: 'pj-grp' }, rows));
     }
     function dateBar() {
       const t = today(); const cur = state.date || t;
