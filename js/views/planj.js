@@ -675,10 +675,26 @@
         }) : [h('p', { class: 'secondary muted', style: 'margin:4px 0' }, 'Aucun cours ne correspond.')]);
       }
       const search = h('input', { type: 'search', class: 'input', placeholder: 'Chercher un cours (nom ou numéro)…', style: 'width:100%', on: { input: function (e) { fill(e.target.value); } } });
+      // Auto : l'app prend le meilleur cours suivant du classement (jamais vu > J dû > en cours, le plus pertinent d'abord),
+      // en sautant ceux déjà proposés pour ce créneau : chaque appui propose un cours différent.
+      const skipKey = date + ':' + state.pick.i;
+      state.skip = state.skip || {};
+      const autoBtn = btn('Auto : l’app choisit', 'btn--primary btn--sm', function () {
+        const sk = state.skip[skipKey] || (state.skip[skipKey] = []);
+        if (s.key && sk.indexOf(s.key) < 0) sk.push(s.key);
+        const ord = day.heavy || s.m === 'rev' ? { 0: 0, 2: 1, 1: 2 } : { 1: 0, 0: 1, 2: 2 };   // même logique que les créneaux Auto
+        const pool = rows.filter(function (r) { return r.cls < 3 && r.m.group === s.g; }).sort(function (a, b) { return ord[a.cls] - ord[b.cls] || b.p - a.p; });
+        let next = pool.find(function (r) { return sk.indexOf(r.m.key) < 0; });
+        if (!next) { state.skip[skipKey] = s.key ? [s.key] : []; next = pool.find(function (r) { return r.m.key !== s.key; }); }
+        if (!next) { toast('Pas d’autre cours à proposer dans ce pôle', 'warn'); return; }
+        s.key = next.m.key; s.why = next.why + ' · auto'; save(d);
+        toast(next.m.title + ' (' + next.why + ')', 'ok'); rerender();
+      }, 'shuffle');
       fill('');
       return h('div', { class: 'card', style: 'margin-top:8px;padding:10px;display:grid;gap:6px' },
         h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' },
           h('b', { style: 'flex:1;min-width:140px' }, 'Choisis le cours de ce créneau'),
+          autoBtn,
           btn('Ce pôle', !all ? 'btn--primary btn--sm' : 'btn--outline btn--sm', function () { state.pick.all = false; rerender(); }),
           btn('Tous les pôles', all ? 'btn--primary btn--sm' : 'btn--outline btn--sm', function () { state.pick.all = true; rerender(); })),
         search, listEl);
