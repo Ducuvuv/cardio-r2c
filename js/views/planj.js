@@ -430,7 +430,7 @@
   }
   function normDay(x) {
     if (!x || typeof x !== 'object' || !valid(x.date) || !Array.isArray(x.slots)) return null;
-    return { date: x.date, bonus: !!x.bonus, stage: !!x.stage, heavy: !!x.heavy, dueN: Math.max(0, Math.round(Number(x.dueN)) || 0), caught: Math.max(0, Math.round(Number(x.caught)) || 0), slots: x.slots.filter(function (s) { return s && typeof s.g === 'string'; }).slice(0, 20).map(function (s) {
+    return { date: x.date, round: Math.max(1, Math.min(9, Math.round(Number(x.round)) || 1)), bonus: !!x.bonus, stage: !!x.stage, heavy: !!x.heavy, dueN: Math.max(0, Math.round(Number(x.dueN)) || 0), caught: Math.max(0, Math.round(Number(x.caught)) || 0), slots: x.slots.filter(function (s) { return s && typeof s.g === 'string'; }).slice(0, 20).map(function (s) {
       const m = mode(s.m);
       return { g: s.g, m: m, min: mins(s.min, m), why: typeof s.why === 'string' ? s.why.slice(0, 60) : '', key: typeof s.key === 'string' ? s.key : null, done: !!s.done, grade: GRADES[s.grade] ? s.grade : null };
     }) };
@@ -1006,6 +1006,33 @@
         h('button', { type: 'button', class: cur === add(t, 1) ? 'is-on' : '', on: { click: function () { state.date = add(t, 1); rerender(); } } }, 'Demain'),
         inp);
     }
+    /* Une autre journée dans la même journée : nouveau programme (les cours déjà vus aujourd'hui sont placés, donc
+     * l'app propose de nouvelles découvertes et les J suivants). Ce qui a été fait reste enregistré. */
+    function anotherDay(d, cat, day, date) {
+      const left = day.slots.filter(function (s) { return !s.done && (s.key || s.m === 'memo'); }).length;
+      if (left && !window.confirm('Il reste ' + plural(left, 'créneau', 'créneaux') + ' non faits. Les remplacer par une nouvelle journée ? (ce que tu as déjà fait reste enregistré)')) return;
+      const pl = buildDay(d, cat, date); pl.round = (day.round || 1) + 1;
+      d.plans[date] = pl; if (date === today()) d.day = pl;
+      save(d); toast('Journée n° ' + pl.round + ' : c’est parti !', 'ok'); rerender(); window.scrollTo(0, 0);
+    }
+    /* Réinitialiser un bloc (ex. Dermato) : ses créneaux redeviennent à faire et l'app re-choisit les cours du pôle
+     * (les révisions déjà notées restent enregistrées dans tes J). Ensuite « Changer » pour choisir toi-même. */
+    function blockReset(d, cat, day, date, isToday) {
+      const groups = [];
+      day.slots.forEach(function (s) { if (s.m !== 'memo' && groups.indexOf(s.g) < 0) groups.push(s.g); });
+      if (!groups.length) return null;
+      return h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' },
+        h('span', { class: 'secondary muted' }, 'Réinitialiser un bloc :'),
+        groups.map(function (g) {
+          return btn(g, 'btn--outline btn--sm', function () {
+            const mine = day.slots.filter(function (s) { return s.g === g; });
+            const others = day.slots.filter(function (s) { return s.g !== g; }).map(function (s) { return s.key; });
+            const tmp = buildDay(Object.assign({}, d, { stage: false, template: mine.map(function (s) { return { g: s.g, m: s.m, min: s.min }; }) }), cat.filter(function (x) { return others.indexOf(x.key) < 0; }), date);
+            mine.forEach(function (s, k) { const n = tmp.slots[k] || {}; s.key = n.key || null; s.why = n.why || ''; s.done = false; s.grade = null; });
+            save(d); toast('Bloc ' + g + ' remis à zéro : nouveaux cours proposés (touche « Changer » pour choisir)', 'ok'); rerender();
+          }, 'refresh');
+        }));
+    }
     function dayDone(d, cat, day) {
       if (!day || day.bonus || day.date !== today()) return;
       if (!day.slots.length || !day.slots.every(function (s) { return s.done || !s.key && s.m !== 'memo'; })) return;
@@ -1086,7 +1113,7 @@
       day.slots.forEach(function (s) { byG[s.g] = (byG[s.g] || 0) + 1; });
       return h('div', { class: 'card stack' },
         h('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' },
-          h('p', { class: 'pj-h', style: 'font-size:17px;flex:1;margin:0' }, '1 · ' + (d.stage ? 'Journée de stage' : 'Ma journée type') + (isToday ? '' : ' · ' + nice(date)) + ' (' + nDone + '/' + day.slots.length + ' créneaux)'),
+          h('p', { class: 'pj-h', style: 'font-size:17px;flex:1;margin:0' }, '1 · ' + (d.stage ? 'Journée de stage' : 'Ma journée type') + (day.round > 1 ? ' n° ' + day.round : '') + (isToday ? '' : ' · ' + nice(date)) + ' (' + nDone + '/' + day.slots.length + ' créneaux)'),
           btn(d.stage ? 'Mode stage : activé' : 'Mode stage', d.stage ? 'btn--primary btn--sm' : 'btn--outline btn--sm', function () {
             // Bascule : la journée est recomposée tout de suite ; les créneaux déjà faits restent comptés dans les J
             d.stage = !d.stage; delete d.plans[date]; if (isToday) d.day = null; ensureDay(d, cat, date); save(d);
@@ -1100,7 +1127,11 @@
           (day.stage ? 'Mode stage : journée allégée (environ 3 h), révisions d’abord ; une découverte seulement s’il n’y a rien à revoir dans le pôle. ' : day.heavy ? 'Beaucoup de J dus (' + day.dueN + ') : les créneaux « Auto » revoient au lieu de découvrir ce jour-là. Les découvertes reprennent quand la charge baisse.' : ''))) : null,
         isToday ? null : h('p', { class: 'secondary muted' }, 'Programme préparé pour ' + nice(date) + ' : change les cours si tu veux, il sera prêt le jour venu (tu noteras tes révisions ce jour-là).'),
         h('div', { class: 'pj-grp' }, rows),
-        h('div', { class: 'pj-row__acts' }, btn('Recomposer le programme', null, function () { const pl = buildDay(d, cat, date); d.plans[date] = pl; if (isToday) d.day = pl; save(d); rerender(); }, 'refresh'),
+        isToday && day.bonus ? h('div', { class: 'pj-banner' }, h('span', null, 'Journée bouclée ! Encore de l’énergie ? Enchaîne une autre journée : de nouveaux cours à découvrir et les révisions suivantes.'),
+          btn('Enchaîner une autre journée', 'btn--primary btn--sm', function () { anotherDay(d, cat, day, date); }, 'refresh')) : null,
+        blockReset(d, cat, day, date, isToday),
+        h('div', { class: 'pj-row__acts' }, btn('Recomposer le programme', null, function () { const pl = buildDay(d, cat, date); pl.round = day.round || 1; d.plans[date] = pl; if (isToday) d.day = pl; save(d); rerender(); }, 'refresh'),
+          isToday && !day.bonus ? btn('Faire une autre journée', null, function () { anotherDay(d, cat, day, date); }, 'plus') : null,
           btn('Modifier mon modèle', null, function () { go('regl'); }, 'edit')));
     }
 
