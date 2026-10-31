@@ -1096,6 +1096,16 @@
               acts.push(h('a', { class: 'btn btn--outline btn--sm', href: base + '&kind=qcm,qroc&size=20&pj=1' }, '① Me tester · 20 questions'));
               if (m.href) acts.push(h('a', { class: 'btn btn--ghost btn--sm', href: '#/item/' + encodeURIComponent(num) + '/cours' }, '② Relire'));
             }
+          } else if (s.key.charAt(0) === 'p') {
+            // Fiche parasito, même déroulé : découverte = pré-test 10 cartes (ne compte pas) → fiche → Découvert ✓ ;
+            // révision = Me tester 20 cartes (la seule séance qui compte) → relire
+            if (!c) {
+              if (m.train) acts.push(h('a', { class: 'btn btn--outline btn--sm', href: m.train + '?size=10&order=random' }, '① Pré-test 10 cartes'));
+              if (m.href) acts.push(h('a', { class: 'btn btn--outline btn--sm', href: m.href }, '② Lire la fiche'));
+            } else {
+              if (m.train) acts.push(h('a', { class: 'btn btn--outline btn--sm', href: m.train + '?size=20&order=random&pj=1' }, '① Me tester · 20 cartes'));
+              if (m.href) acts.push(h('a', { class: 'btn btn--ghost btn--sm', href: m.href }, '② Relire'));
+            }
           } else {
             if (m.href) acts.push(h('a', { class: 'btn btn--ghost btn--sm', href: m.href }, icon('book'), 'Cours'));
             if (m.train) acts.push(h('a', { class: 'btn btn--ghost btn--sm', href: s.key.charAt(0) === 'p' ? m.train + '?size=20&order=random&pj=1' : m.train }, icon('play'), s.key.charAt(0) === 'p' && c ? 'Me tester · 20 cartes' : 'S’entraîner'));
@@ -1103,7 +1113,7 @@
           if (!isToday) {
             /* jour préparé à l'avance : on peut changer les cours, la note se fera le jour J */
           } else if (!c) {
-            acts.push(btn((s.key.charAt(0) === 'i' ? '③ ' : '') + 'Découvert ✓', 'btn--primary btn--sm', function () { place(d, s.key, { start: t, passes: 0 }); s.done = true; save(d); xp(XP.discover, 'Découverte'); checkBadges(d, cat); dayDone(d, cat, day); toast(m.title + ' découvert : J1 demain', 'ok'); rerender(); }));
+            acts.push(btn((/^[ip]/.test(s.key) ? '③ ' : '') + 'Découvert ✓', 'btn--primary btn--sm', function () { place(d, s.key, { start: t, passes: 0 }); s.done = true; save(d); xp(XP.discover, 'Découverte'); checkBadges(d, cat); dayDone(d, cat, day); toast(m.title + ' découvert : J1 demain', 'ok'); rerender(); }));
           } else {
             ['difficile', 'moyen', 'facile'].forEach(function (g) {
               acts.push(btn(GRADES[g].label, g === 'facile' ? 'btn--primary btn--sm' : 'btn--outline btn--sm', function () {
@@ -1127,6 +1137,9 @@
             h('div', { class: 'pj-row__t' }, m.title),
             h('div', { class: 'pj-row__s' }, tag + (s.done && s.grade ? ' · ' + GRADES[s.grade].label : '')),
             statusEl(c, d, { noLevel: true }),
+            !s.done && s.key.charAt(0) === 'p' ? h('div', { class: 'pj-row__s', style: 'margin-top:4px' }, !c
+              ? 'Découverte : pré-test 10 cartes (ne compte pas) → lis la fiche (mode « Me tester » pour retrouver les mots-clés) → Découvert ✓.'
+              : 'Révision : « Me tester » AVANT de relire (20 cartes) : c’est la seule séance qui compte, ta note règle le prochain J → puis relis les parties fragiles.') : null,
             !s.done && s.key.charAt(0) === 'i' ? h('div', { class: 'pj-row__s', style: 'margin-top:4px' }, !c
               ? 'Découverte : pré-test 10 QCM (ne compte pas, lis vite les corrections) → fiche partie par partie, avec 6 questions après chaque partie → Découvert ✓.'
               : 'Révision : « Me tester » AVANT de relire (20 questions au hasard) : c’est la seule séance qui compte, ta note règle le prochain J toute seule → puis relis les parties fragiles. Ou note-toi directement.') : null,
