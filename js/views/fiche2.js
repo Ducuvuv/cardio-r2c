@@ -56,7 +56,8 @@
     const q = (ids || []).filter(Boolean).map(encodeURIComponent).join(',');
     // from : la séance finie (ou quittée), on revient sur cette partie de la fiche.
     const from = sid ? '&from=' + encodeURIComponent('#/item/' + num + '/cours?sec=' + sid) : '';
-    return '#/review?mode=item&item=' + encodeURIComponent(num) + (q ? '&objective=' + q : '') + from + '&autostart=1';
+    // après chaque partie : quelques questions QCM + QROC de la partie, au hasard
+    return '#/review?mode=item&item=' + encodeURIComponent(num) + (q ? '&objective=' + q + '&kind=qcm,qroc&size=6&all=1&order=random' : '') + from + '&autostart=1';
   }
   function itemLabel(num) {
     try { const r = registry(); return typeof r.label === 'function' ? r.label(num) : str(num); } catch (e) { return str(num); }

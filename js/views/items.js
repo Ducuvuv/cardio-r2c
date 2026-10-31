@@ -852,6 +852,8 @@
     const nT2 = t2Count(it.num);
     page.appendChild(h('section', { class: 'card hub__all' },
       h('h3', { class: 'hub__all-title' }, 'Séance sur mesure'),
+      h('a', { class: 'btn btn--outline btn--block', style: 'margin-bottom:8px', href: '#/review?mode=item&item=' + encodeURIComponent(it.num) + '&kind=qcm&size=10&all=1&order=random&pre=1&from=' + encodeURIComponent('#/item/' + it.num) + '&autostart=1' },
+        '🧪 Pré-test avant le cours · 10 QCM (ne compte pas dans la note)'),
       qChooser('item=' + encodeURIComponent(it.num), '#/item/' + it.num, (Number(c.qcm) || 0) + (Number(c.qroc) || 0))));
     page.appendChild(h('section', { class: 'card hub__all' },
       h('h3', { class: 'hub__all-title' }, 'Tout l’entraînement de l’item'),
