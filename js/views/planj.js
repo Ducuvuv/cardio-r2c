@@ -358,6 +358,31 @@
     return late.length;
   }
 
+  /* Trop de J pour aujourd'hui (ex. beaucoup de cours placés d'un coup, retards) : on garde aujourd'hui les plus
+   * importants (ceux déjà dans le programme du jour d'abord, puis par priorité : pertinence EDN, fragilité, retard) dans
+   * la limite de la capacité, et on étale le reste sur les jours suivants, toujours sans dépasser la capacité,
+   * les plus importants en premier. Renvoie le nombre de cours déplacés. */
+  function spreadDue(d, cat, protect) {
+    const t = today(), cap = Math.max(1, d.capacity), tiers = weightTiers(cat);
+    const due = list(d).filter(function (c) { return c.state === 'active' && c.due && c.due <= t; });
+    if (due.length <= cap) return 0;
+    const prot = protect || {};
+    const meta = function (c) { return cat.find(function (m) { return m.key === c.key; }) || { key: c.key, group: c.group, weight: 0 }; };
+    const ranked = due.map(function (c) { return { c: c, p: priority(d, meta(c), tiers).score }; })
+      .sort(function (a, b) { return (prot[b.c.key] ? 1 : 0) - (prot[a.c.key] ? 1 : 0) || b.p - a.p || (a.c.due < b.c.due ? -1 : 1); });
+    const keep = Math.max(cap, ranked.filter(function (x) { return prot[x.c.key]; }).length);
+    const move = ranked.slice(keep).map(function (x) { return x.c; });
+    const moving = {}; move.forEach(function (c) { moving[c.key] = 1; });
+    const fc = forecast(d, t, 90);
+    const load = fc.map(function (x) { return x.items.filter(function (it) { return !moving[it.key] && !it.projected; }).length; });
+    let day = 1;
+    move.forEach(function (c) {
+      while (day < 89 && load[day] >= cap) day++;
+      c.due = add(t, day); load[day]++; delete c.planned;
+    });
+    return move.length;
+  }
+
   /* ---------- fréquence aux examens et priorité ---------- */
   /* Aucune statistique officielle fiable des items « les plus tombés » n'est dans l'app : c'est TOI qui règles la
    * fréquence (selon tes annales, tes profs) ; à défaut, estimation d'après le volume de l'essentiel (niveau 1) de l'item. */
@@ -957,14 +982,14 @@
     function ensureDay(d, cat, date) {
       const t = today(); const dt = date || t;
       let caught = 0;
-      if (dt === t && d.caughtAt !== t) {
-        // Premier passage du jour : si le retard dépasse la capacité, on l'étale automatiquement (les plus fragiles d'abord)
-        const late = list(d).filter(function (c) { return c.state === 'active' && c.due && c.due < t; }).length;
-        caught = late > d.capacity ? catchUp(d) : 0;
+      if (dt === t) {
+        // Plus de J dus aujourd'hui que ta capacité : on garde les plus importants, le reste est étalé automatiquement
+        const prot = {}; const cur0 = d.plans[t]; if (cur0) cur0.slots.forEach(function (s) { if (s.key) prot[s.key] = 1; });
+        caught = spreadDue(d, cat, prot);
         d.caughtAt = t;
       }
       const cur = d.plans[dt];
-      if (cur && !!cur.stage === !!d.stage) { if (caught) { cur.caught = caught; save(d); } return; }
+      if (cur && !!cur.stage === !!d.stage) { if (caught) { cur.caught = (cur.caught || 0) + caught; save(d); } return; }
       const plan = buildDay(d, cat, dt); plan.caught = caught;
       d.plans[dt] = plan; if (dt === t) d.day = plan;
       save(d);
@@ -1265,7 +1290,7 @@
         h('div', { class: 'pj-bar__track' }, h('div', { class: 'pj-bar__fill', style: 'width:' + Math.round((tot - left) / Math.max(1, tot) * 100) + '%' })),
         day.lite ? h('div', { class: 'pj-banner' }, h('span', null, 'Jour sans : seulement tes 3 révisions les plus importantes, dont 1 fiche parasito si tu en as (45 min max), pas de nouveau cours. Réfléchis avant de cliquer et lis tes erreurs : ça suffit. Les découvertes reprennent demain.')) : null,
         day.heavy || day.caught ? h('div', { class: 'pj-banner' }, h('span', null,
-          (day.caught ? plural(day.caught, 'révision en retard étalée', 'révisions en retard étalées') + ' automatiquement sur les prochains jours. ' : '') +
+          (day.caught ? plural(day.caught, 'révision étalée', 'révisions étalées') + ' automatiquement sur les prochains jours pour ne pas dépasser ' + d.capacity + ' par jour (les plus importantes restent aujourd’hui). ' : '') +
           (day.stage ? 'Mode stage : journée allégée (environ 3 h), révisions d’abord ; une découverte seulement s’il n’y a rien à revoir dans le pôle. ' : day.heavy ? 'Beaucoup de J dus (' + day.dueN + ') : les créneaux « Auto » revoient au lieu de découvrir ce jour-là. Les découvertes reprennent quand la charge baisse.' : ''))) : null,
         isToday ? null : h('p', { class: 'secondary muted' }, 'Programme préparé pour ' + nice(date) + ' : change les cours si tu veux, il sera prêt le jour venu (tu noteras tes révisions ce jour-là).'),
         h('div', { class: 'pj-grp' }, rows),
