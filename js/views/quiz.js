@@ -31,7 +31,7 @@
   const REQUEUE_GAP = 4;
 
   const KINDS = [
-    ['qcm', 'QCM'], ['qroc', 'QROC'], ['open', 'Ouvertes'], ['kfp', 'KFP'], ['tcs', 'TCS'],
+    ['qcm', 'QCM'], ['qroc', 'QROC'], ['open', 'Ouvertes'], ['kfp', 'KFP'],
     ['flash', 'Flash'], ['tx', 'Traitements'], ['case', 'Cas'], ['ecg', 'ECG'], ['echo', 'Écho']
   ];
   const KIND_IDS = KINDS.map((k) => k[0]);

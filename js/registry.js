@@ -184,7 +184,7 @@
       qroc: q.filter(function (x) { return x.type === 'QROC'; }).length,
       open: q.filter(function (x) { return x.type === 'OPEN'; }).length,
       kfp: c.edn.filter(function (x) { return x.type === 'KFP'; }).length,
-      tcs: c.edn.filter(function (x) { return x.type === 'TCS'; }).length,
+      tcs: 0,   // TCS retirés de l'app (choix d'Aymen)
       flash: c.course.essentials.length + c.course.numbers.length + c.course.mnemonics.length,
       trees: c.trees.length, tx: c.treatments.data.length, cases: c.cases.length,
       ecg: c.ecg.data.length, echo: c.echo.data.length,
@@ -347,7 +347,7 @@
       out.push(card);
     }
     c.questions.forEach(function (q) { push(q.type === 'QROC' ? 'qroc' : q.type === 'OPEN' ? 'open' : 'qcm', q); });
-    c.edn.forEach(function (e) { push(e.type === 'TCS' ? 'tcs' : 'kfp', e); });
+    c.edn.forEach(function (e) { if (e.type !== 'TCS') push('kfp', e); });   // TCS retirés de l'app
     c.course.essentials.forEach(function (e) { push('flash', e, e.objective || null); });
     c.course.numbers.forEach(function (n) { push('flash', n, n.objective || null); });
     c.course.mnemonics.forEach(function (m) { push('flash', m, m.objective || null); });

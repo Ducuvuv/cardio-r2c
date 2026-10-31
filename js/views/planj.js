@@ -595,7 +595,8 @@
     ensureStyles();
     const q = query || {};
     const root = h('div', { class: 'pj' });
-    const state = { tab: ['cours', 'prio', 'tours', 'plan', 'regl'].indexOf(q.tab) >= 0 ? q.tab : 'today', open: q.open || null, filter: '', sel: {}, bulk: false, classify: false, day: null, tg: null };
+    let runOpen0 = null; try { runOpen0 = sessionStorage.getItem('cardio.pj.open'); } catch (e) { /* ignore */ }
+    const state = { run: runOpen0 && runOpen0.slice(0, 10) === today() ? runOpen0 : null, tab: ['cours', 'prio', 'tours', 'plan', 'regl'].indexOf(q.tab) >= 0 ? q.tab : 'today', open: q.open || null, filter: '', sel: {}, bulk: false, classify: false, day: null, tg: null };
     function rerender() {
       const d = load();
       const cat = catalog();
@@ -1049,6 +1050,67 @@
           }, 'refresh');
         }));
     }
+    /* Déroulé guidé d'un créneau : la trame étape par étape, chacune avec son minuteur (js/timer.js).
+     * Découverte : pré-test (ne compte pas) → fiche partie par partie avec questions → relire ses erreurs → Découvert ✓.
+     * Révision : Me tester AVANT de relire (seule séance qui compte) → relire les parties fragiles → se noter.
+     * Avancement gardé par créneau (localStorage « cardio.pj.run »). */
+    const RUN_KEY = 'cardio.pj.run';
+    function runGet(id) { try { const x = JSON.parse(localStorage.getItem(RUN_KEY) || '{}'); return x[id] || 0; } catch (e) { return 0; } }
+    function runSet(id, n) { try { const x = JSON.parse(localStorage.getItem(RUN_KEY) || '{}'); Object.keys(x).forEach(function (k) { if (k.slice(0, 10) < today()) delete x[k]; }); x[id] = n; localStorage.setItem(RUN_KEY, JSON.stringify(x)); } catch (e) { /* ignore */ } }
+    function runSteps(s, c, m) {
+      const tot = s.min || 40, from = encodeURIComponent('#/planj');
+      if (s.key.charAt(0) === 'i') {
+        const num = encodeURIComponent(s.key.slice(2));
+        const base = '#/review?mode=item&item=' + num + '&all=1&order=random&from=' + from + '&autostart=1';
+        const cours = '#/item/' + num + '/cours';
+        return !c ? [
+          { t: 'Pré-test · 10 QCM', d: 'Réponds sans avoir lu, même au hasard. Lis vite les corrections, sans chercher à tout comprendre. Ne compte pas dans ta note.', min: 8, href: base + '&kind=qcm&size=10&pre=1' },
+          { t: 'Fiche, partie par partie', d: 'Lis une partie, puis « Me tester » en bas de la partie (6 questions QCM + QROC). Passe à la suivante.', min: Math.max(10, tot - 13), href: cours },
+          { t: 'Relire tes erreurs', d: 'Repasse sur les parties où tu as raté, en 5 minutes. Ensuite : Découvert ✓.', min: 5, href: cours }
+        ] : [
+          { t: 'Me tester · 20 questions', d: 'AVANT de relire. C’est la seule séance qui compte : ta note règle le prochain J toute seule.', min: 15, href: base + '&kind=qcm,qroc&size=20&pj=1' },
+          { t: 'Relire les parties fragiles', d: 'Uniquement les parties où tu as raté (« À revoir en priorité » sur la page de l’item).', min: Math.max(5, tot - 20), href: '#/item/' + num },
+          { t: 'Bilan', d: 'Si les 20 questions sont faites, le J est déjà validé. Sinon note-toi : Difficile, Moyen ou Facile.', min: 5, href: null }
+        ];
+      }
+      const pid = s.key.slice(2);
+      return !c ? [
+        { t: 'Pré-test · 10 cartes', d: 'Sans avoir lu. Ne compte pas dans ta note.', min: 4, href: m.train + '?size=10&order=random' },
+        { t: 'Lire la fiche', d: 'Puis mode « Me tester » de la fiche : retrouve les mots-clés cachés.', min: Math.max(6, tot - 7), href: '#/parasito/' + encodeURIComponent(pid) },
+        { t: 'Relire tes erreurs', d: 'Les parties où tu as bloqué. Ensuite : Découvert ✓.', min: 3, href: '#/parasito/' + encodeURIComponent(pid) }
+      ] : [
+        { t: 'Me tester · 20 cartes', d: 'AVANT de relire. La seule séance qui compte pour ta note.', min: 10, href: m.train + '?size=20&order=random&pj=1' },
+        { t: 'Relire les parties fragiles', d: '« À revoir en priorité » en haut de la fiche.', min: Math.max(4, tot - 12), href: '#/parasito/' + encodeURIComponent(pid) },
+        { t: 'Bilan', d: 'Note-toi si la note n’est pas déjà faite.', min: 2, href: null }
+      ];
+    }
+    function runPanel(s, c, m, date, i) {
+      const id = date + ':' + i + ':' + s.key;
+      const steps = runSteps(s, c, m);
+      const cur = Math.min(runGet(id), steps.length);
+      const rows = steps.map(function (st, k) {
+        const done = k < cur, now = k === cur;
+        const go = function () {
+          runSet(id, k);
+          try { sessionStorage.setItem('cardio.pj.open', date + ':' + i); } catch (e) { /* ignore */ }
+          if (CARDIO.timer) CARDIO.timer.start({ label: (k + 1) + '/' + steps.length + ' · ' + st.t + ' · ' + m.title, min: st.min });
+          if (st.href) location.hash = st.href; else rerender();
+        };
+        return h('div', { style: 'display:grid;gap:4px;padding:8px 10px;border-radius:12px;border:' + (now ? '2px solid var(--accent)' : '1px solid var(--line)') + ';opacity:' + (done ? '.55' : '1') },
+          h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' },
+            h('b', { style: 'flex:1;min-width:150px' }, (done ? '✓ ' : (k + 1) + ' · ') + st.t),
+            h('span', { class: 'secondary muted' }, '⏱ ' + st.min + ' min')),
+          now ? h('div', { class: 'pj-row__s' }, st.d) : null,
+          now ? h('div', { class: 'pj-row__acts' },
+            btn('▶ Go · minuteur ' + st.min + ' min', 'btn--primary btn--sm', go),
+            btn('✓ Étape faite', 'btn--outline btn--sm', function () { runSet(id, k + 1); if (CARDIO.timer && CARDIO.timer.active()) CARDIO.timer.stop(); rerender(); })) : null,
+          done ? h('div', { class: 'pj-row__acts' }, btn('Refaire', 'btn--ghost btn--sm', function () { runSet(id, k); rerender(); })) : null);
+      });
+      const endMsg = cur >= steps.length ? h('p', { class: 'pj-row__s', style: 'margin:0;font-weight:700' }, !c ? 'Trame finie : valide avec « ③ Découvert ✓ » ci-dessus, puis pause ☕.' : 'Trame finie : note-toi ci-dessus si le J n’est pas déjà validé, puis pause ☕.') : null;
+      return h('div', { class: 'card', style: 'margin-top:8px;padding:10px;display:grid;gap:6px' },
+        h('div', { style: 'display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap' }, h('b', {}, 'Déroulé · ' + (s.min || 40) + ' min'), h('span', { class: 'secondary muted' }, Math.min(cur, steps.length) + '/' + steps.length + ' étapes')),
+        rows, endMsg);
+    }
     function dayDone(d, cat, day) {
       if (!day || day.bonus || day.date !== today()) return;
       if (!day.slots.length || !day.slots.every(function (s) { return s.done || !s.key && s.m !== 'memo'; })) return;
@@ -1125,16 +1187,21 @@
               }));
             });
           }
+          if (isToday && /^[ip]/.test(s.key)) {
+            const runOpen = state.run === date + ':' + i;
+            acts.unshift(btn(runOpen ? 'Fermer le déroulé' : '▶ Démarrer', runOpen ? 'btn--outline btn--sm' : 'btn--primary btn--sm', function () { state.run = runOpen ? null : date + ':' + i; try { if (state.run) sessionStorage.setItem('cardio.pj.open', state.run); else sessionStorage.removeItem('cardio.pj.open'); } catch (e) { /* ignore */ } rerender(); }, runOpen ? null : 'play'));
+          }
           const pickOpen = state.pick && state.pick.date === date && state.pick.i === i;
           acts.push(btn(pickOpen ? 'Fermer' : 'Changer', pickOpen ? 'btn--primary btn--sm' : 'btn--ghost btn--sm', function () {
             state.pick = pickOpen ? null : { date: date, i: i, all: false }; rerender();
           }, 'shuffle'));
         }
         const picker = !s.done && state.pick && state.pick.date === date && state.pick.i === i ? coursePicker(d, cat, day, s, date) : null;
+        const run = !s.done && isToday && state.run === date + ':' + i ? runPanel(s, c, m, date, i) : null;
         rows.push(h('div', { class: 'pj-row', style: 'align-items:flex-start' + (s.done ? ';opacity:.6' : '') },
           h('b', { style: 'width:22px;text-align:right;color:var(--muted)' }, s.done ? '✓' : String(i + 1)), dot(mastery(c, d)),
           h('div', { class: 'pj-row__main' },
-            h('div', { class: 'pj-row__t' }, m.title),
+            h('div', { class: 'pj-row__t', style: !s.done && isToday ? 'cursor:pointer' : null, on: !s.done && isToday && /^[ip]/.test(s.key) ? { click: function () { state.run = state.run === date + ':' + i ? null : date + ':' + i; try { if (state.run) sessionStorage.setItem('cardio.pj.open', state.run); else sessionStorage.removeItem('cardio.pj.open'); } catch (e) { /* ignore */ } rerender(); } } : null }, m.title),
             h('div', { class: 'pj-row__s' }, tag + (s.done && s.grade ? ' · ' + GRADES[s.grade].label : '')),
             statusEl(c, d, { noLevel: true }),
             !s.done && s.key.charAt(0) === 'p' ? h('div', { class: 'pj-row__s', style: 'margin-top:4px' }, !c
@@ -1145,7 +1212,7 @@
               : 'Révision : « Me tester » AVANT de relire (20 questions au hasard) : c’est la seule séance qui compte, ta note règle le prochain J toute seule → puis relis les parties fragiles. Ou note-toi directement.') : null,
             !s.done ? (s.key.charAt(0) === 'i' ? fragileEl(s.key.slice(2), rerenderSoon, 2) : s.key.charAt(0) === 'p' ? fragileEl(s.key, null, 2) : null) : null,
             acts.length ? h('div', { class: 'pj-row__acts' }, acts) : null,
-            picker)));
+            run, picker)));
         const nextS = day.slots[i + 1];
         if (s.g === 'Parasito-myco' && (!nextS || nextS.g !== 'Parasito-myco')) {
           rows.push(h('a', { class: 'pj-row', href: '#/parasito/toutes/cartes', style: 'text-decoration:none;color:inherit' }, icon('refresh'),
@@ -1165,6 +1232,9 @@
             d.stage = !d.stage; delete d.plans[date]; if (isToday) d.day = null; ensureDay(d, cat, date); save(d);
             toast(d.stage ? 'Mode stage : journée allégée (~3 h), révisions d’abord' : 'Retour à ta journée type', 'ok'); rerender();
           }, 'clock')),
+        isToday && CARDIO.timer ? h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'secondary muted' }, '⏱ Minuteur de bloc :'),
+          [25, 45, 60].map(function (n) { return btn(n + ' min', 'btn--outline btn--sm', function () { CARDIO.timer.start({ label: 'Bloc de travail', min: n }); }); }),
+          btn('☕ Pause 5', 'btn--ghost btn--sm', function () { CARDIO.timer.start({ kind: 'break', min: 5, label: 'Pause' }); })) : null,
         h('div', { class: 'pj-xpline' }, h('span', { class: 'pj-xpchip' }, '⚡ ' + todayXp() + ' XP aujourd’hui'), h('span', { class: 'pj-xpchip pj-xpchip--lvl' }, levelLabel()), h('span', { class: 'pj-xpchip pj-xpchip--fire' }, '🏁 ' + (Number(d.daysDone) || 0) + ' journées bouclées')),
         h('p', { class: 'secondary muted' }, 'Objectif : ' + Object.keys(byG).map(function (g) { return byG[g] + ' ' + g; }).join(' · ') + ' · environ ' + hm(tot) + (nDone ? ' (reste ' + hm(left) + ')' : '') + '. Dans chaque créneau, l’app choisit le cours du pôle : un cours jamais vu d’abord, sinon un J dû, sinon ton cours le plus fragile ; à chaque fois le plus pertinent pour l’EDN et la pratique en premier (les jours chargés, les révisions passent avant).'),
         h('div', { class: 'pj-bar__track' }, h('div', { class: 'pj-bar__fill', style: 'width:' + Math.round((tot - left) / Math.max(1, tot) * 100) + '%' })),

@@ -613,7 +613,7 @@
       body.push(stepper(tier, labels));
       body.push(levelBar(labels[tier], cur.acquired, cur.total));
       let next;
-      if (tier >= 3) next = 'Tout est débloqué : rang B, KFP et TCS compris.';
+      if (tier >= 3) next = 'Tout est débloqué : rang B et KFP compris.';
       else if (!cur.total) next = 'Aucune carte à ce niveau : « ' + labels[tier + 1] + ' » se débloque à ta prochaine carte de cet item.';
       else if (tp.toNext > 0) next = ['Encore ', h('b', {}, String(tp.toNext)), ' carte' + (tp.toNext > 1 ? 's' : '') + ' à acquérir pour débloquer ', h('b', {}, labels[tier + 1])];
       else next = 'Seuil atteint : « ' + labels[tier + 1] + ' » se débloque à ta prochaine carte de cet item.';
@@ -626,7 +626,7 @@
       body.push(h('p', { class: 'hub__lvl-mode' },
         mode === 'essentiel'
           ? ['Mode ', h('b', {}, '« L’essentiel seulement »'), ' : tes séances ne proposent que le niveau Essentiel (rang A, questions faciles). ']
-          : ['Mode ', h('b', {}, '« Tout le programme »'), ' : rang A et B, KFP et TCS, comme le jour de l’EDN. '],
+          : ['Mode ', h('b', {}, '« Tout le programme »'), ' : rang A et B et KFP, comme le jour de l’EDN. '],
         h('a', { href: '#/settings' }, 'Changer de mode')));
       if (mode === 'essentiel') body.push(levelBar(labels[1], tp.tiers[0].acquired, tp.tiers[0].total));
       else {

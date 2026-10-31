@@ -10,7 +10,7 @@
 
   var DEFAULTS = { name: '', dailyGoal: 30, newPerDay: 15, retention: 0.9, theme: 'system', sound: false, haptics: true };
   var COUNT_LABELS = [
-    ['qcm', 'QCM'], ['qroc', 'QROC'], ['open', 'ouvertes'], ['kfp', 'KFP'], ['tcs', 'TCS'], ['flash', 'flash'],
+    ['qcm', 'QCM'], ['qroc', 'QROC'], ['open', 'ouvertes'], ['kfp', 'KFP'], ['flash', 'flash'],
     ['trees', 'arbres'], ['tx', 'traitements'], ['cases', 'cas'], ['ecg', 'ECG'], ['echo', 'écho']
   ];
 
@@ -211,7 +211,7 @@
   var LEVELS = [
     ['progressif', 'Progressif (recommandé)', 'Chaque item débloque le niveau suivant quand tu maîtrises 60 % du niveau en cours.', 'Mode progressif : chaque item avance à ton rythme.'],
     ['essentiel', 'L’essentiel seulement', 'Rang A, questions faciles, idéal pour démarrer.', 'L’essentiel seulement : rang A, questions faciles.'],
-    ['complet', 'Tout le programme', 'Rang A et B, KFP, TCS, comme le jour de l’EDN.', 'Tout le programme : comme le jour de l’EDN.']
+    ['complet', 'Tout le programme', 'Rang A et B et KFP, comme le jour de l’EDN.', 'Tout le programme : comme le jour de l’EDN.']
   ];
   function currentLevel() {
     var s = store();

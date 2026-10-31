@@ -54,7 +54,7 @@
   };
   const KIND_COST = { case: 4 };      // un dossier compte pour 4 cartes dans une session
   const MAX_RUN = 3;                  // pas plus de 3 cartes consécutives du même kind
-  const EXAM_SHAPE = { qcm: 18, kfp: 2, tcs: 1, case: 1 };
+  const EXAM_SHAPE = { qcm: 18, kfp: 3, case: 1 };   // TCS retirés de l'app
   /* Niveaux de progression (par item) : 1 Essentiel (rang A, QCM/QROC/flash faciles), 2 Approfondi
    * (tout le rang A : difficiles, dossiers, ECG, écho, traitements, questions ouvertes), 3 Expert
    * (rang B, KFP, TCS). 0 = arbre décisionnel : support de cours, jamais dans les séances. */
@@ -1209,7 +1209,7 @@
   /* buildSession({mode, item, size, kinds, rank, nowMs, seed}) → [cardId] (SPEC §5).
    * smart : dues (R croissante) puis nouvelles (≤ newPerDay − nouvelles du jour), entrelacées, plafonnées.
    * item / rank / kind : idem sans plafond quotidien de nouvelles, puis complément par les cartes vues
-   * les moins retenues. errors : cahier d'erreurs par count décroissant. exam : 18 QCM + 2 KFP + 1 TCS + 1 cas. */
+   * les moins retenues. errors : cahier d'erreurs par count décroissant. exam : 18 QCM + 3 KFP + 1 cas. */
   function buildSession(opts) {
     const o = isObj(opts) ? opts : {};
     const mode = ['smart', 'item', 'errors', 'rank', 'kind', 'exam'].indexOf(o.mode) >= 0 ? o.mode : 'smart';
