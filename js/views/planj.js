@@ -1035,8 +1035,13 @@
       const rank = function (arr) { return arr.map(function (m) { return { m: m, p: priority(d, m, tiers).score }; }).sort(function (a, b) { return b.p - a.p; }); };
       const due = rank(metas.filter(function (m) { const c = d.courses[m.key]; return c && c.state === 'active' && c.due && c.due <= t && !used[m.key]; }));
       const weak = rank(metas.filter(function (m) { const c = d.courses[m.key]; return c && c.state === 'active' && !used[m.key] && !(c.due && c.due <= t); }));
-      const pick = due.map(function (x) { return { x: x, why: 'J dû · le plus important' }; }).concat(weak.map(function (x) { return { x: x, why: 'le plus fragile' }; })).slice(0, 3);
-      const slots = kept.concat(pick.map(function (o) { return { g: o.x.m.group, m: 'rev', min: 15, why: o.why, key: o.x.m.key, done: false, grade: null }; }));
+      const all = due.map(function (x) { return { x: x, why: 'J dû · le plus important' }; }).concat(weak.map(function (x) { return { x: x, why: 'le plus fragile' }; }));
+      // fiches parasito aussi : 1 créneau parasito (10 min) réservé s'il y a une fiche placée, + 2 cours
+      const isP = function (o) { return o.x.m.key.charAt(0) === 'p'; };
+      const para = all.filter(isP).slice(0, 1);
+      const pick = all.filter(function (o) { return !isP(o); }).slice(0, para.length ? 2 : 3).concat(para);
+      if (pick.length < 3) all.forEach(function (o) { if (pick.length < 3 && pick.indexOf(o) < 0) pick.push(o); });
+      const slots = kept.concat(pick.map(function (o) { return { g: o.x.m.group, m: 'rev', min: isP(o) ? 10 : 15, why: o.why, key: o.x.m.key, done: false, grade: null }; }));
       if (!pick.length) slots.push({ g: 'Jour sans : 20 questions au choix', m: 'memo', min: 15, why: '', key: null, done: false, grade: null });
       return { date: t, lite: true, round: day && day.round || 1, bonus: !!(day && day.bonus), slots: slots, heavy: false, dueN: due.length, stage: false };
     }
@@ -1258,7 +1263,7 @@
         h('div', { class: 'pj-xpline' }, h('span', { class: 'pj-xpchip' }, '⚡ ' + todayXp() + ' XP aujourd’hui'), h('span', { class: 'pj-xpchip pj-xpchip--lvl' }, levelLabel()), h('span', { class: 'pj-xpchip pj-xpchip--fire' }, '🏁 ' + (Number(d.daysDone) || 0) + ' journées bouclées')),
         h('p', { class: 'secondary muted' }, 'Objectif : ' + Object.keys(byG).map(function (g) { return byG[g] + ' ' + g; }).join(' · ') + ' · environ ' + hm(tot) + (nDone ? ' (reste ' + hm(left) + ')' : '') + '. Dans chaque créneau, l’app choisit le cours du pôle : un cours jamais vu d’abord, sinon un J dû, sinon ton cours le plus fragile ; à chaque fois le plus pertinent pour l’EDN et la pratique en premier (les jours chargés, les révisions passent avant).'),
         h('div', { class: 'pj-bar__track' }, h('div', { class: 'pj-bar__fill', style: 'width:' + Math.round((tot - left) / Math.max(1, tot) * 100) + '%' })),
-        day.lite ? h('div', { class: 'pj-banner' }, h('span', null, 'Jour sans : seulement tes 3 révisions les plus importantes (45 min max), pas de nouveau cours. Réfléchis avant de cliquer et lis tes erreurs : ça suffit. Les découvertes reprennent demain.')) : null,
+        day.lite ? h('div', { class: 'pj-banner' }, h('span', null, 'Jour sans : seulement tes 3 révisions les plus importantes, dont 1 fiche parasito si tu en as (45 min max), pas de nouveau cours. Réfléchis avant de cliquer et lis tes erreurs : ça suffit. Les découvertes reprennent demain.')) : null,
         day.heavy || day.caught ? h('div', { class: 'pj-banner' }, h('span', null,
           (day.caught ? plural(day.caught, 'révision en retard étalée', 'révisions en retard étalées') + ' automatiquement sur les prochains jours. ' : '') +
           (day.stage ? 'Mode stage : journée allégée (environ 3 h), révisions d’abord ; une découverte seulement s’il n’y a rien à revoir dans le pôle. ' : day.heavy ? 'Beaucoup de J dus (' + day.dueN + ') : les créneaux « Auto » revoient au lieu de découvrir ce jour-là. Les découvertes reprennent quand la charge baisse.' : ''))) : null,
