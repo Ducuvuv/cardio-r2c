@@ -638,7 +638,7 @@
       ];
       return h('div', { class: 'card stack' },
         h('p', { class: 'pj-h' }, '2 · Mini-sessions du jour (quelques minutes)'),
-        h('p', { class: 'secondary muted' }, 'À faire en plus des cours, dans les petits moments. Après chaque question : « Voir le point de cours », puis « Revenir à la question » pour passer à la suite. Dès 20 questions sur un même item dans la journée, ta note (📝) compte comme une révision du planning.'),
+        h('p', { class: 'secondary muted' }, 'À faire en plus des cours, dans les petits moments. Après chaque question : « Voir le point de cours », puis « Revenir à la question » pour passer à la suite. Ces séances ne changent pas tes J : seule la séance « Me tester » d’un créneau de révision compte pour la note (📝).'),
         h('div', { class: 'pj-grp' }, S.map(function (x) {
           return h('a', { class: 'pj-row', href: x[1], style: 'text-decoration:none;color:inherit' }, icon(x[2]),
             h('div', { class: 'pj-row__main' }, h('div', { class: 'pj-row__t' }, x[0]), h('div', { class: 'pj-row__s' }, x[3])), icon('play'));
@@ -1093,12 +1093,12 @@
               acts.push(h('a', { class: 'btn btn--outline btn--sm', href: base + '&kind=qcm&size=10&pre=1' }, '① Pré-test 10 QCM'));
               acts.push(h('a', { class: 'btn btn--outline btn--sm', href: '#/item/' + encodeURIComponent(num) + '/cours' }, '② Lire la fiche'));
             } else {
-              acts.push(h('a', { class: 'btn btn--outline btn--sm', href: base + '&kind=qcm,qroc&size=20' }, '① 20 questions'));
+              acts.push(h('a', { class: 'btn btn--outline btn--sm', href: base + '&kind=qcm,qroc&size=20&pj=1' }, '① Me tester · 20 questions'));
               if (m.href) acts.push(h('a', { class: 'btn btn--ghost btn--sm', href: '#/item/' + encodeURIComponent(num) + '/cours' }, '② Relire'));
             }
           } else {
             if (m.href) acts.push(h('a', { class: 'btn btn--ghost btn--sm', href: m.href }, icon('book'), 'Cours'));
-            if (m.train) acts.push(h('a', { class: 'btn btn--ghost btn--sm', href: m.train }, icon('play'), 'S’entraîner'));
+            if (m.train) acts.push(h('a', { class: 'btn btn--ghost btn--sm', href: s.key.charAt(0) === 'p' ? m.train + '?size=20&order=random&pj=1' : m.train }, icon('play'), s.key.charAt(0) === 'p' && c ? 'Me tester · 20 cartes' : 'S’entraîner'));
           }
           if (!isToday) {
             /* jour préparé à l'avance : on peut changer les cours, la note se fera le jour J */
@@ -1129,7 +1129,7 @@
             statusEl(c, d, { noLevel: true }),
             !s.done && s.key.charAt(0) === 'i' ? h('div', { class: 'pj-row__s', style: 'margin-top:4px' }, !c
               ? 'Découverte : pré-test 10 QCM (ne compte pas, lis vite les corrections) → fiche partie par partie, avec 6 questions après chaque partie → Découvert ✓.'
-              : 'Révision : 20 questions au hasard, ta note règle le prochain J toute seule → relis les parties fragiles. Ou note-toi directement.') : null,
+              : 'Révision : « Me tester » AVANT de relire (20 questions au hasard) : c’est la seule séance qui compte, ta note règle le prochain J toute seule → puis relis les parties fragiles. Ou note-toi directement.') : null,
             !s.done ? (s.key.charAt(0) === 'i' ? fragileEl(s.key.slice(2), rerenderSoon, 2) : s.key.charAt(0) === 'p' ? fragileEl(s.key, null, 2) : null) : null,
             acts.length ? h('div', { class: 'pj-row__acts' }, acts) : null,
             picker)));

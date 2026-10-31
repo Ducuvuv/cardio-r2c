@@ -264,7 +264,7 @@
     if (s && s.course) out.push(s.el);
     if (withProgress && pj.quizProgress) {
       const q = pj.quizProgress('p:' + id);
-      if (q) out.push(h('p', { class: 'secondary muted', style: 'margin:4px 0 0' }, q.applied ? '📝 Note du jour : ' + q.pct + ' % sur ' + q.n + ' cartes.' : '📝 ' + q.n + '/' + q.min + ' cartes aujourd’hui' + (q.n ? ' (' + q.pct + ' %)' : '') + ' : à ' + q.min + ', ta note compte comme une révision.'));
+      if (q) out.push(h('p', { class: 'secondary muted', style: 'margin:4px 0 0' }, q.applied ? '📝 Note du jour : ' + q.pct + ' % sur ' + q.n + ' cartes.' : '📝 ' + q.n + '/' + q.min + ' cartes aujourd’hui' + (q.n ? ' (' + q.pct + ' %)' : '') + ' via « Me tester » dans la Méthode des J : à ' + q.min + ', ta note compte comme une révision.'));
     }
     return out.length ? h('div', {}, out) : null;
   }
@@ -489,6 +489,7 @@
       h('div', { style: 'margin-top:6px' }, trainChooser(base, n.total)));
   }
 
+  let trainCounts = false;   // séance lancée depuis la Méthode des J (?pj=1) : seule celle-ci compte pour la note
   function renderTrain(scope, root, type, size, order) {
     const page = h('div', { class: 'page stack' });
     const multi = Array.isArray(scope);
@@ -516,7 +517,7 @@
       if (!missed[c.id]) {
         grade(c.id, ok);
         // Méthode des J (views/planj.js) : 20 cartes d'une fiche dans la journée → note de la fiche
-        try { const u = util(); if (u.emit && c.fiche) u.emit('quiz:answer', { pkey: 'p:' + c.fiche.id, kind: 'parasito', score: ok ? 1 : 0, at: Date.now() }); } catch (e) { /* ignore */ }
+        if (trainCounts) try { const u = util(); if (u.emit && c.fiche) u.emit('quiz:answer', { pkey: 'p:' + c.fiche.id, kind: 'parasito', score: ok ? 1 : 0, at: Date.now() }); } catch (e) { /* ignore */ }
         if (ok) good++;
         done++;
         if (!ok) { missed[c.id] = 1; queue.push(c); }
@@ -593,6 +594,7 @@
       }
       root.dataset.title = 'Cartes parasito';
       const sz = query && query.size === 'all' ? 100000 : query && Number(query.size) > 0 ? Math.min(500, Number(query.size)) : 20;
+      trainCounts = !!(query && query.pj === '1');
       renderTrain(scope || null, root, query && query.type, sz, query && query.order === 'random' ? 'random' : 'srs');
       return root;
     }

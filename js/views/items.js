@@ -808,7 +808,7 @@
       if (s) page.appendChild(h('a', { class: 'card', href: '#/planj?tab=cours', style: 'display:block;margin-bottom:12px;text-decoration:none;color:inherit' },
         h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px' }, h('b', {}, 'Méthode des J'), h('span', { class: 'secondary muted' }, s.course ? 'Modifier' : 'Placer ce cours')),
         s.course ? s.el : h('p', { class: 'secondary muted', style: 'margin:4px 0 0' }, 'Pas encore placé dans ton planning.'),
-        qp ? h('p', { class: 'secondary muted', style: 'margin:6px 0 0' }, qp.applied ? '📝 Note du jour enregistrée : ' + qp.pct + ' % sur ' + qp.n + ' questions.' : '📝 ' + qp.n + '/' + qp.min + ' questions aujourd’hui' + (qp.n ? ' (' + qp.pct + ' %)' : '') + ' : à ' + qp.min + ', ta note compte comme une révision.') : null));
+        qp ? h('p', { class: 'secondary muted', style: 'margin:6px 0 0' }, qp.applied ? '📝 Note du jour enregistrée : ' + qp.pct + ' % sur ' + qp.n + ' questions.' : '📝 ' + qp.n + '/' + qp.min + ' questions aujourd’hui' + (qp.n ? ' (' + qp.pct + ' %)' : '') + ' via « Me tester » dans la Méthode des J : à ' + qp.min + ', ta note compte comme une révision.') : null));
     }
     {
       // Zones de fragilité : parties de la fiche où tu réussis le moins (≥ 3 cartes faites, < 70 %), à revoir en premier

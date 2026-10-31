@@ -403,6 +403,8 @@
       order: o.order === 'random' ? 'random' : null,
       // pré-test (avant d'avoir lu le cours) : ne compte pas dans la note de la Méthode des J
       pre: o.pre === true || o.pre === '1' || o.pre === 1,
+      // seule la séance « questions avant de revoir le cours » lancée depuis la Méthode des J compte pour la note
+      pj: o.pj === true || o.pj === '1' || o.pj === 1,
       kinds,
       rank: o.rank === 'A' || o.rank === 'B' ? o.rank : (mode === 'rank' ? 'A' : null),
       size,
@@ -428,6 +430,7 @@
     if (x.items && x.items.length) p.set('items', x.items.join(','));
     if (x.order) p.set('order', x.order);
     if (x.pre) p.set('pre', '1');
+    if (x.pj) p.set('pj', '1');
     if (x.kinds && x.kinds.length) p.set('kind', x.kinds.join(','));
     if (x.rank && x.mode !== 'rank') p.set('rank', x.rank);
     if (x.size != null && x.mode !== 'exam' && x.mode !== 'endless') p.set('size', x.size === 0 ? 'inf' : String(x.size));
@@ -1263,7 +1266,7 @@
       const grade = out && out.grade ? out.grade : (res.grade || suggestGradeRaw(score, ms, card.kind));
       rt.results.push({ cardId: card.id, kind: card.kind, item: card.item, score, grade, ms, xp: out ? out.xpGained || 0 : 0, at: nowMs() });
       // Méthode des J (views/planj.js) : chaque réponse compte pour la note de l'item (≥ 20 questions dans la journée)
-      if (!rt.opts.pre) { try { if (U().emit) U().emit('quiz:answer', { item: card.item, kind: card.kind, score: score, at: nowMs() }); } catch (e) { /* ignore */ } }
+      if (rt.opts.pj && !rt.opts.pre) { try { if (U().emit) U().emit('quiz:answer', { item: card.item, kind: card.kind, score: score, at: nowMs() }); } catch (e) { /* ignore */ } }
       if (rt.opts.mode === 'endless' && score < 0.5 && card.kind !== 'case') {
         // Ratée : elle revient une fois, une quinzaine de questions plus tard
         const retries = rt.retries || (rt.retries = {});
@@ -1328,6 +1331,7 @@
       try {
         const pj = CARDIO.views && CARDIO.views.planj;
         if (rt.opts.pre) return h('span', { class: 'quiz__meta-item', title: 'Pré-test : ne compte pas dans la note de la méthode des J' }, '🧪 pré-test');
+        if (!rt.opts.pj) return null;
         if (!pj || !pj.quizProgress || !card || !card.item || card.kind === 'flash') return null;
         const q = pj.quizProgress(card.item);
         if (!q) return null;
