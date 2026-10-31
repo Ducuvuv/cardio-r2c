@@ -430,7 +430,7 @@
   }
   function normDay(x) {
     if (!x || typeof x !== 'object' || !valid(x.date) || !Array.isArray(x.slots)) return null;
-    return { date: x.date, round: Math.max(1, Math.min(9, Math.round(Number(x.round)) || 1)), bonus: !!x.bonus, stage: !!x.stage, heavy: !!x.heavy, dueN: Math.max(0, Math.round(Number(x.dueN)) || 0), caught: Math.max(0, Math.round(Number(x.caught)) || 0), slots: x.slots.filter(function (s) { return s && typeof s.g === 'string'; }).slice(0, 20).map(function (s) {
+    return { date: x.date, lite: !!x.lite, round: Math.max(1, Math.min(9, Math.round(Number(x.round)) || 1)), bonus: !!x.bonus, stage: !!x.stage, heavy: !!x.heavy, dueN: Math.max(0, Math.round(Number(x.dueN)) || 0), caught: Math.max(0, Math.round(Number(x.caught)) || 0), slots: x.slots.filter(function (s) { return s && typeof s.g === 'string'; }).slice(0, 20).map(function (s) {
       const m = mode(s.m);
       return { g: s.g, m: m, min: mins(s.min, m), why: typeof s.why === 'string' ? s.why.slice(0, 60) : '', key: typeof s.key === 'string' ? s.key : null, done: !!s.done, grade: GRADES[s.grade] ? s.grade : null };
     }) };
@@ -1025,6 +1025,21 @@
     }
     /* Une autre journée dans la même journée : nouveau programme (les cours déjà vus aujourd'hui sont placés, donc
      * l'app propose de nouvelles découvertes et les J suivants). Ce qui a été fait reste enregistré. */
+    /* Jour sans (motivation à plat) : 3 créneaux de 15 min max, les J dus les plus prioritaires (tous pôles),
+     * sinon les cours les plus fragiles ; aucune découverte. Les créneaux déjà faits aujourd'hui sont gardés. */
+    function liteDay(d, cat, date, day) {
+      const t = date || today(), tiers = weightTiers(cat);
+      const kept = (day && day.slots || []).filter(function (s) { return s.done; });
+      const used = {}; kept.forEach(function (s) { if (s.key) used[s.key] = 1; });
+      const metas = cat.concat(list(d).filter(function (c) { return c.key.charAt(0) === 'c'; }).map(function (c) { return { key: c.key, group: c.group || 'Mes cours', title: c.title, weight: 0 }; }));
+      const rank = function (arr) { return arr.map(function (m) { return { m: m, p: priority(d, m, tiers).score }; }).sort(function (a, b) { return b.p - a.p; }); };
+      const due = rank(metas.filter(function (m) { const c = d.courses[m.key]; return c && c.state === 'active' && c.due && c.due <= t && !used[m.key]; }));
+      const weak = rank(metas.filter(function (m) { const c = d.courses[m.key]; return c && c.state === 'active' && !used[m.key] && !(c.due && c.due <= t); }));
+      const pick = due.map(function (x) { return { x: x, why: 'J dû · le plus important' }; }).concat(weak.map(function (x) { return { x: x, why: 'le plus fragile' }; })).slice(0, 3);
+      const slots = kept.concat(pick.map(function (o) { return { g: o.x.m.group, m: 'rev', min: 15, why: o.why, key: o.x.m.key, done: false, grade: null }; }));
+      if (!pick.length) slots.push({ g: 'Jour sans : 20 questions au choix', m: 'memo', min: 15, why: '', key: null, done: false, grade: null });
+      return { date: t, lite: true, round: day && day.round || 1, bonus: !!(day && day.bonus), slots: slots, heavy: false, dueN: due.length, stage: false };
+    }
     function anotherDay(d, cat, day, date) {
       const left = day.slots.filter(function (s) { return !s.done && (s.key || s.m === 'memo'); }).length;
       if (left && !window.confirm('Il reste ' + plural(left, 'créneau', 'créneaux') + ' non faits. Les remplacer par une nouvelle journée ? (ce que tu as déjà fait reste enregistré)')) return;
@@ -1068,9 +1083,9 @@
           { t: 'Fiche, partie par partie', d: 'Lis une partie, puis « Me tester » en bas de la partie (6 questions QCM + QROC). Passe à la suivante.', min: Math.max(10, tot - 13), href: cours },
           { t: 'Relire tes erreurs', d: 'Repasse sur les parties où tu as raté, en 5 minutes. Ensuite : Découvert ✓.', min: 5, href: cours }
         ] : [
-          { t: 'Me tester · 20 questions', d: 'AVANT de relire. C’est la seule séance qui compte : ta note règle le prochain J toute seule.', min: 15, href: base + '&kind=qcm,qroc&size=20&pj=1' },
-          { t: 'Relire les parties fragiles', d: 'Uniquement les parties où tu as raté (« À revoir en priorité » sur la page de l’item).', min: Math.max(5, tot - 20), href: '#/item/' + num },
-          { t: 'Bilan', d: 'Si les 20 questions sont faites, le J est déjà validé. Sinon note-toi : Difficile, Moyen ou Facile.', min: 5, href: null }
+          { t: 'Me tester · 20 questions', d: 'AVANT de relire. C’est la seule séance qui compte : ta note règle le prochain J toute seule.', min: Math.min(15, Math.round(tot * 0.6)), href: base + '&kind=qcm,qroc&size=20&pj=1' },
+          { t: 'Relire les parties fragiles', d: 'Uniquement les parties où tu as raté (« À revoir en priorité » sur la page de l’item).', min: Math.max(3, tot - Math.min(15, Math.round(tot * 0.6)) - (tot < 30 ? 2 : 5)), href: '#/item/' + num },
+          { t: 'Bilan', d: 'Si les 20 questions sont faites, le J est déjà validé. Sinon note-toi : Difficile, Moyen ou Facile.', min: tot < 30 ? 2 : 5, href: null }
         ];
       }
       const pid = s.key.slice(2);
@@ -1079,8 +1094,8 @@
         { t: 'Fiche, partie par partie', d: 'Lis une partie, puis « Me tester sur cette partie » en bas (6 cartes). Passe à la suivante.', min: Math.max(6, tot - 7), href: '#/parasito/' + encodeURIComponent(pid) },
         { t: 'Relire tes erreurs', d: 'Les parties où tu as bloqué. Ensuite : Découvert ✓.', min: 3, href: '#/parasito/' + encodeURIComponent(pid) }
       ] : [
-        { t: 'Me tester · 20 cartes', d: 'AVANT de relire. La seule séance qui compte pour ta note.', min: 10, href: m.train + '?size=20&order=random&pj=1' },
-        { t: 'Relire les parties fragiles', d: '« À revoir en priorité » en haut de la fiche.', min: Math.max(4, tot - 12), href: '#/parasito/' + encodeURIComponent(pid) },
+        { t: 'Me tester · 20 cartes', d: 'AVANT de relire. La seule séance qui compte pour ta note.', min: Math.min(10, Math.round(tot * 0.5)), href: m.train + '?size=20&order=random&pj=1' },
+        { t: 'Relire les parties fragiles', d: '« À revoir en priorité » en haut de la fiche.', min: Math.max(3, tot - Math.min(10, Math.round(tot * 0.5)) - 2), href: '#/parasito/' + encodeURIComponent(pid) },
         { t: 'Bilan', d: 'Note-toi si la note n’est pas déjà faite.', min: 2, href: null }
       ];
     }
@@ -1226,7 +1241,12 @@
       day.slots.forEach(function (s) { byG[s.g] = (byG[s.g] || 0) + 1; });
       return h('div', { class: 'card stack' },
         h('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' },
-          h('p', { class: 'pj-h', style: 'font-size:17px;flex:1;margin:0' }, '1 · ' + (d.stage ? 'Journée de stage' : 'Ma journée type') + (day.round > 1 ? ' n° ' + day.round : '') + (isToday ? '' : ' · ' + nice(date)) + ' (' + nDone + '/' + day.slots.length + ' créneaux)'),
+          h('p', { class: 'pj-h', style: 'font-size:17px;flex:1;margin:0' }, '1 · ' + (day.lite ? 'Jour sans' : d.stage ? 'Journée de stage' : 'Ma journée type') + (day.round > 1 ? ' n° ' + day.round : '') + (isToday ? '' : ' · ' + nice(date)) + ' (' + nDone + '/' + day.slots.length + ' créneaux)'),
+          isToday ? btn(day.lite ? 'Jour sans : activé' : '🪫 Jour sans', day.lite ? 'btn--primary btn--sm' : 'btn--outline btn--sm', function () {
+            if (day.lite) { const pl = buildDay(d, cat, date); pl.round = day.round || 1; d.plans[date] = pl; d.day = pl; save(d); toast('Retour à ta journée normale', 'ok'); rerender(); return; }
+            const pl = liteDay(d, cat, date, day); d.plans[date] = pl; d.day = pl; save(d);
+            toast('Jour sans : juste l’essentiel, ta série continue', 'ok'); rerender();
+          }) : null,
           btn(d.stage ? 'Mode stage : activé' : 'Mode stage', d.stage ? 'btn--primary btn--sm' : 'btn--outline btn--sm', function () {
             // Bascule : la journée est recomposée tout de suite ; les créneaux déjà faits restent comptés dans les J
             d.stage = !d.stage; delete d.plans[date]; if (isToday) d.day = null; ensureDay(d, cat, date); save(d);
@@ -1238,6 +1258,7 @@
         h('div', { class: 'pj-xpline' }, h('span', { class: 'pj-xpchip' }, '⚡ ' + todayXp() + ' XP aujourd’hui'), h('span', { class: 'pj-xpchip pj-xpchip--lvl' }, levelLabel()), h('span', { class: 'pj-xpchip pj-xpchip--fire' }, '🏁 ' + (Number(d.daysDone) || 0) + ' journées bouclées')),
         h('p', { class: 'secondary muted' }, 'Objectif : ' + Object.keys(byG).map(function (g) { return byG[g] + ' ' + g; }).join(' · ') + ' · environ ' + hm(tot) + (nDone ? ' (reste ' + hm(left) + ')' : '') + '. Dans chaque créneau, l’app choisit le cours du pôle : un cours jamais vu d’abord, sinon un J dû, sinon ton cours le plus fragile ; à chaque fois le plus pertinent pour l’EDN et la pratique en premier (les jours chargés, les révisions passent avant).'),
         h('div', { class: 'pj-bar__track' }, h('div', { class: 'pj-bar__fill', style: 'width:' + Math.round((tot - left) / Math.max(1, tot) * 100) + '%' })),
+        day.lite ? h('div', { class: 'pj-banner' }, h('span', null, 'Jour sans : seulement tes 3 révisions les plus importantes (45 min max), pas de nouveau cours. Réfléchis avant de cliquer et lis tes erreurs : ça suffit. Les découvertes reprennent demain.')) : null,
         day.heavy || day.caught ? h('div', { class: 'pj-banner' }, h('span', null,
           (day.caught ? plural(day.caught, 'révision en retard étalée', 'révisions en retard étalées') + ' automatiquement sur les prochains jours. ' : '') +
           (day.stage ? 'Mode stage : journée allégée (environ 3 h), révisions d’abord ; une découverte seulement s’il n’y a rien à revoir dans le pôle. ' : day.heavy ? 'Beaucoup de J dus (' + day.dueN + ') : les créneaux « Auto » revoient au lieu de découvrir ce jour-là. Les découvertes reprennent quand la charge baisse.' : ''))) : null,
