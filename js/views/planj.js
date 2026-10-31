@@ -1076,7 +1076,7 @@
       const pid = s.key.slice(2);
       return !c ? [
         { t: 'Pré-test · 10 cartes', d: 'Sans avoir lu. Ne compte pas dans ta note.', min: 4, href: m.train + '?size=10&order=random' },
-        { t: 'Lire la fiche', d: 'Puis mode « Me tester » de la fiche : retrouve les mots-clés cachés.', min: Math.max(6, tot - 7), href: '#/parasito/' + encodeURIComponent(pid) },
+        { t: 'Fiche, partie par partie', d: 'Lis une partie, puis « Me tester sur cette partie » en bas (6 cartes). Passe à la suivante.', min: Math.max(6, tot - 7), href: '#/parasito/' + encodeURIComponent(pid) },
         { t: 'Relire tes erreurs', d: 'Les parties où tu as bloqué. Ensuite : Découvert ✓.', min: 3, href: '#/parasito/' + encodeURIComponent(pid) }
       ] : [
         { t: 'Me tester · 20 cartes', d: 'AVANT de relire. La seule séance qui compte pour ta note.', min: 10, href: m.train + '?size=20&order=random&pj=1' },
@@ -1205,7 +1205,7 @@
             h('div', { class: 'pj-row__s' }, tag + (s.done && s.grade ? ' · ' + GRADES[s.grade].label : '')),
             statusEl(c, d, { noLevel: true }),
             !s.done && s.key.charAt(0) === 'p' ? h('div', { class: 'pj-row__s', style: 'margin-top:4px' }, !c
-              ? 'Découverte : pré-test 10 cartes (ne compte pas) → lis la fiche (mode « Me tester » pour retrouver les mots-clés) → Découvert ✓.'
+              ? 'Découverte : pré-test 10 cartes (ne compte pas) → fiche partie par partie, avec 6 cartes après chaque partie → Découvert ✓.'
               : 'Révision : « Me tester » AVANT de relire (20 cartes) : c’est la seule séance qui compte, ta note règle le prochain J → puis relis les parties fragiles.') : null,
             !s.done && s.key.charAt(0) === 'i' ? h('div', { class: 'pj-row__s', style: 'margin-top:4px' }, !c
               ? 'Découverte : pré-test 10 QCM (ne compte pas, lis vite les corrections) → fiche partie par partie, avec 6 questions après chaque partie → Découvert ✓.'

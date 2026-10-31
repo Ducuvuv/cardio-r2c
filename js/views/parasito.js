@@ -219,6 +219,20 @@
     const n = (util().normalize ? util().normalize(str(s).replace(/\*\*/g, '')) : str(s).toLowerCase());
     return n.split(' ').filter(function (w) { return w.length >= 5; });
   }
+  /* Partie (index) de chaque carte de la fiche, estimée par les mots partagés : {cardId: index}. */
+  // explain = true : parties du mode « Comprendre » (texte rédigé) au lieu des parties de la fiche
+  function cardSections(p, explain) {
+    const src = explain ? (p.explain && p.explain.sections) || [] : p.sections || [];
+    const secs = src.map(function (s) { const set = {}; words((s.h || '') + ' ' + (explain ? str(s.text) + ' ' + (s.retenir || []).join(' ') : (s.points || []).join(' '))).forEach(function (w) { set[w] = 1; }); return set; });
+    const out = {};
+    cardsOf(p).forEach(function (c) {
+      let best = -1, bs = 0;
+      const ws = words(c.q + ' ' + c.a);
+      secs.forEach(function (set, i) { let k = 0; ws.forEach(function (w) { if (set[w]) k++; }); if (k > bs) { bs = k; best = i; } });
+      if (best >= 0) out[c.id] = best;
+    });
+    return out;
+  }
   function sectionScores(p) {
     const secs = (p.sections || []).map(function (s, i) {
       const set = {};
@@ -292,22 +306,28 @@
       const x = p.explain;
       body.replaceChildren();
       if (x.intro) body.appendChild(h('p', { class: 'pz-intro' }, inlineMd(x.intro)));
-      x.sections.forEach(function (s) {
+      const eMap = cardSections(p, true);
+      x.sections.forEach(function (s, i) {
+        const nSec = Object.keys(eMap).filter(function (k) { return eMap[k] === i; }).length;
         const paras = str(s.text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean);
         body.appendChild(h('section', { class: 'pz-sec' }, h('h3', {}, str(s.h)),
           h('div', { class: 'pz-text' }, paras.map(function (t) { return h('p', {}, inlineMd(t)); })),
           Array.isArray(s.retenir) && s.retenir.length ? h('div', { class: 'pz-retenir' }, h('span', { class: 'caption' }, 'À retenir'),
-            h('ul', {}, s.retenir.map(function (r) { return h('li', {}, inlineMd(r)); }))) : null));
+            h('ul', {}, s.retenir.map(function (r) { return h('li', {}, inlineMd(r)); }))) : null,
+          nSec ? h('a', { class: 'btn btn--outline btn--sm', style: 'margin-top:8px', href: '#/parasito/' + encodeURIComponent(p.id) + '/cartes?sec=e' + i + '&size=6&order=random' }, '▶ Me tester sur cette partie · ' + Math.min(6, nSec) + ' cartes') : null));
       });
       mark(p.id, { seen: true });
       after.replaceChildren(h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: function () { setMode('test'); window.scrollTo(0, 0); } } }, 'J’ai lu : me tester sur la fiche'), footer());
     }
+    const secMap = cardSections(p);
     function draw(test) {
       const hidden = [];
       body.replaceChildren();
       (p.sections || []).forEach(function (s, i) {
         const ul = h('ul', {}, (s.points || []).map(function (pt) { return h('li', {}, inlineMd(pt)); }));
-        body.appendChild(h('section', { class: 'pz-sec', id: 'pz-s' + i }, h('h3', {}, str(s.h)), ul));
+        const nSec = secMap ? Object.keys(secMap).filter(function (k) { return secMap[k] === i; }).length : 0;
+        body.appendChild(h('section', { class: 'pz-sec', id: 'pz-s' + i }, h('h3', {}, str(s.h)), ul,
+          nSec ? h('a', { class: 'btn btn--outline btn--sm', style: 'margin-top:8px', href: '#/parasito/' + encodeURIComponent(p.id) + '/cartes?sec=' + i + '&size=6&order=random' }, '▶ Me tester sur cette partie · ' + Math.min(6, nSec) + ' cartes') : null));
         if (test) {
           ul.querySelectorAll('strong').forEach(function (el) {
             el.classList.add('pz-hide');
@@ -388,8 +408,13 @@
     }
     return out;
   }
+  let trainSec = null;   // ?sec=i : seulement les cartes de cette partie de la fiche (après chaque partie)
   function allCards(scope, type) {
-    const all = (Array.isArray(scope) ? scope : scope ? [scope] : list()).reduce(function (a, p) { return a.concat(cardsOf(p)); }, []);
+    let all = (Array.isArray(scope) ? scope : scope ? [scope] : list()).reduce(function (a, p) { return a.concat(cardsOf(p)); }, []);
+    if (trainSec != null && scope && !Array.isArray(scope)) {
+      const ex = String(trainSec).charAt(0) === 'e', n = Number(String(trainSec).replace(/^e/, ''));
+      const m = cardSections(scope, ex); all = all.filter(function (c) { return m[c.id] === n; });
+    }
     return type === 'qroc' || type === 'flash' ? all.filter(function (c) { return c.kind === type; }) : all;
   }
   function counts(scope, type) {
@@ -595,6 +620,7 @@
       root.dataset.title = 'Cartes parasito';
       const sz = query && query.size === 'all' ? 100000 : query && Number(query.size) > 0 ? Math.min(500, Number(query.size)) : 20;
       trainCounts = !!(query && query.pj === '1');
+      trainSec = query && /^e?\d+$/.test(str(query.sec)) ? str(query.sec) : null;
       renderTrain(scope || null, root, query && query.type, sz, query && query.order === 'random' ? 'random' : 'srs');
       return root;
     }
