@@ -124,14 +124,15 @@
   }
 
   /* ---------- données ---------- */
-  function blank() { return { v: 1, rhythm: 'allegee', rhythmSet: false, capacity: 12, updatedAt: 0, courses: {}, freq: {}, tours: null, daysDone: 0, template: normTemplate(null), tplStage: normTemplate(null, STAGE_TEMPLATE), stage: false, day: null, plans: {}, caughtAt: null }; }
+  function blank() { return { v: 1, rhythm: 'allegee', rhythmSet: false, capacity: 8, capSet: false, updatedAt: 0, courses: {}, freq: {}, tours: null, daysDone: 0, template: normTemplate(null), tplStage: normTemplate(null, STAGE_TEMPLATE), stage: false, day: null, plans: {}, caughtAt: null }; }
   function load() {
     const raw = CARDIO.store && typeof CARDIO.store.get === 'function' ? CARDIO.store.get('planJ') : null;
     const d = blank();
     if (!raw || typeof raw !== 'object') return d;
     // Allégé par défaut tant que l'utilisateur n'a pas choisi lui-même un rythme
     if (raw.rhythmSet && RHYTHMS[raw.rhythm]) { d.rhythm = raw.rhythm; d.rhythmSet = true; }
-    d.capacity = Math.max(2, Math.min(60, Math.round(Number(raw.capacity)) || 12));
+    // 8 cours max par jour par défaut (choix d'Aymen) ; un réglage fait par l'utilisateur dans Réglages est gardé
+    if (raw.capSet) { d.capSet = true; d.capacity = Math.max(2, Math.min(60, Math.round(Number(raw.capacity)) || 8)); } else d.capacity = 8;
     d.updatedAt = Number(raw.updatedAt) || 0;
     if (raw.freq && typeof raw.freq === 'object') Object.keys(raw.freq).forEach(function (k) { const v = Math.round(Number(raw.freq[k])); if (/^[ipc]:/.test(k) && v >= 1 && v <= 3) d.freq[k] = v; });
     d.tours = toursNorm(raw.tours);
@@ -1478,7 +1479,7 @@
       out.push(h('p', { class: 'pj-h' }, 'Capacité'));
       out.push(h('div', { class: 'pj-sheet', style: 'border-width:1px' },
         h('label', { class: 'pj-field' }, 'Nombre maximum de cours à revoir par jour', cap),
-        h('div', { class: 'pj-row__acts' }, btn('Enregistrer', 'btn--primary btn--sm', function () { d.capacity = Math.max(2, Math.min(60, Math.round(Number(cap.value)) || 12)); save(d); toast('Capacité : ' + d.capacity + ' par jour', 'ok'); rerender(); }, 'check'))));
+        h('div', { class: 'pj-row__acts' }, btn('Enregistrer', 'btn--primary btn--sm', function () { d.capacity = Math.max(2, Math.min(60, Math.round(Number(cap.value)) || 8)); d.capSet = true; save(d); toast('Capacité : ' + d.capacity + ' par jour', 'ok'); rerender(); }, 'check'))));
       const n = h('input', { type: 'number', min: '1', max: '30', value: '3', inputmode: 'numeric' });
       out.push(h('p', { class: 'pj-h' }, 'Pause (vacances, stage chargé)'));
       out.push(h('div', { class: 'pj-sheet', style: 'border-width:1px' },
