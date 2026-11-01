@@ -202,6 +202,11 @@
       if (!p || !p.id) return;
       out.push({ key: 'p:' + p.id, weight: 0, group: 'Parasito-myco', title: p.title || p.id, href: '#/parasito/' + encodeURIComponent(p.id), train: '#/parasito/' + encodeURIComponent(p.id) + '/cartes' });
     });
+    // poly de bactériologie (privé) : même fonctionnement que les fiches parasito, pôle « Bactério »
+    (Array.isArray(r.bacterio) ? r.bacterio : []).forEach(function (p) {
+      if (!p || !p.id) return;
+      out.push({ key: 'p:' + p.id, weight: 0, group: 'Bactério', title: 'Bactério · ' + (p.title || p.id), href: '#/parasito/' + encodeURIComponent(p.id), train: '#/parasito/' + encodeURIComponent(p.id) + '/cartes' });
+    });
     return out;
   }
   function meta(c, cat) {
@@ -406,7 +411,11 @@
     'p:paludisme': 3, 'p:toxoplasmose': 3, 'p:candidoses': 3, 'p:gale-ou-scabiose': 3, 'p:dermatophytoses': 3, 'p:pneumocystose': 3,
     'p:generalites': 2, 'p:introduction-a-la-mycologie': 2, 'p:amoebose': 2, 'p:giardiose': 2, 'p:oxyurose': 2, 'p:taeniasis-et-cysticercose': 2,
     'p:aspergilloses-et-autres-champignons-fila': 2, 'p:cryptococcose': 2, 'p:anguillulose-ou-strongyloidose': 2, 'p:schistosomoses-ou-bilharzioses': 2,
-    'p:leishmanioses': 2, 'p:poux-puces-punaises-et-tiques': 2, 'p:ascaridiose': 2, 'p:infections-a-malassezia': 2
+    'p:leishmanioses': 2, 'p:poux-puces-punaises-et-tiques': 2, 'p:ascaridiose': 2, 'p:infections-a-malassezia': 2,
+    // bactério (partiel) : les grands syndromes et les antibiotiques d'abord
+    'p:bact-urinaires': 3, 'p:bact-meningites': 3, 'p:bact-respiratoires': 3, 'p:bact-antibiotiques': 3, 'p:bact-diagnostic': 3,
+    'p:bact-ippm': 2, 'p:bact-ist': 2, 'p:bact-diarrhees': 2, 'p:bact-atypiques': 2, 'p:bact-familles': 2, 'p:bact-flores': 2,
+    'p:bact-anatomie': 2, 'p:bact-genetique': 2, 'p:bact-mots-cles': 2
   };
   function freqOf(d, m, tiers) {
     if (d.freq[m.key]) return { v: d.freq[m.key], est: false };
@@ -482,7 +491,12 @@
       return rest[0] ? { m: rest[0], why: 'le plus fragile du pôle' } : null;
     }
     const dueN = list(d).filter(function (c) { return c.state === 'active' && c.due && c.due <= t; }).length;
-    const tpl = d.stage ? d.tplStage : d.template;
+    // le créneau rappel « Bactério / viro (hors app) » devient un vrai créneau Bactério quand le poly est dans l'app
+    const hasB = !!(CARDIO.registry && Array.isArray(CARDIO.registry.bacterio) && CARDIO.registry.bacterio.length);
+    const tpl = (d.stage ? d.tplStage : d.template).reduce(function (a, s) {
+      if (hasB && s.m === 'memo' && /bact/i.test(s.g)) return a.concat([{ g: 'Bactério', m: 'auto', min: s.min }, { g: 'Virologie (hors app)', m: 'memo', min: 10 }]);
+      return a.concat([s]);
+    }, []);
     const autoN = tpl.filter(function (s) { return s.m !== 'memo'; }).length;
     const heavy = !!d.stage || dueN > Math.max(autoN, Math.round(d.capacity * 0.8));
     const slots = tpl.map(function (s) {

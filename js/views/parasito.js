@@ -20,14 +20,24 @@
 
   const GROUPS = [
     ['generalites', 'Généralités'], ['protozoaires', 'Protozoaires'], ['helminthes', 'Helminthes'],
-    ['ectoparasites', 'Ectoparasites'], ['mycologie', 'Mycologie']
+    ['ectoparasites', 'Ectoparasites'], ['mycologie', 'Mycologie'],
+    ['bact-gen', 'Généralités de bactériologie'], ['bact-fam', 'Les bactéries'], ['bact-synd', 'Approche par syndrome']
   ];
   const LS = 'cardio.parasito';
 
   function util() { return CARDIO.util || {}; }
   function h() { const u = util(); return u.h.apply(null, arguments); }
   function str(v) { return v === undefined || v === null ? '' : String(v); }
-  function list() { const r = CARDIO.registry || {}; return Array.isArray(r.parasito) ? r.parasito : []; }
+  /* Deux polys dans la même rubrique : parasito-myco (CARDIO.registry.parasito) et bactériologie (CARDIO.registry.bacterio,
+   * ids « bact-… », docs/BACTERIO.md). list() = les fiches du poly affiché ; listAll() = toutes (recherche par id). */
+  function listAll() { const r = CARDIO.registry || {}; return (Array.isArray(r.parasito) ? r.parasito : []).concat(Array.isArray(r.bacterio) ? r.bacterio : []); }
+  function polyOf(p) { return p && /^bact-/.test(p.id) ? 'bacterio' : 'parasito'; }
+  function hasBact() { const r = CARDIO.registry || {}; return Array.isArray(r.bacterio) && r.bacterio.length > 0; }
+  let curPoly = 'parasito';
+  try { if (sessionStorage.getItem('cardio.micro.poly') === 'bacterio') curPoly = 'bacterio'; } catch (e) { /* ignore */ }
+  function setPoly(x) { curPoly = x === 'bacterio' && hasBact() ? 'bacterio' : 'parasito'; try { sessionStorage.setItem('cardio.micro.poly', curPoly); } catch (e) { /* ignore */ } }
+  function list() { return listAll().filter(function (p) { return polyOf(p) === curPoly; }); }
+  function polyName(p) { return polyOf(p) === 'bacterio' ? 'Poly bactério' : 'Poly parasito-myco'; }
   function noA() { const r = CARDIO.registry || {}; return Array.isArray(r.parasitoNoA) ? r.parasitoNoA : []; }
   function loadState() { try { return JSON.parse(localStorage.getItem(LS) || '{}') || {}; } catch (e) { return {}; } }
   function saveState(st) { try { localStorage.setItem(LS, JSON.stringify(st)); } catch (e) { /* stockage indisponible */ } }
@@ -141,7 +151,13 @@
     const page = h('div', { class: 'page stack' });
     const sel = getSel().filter(function (id) { return all.some(function (p) { return p.id === id; }); });
     const redraw = function () { const v = page.parentNode; if (v) v.replaceChild(buildList(), page); };
-    page.appendChild(h('p', { class: 'secondary' }, 'Une fiche par parasite et par mycose, avec uniquement ce qui est en rouge (rang A) dans le poly de parasitologie-mycologie. Mode « Me tester » : les mots-clés sont cachés, à toi de les retrouver.'));
+    if (hasBact()) page.appendChild(h('div', { class: 'pj-chips', style: 'display:flex;gap:6px;flex-wrap:wrap' },
+      [['parasito', '🪱 Parasito-myco'], ['bacterio', '🧫 Bactério']].map(function (x) {
+        return h('button', { type: 'button', class: 'btn btn--sm ' + (curPoly === x[0] ? 'btn--primary' : 'btn--outline'), on: { click: function () { setPoly(x[0]); selMode = false; redraw(); } } }, x[1]);
+      })));
+    page.appendChild(h('p', { class: 'secondary' }, curPoly === 'bacterio'
+      ? 'Une fiche par chapitre du poly de bactériologie (DFGSM3). Ce poly n’a pas de code couleur rang A/B : tout le contenu utile au partiel est repris, résumé. Mode « Me tester » : les mots-clés sont cachés, à toi de les retrouver.'
+      : 'Une fiche par parasite et par mycose, avec uniquement ce qui est en rouge (rang A) dans le poly de parasitologie-mycologie. Mode « Me tester » : les mots-clés sont cachés, à toi de les retrouver.'));
     if (!all.length) {
       page.appendChild(h('div', { class: 'empty' }, h('div', { class: 'empty__title' }, 'Fiches non disponibles ici'), 'Cette rubrique est réservée à ta version privée de l’app.'));
       return page;
@@ -205,7 +221,7 @@
         h('b', {}, chosen.length ? chosen.length + ' fiche' + (chosen.length > 1 ? 's' : '') + ' choisie' + (chosen.length > 1 ? 's' : '') + ' · ' + nCards + ' cartes' : 'Touche les fiches à travailler ensemble'),
         chosen.length ? trainChooser(base, nCards) : null));
     }
-    if (noA().length) {
+    if (curPoly === 'parasito' && noA().length) {
       page.appendChild(h('p', { class: 'secondary muted' }, 'Sans rien en rouge dans le poly (donc pas de fiche) : ' + noA().join(', ') + '.'));
     }
     return page;
@@ -365,7 +381,7 @@
       const i = all.findIndex(function (x) { return x.id === p.id; });
       const nx = i >= 0 && i + 1 < all.length ? all[i + 1] : null;
       return h('div', { class: 'stack' },
-        h('div', { class: 'cluster' }, h('span', { class: 'src' }, 'Poly parasito-myco · p. ' + str(p.pages))),
+        h('div', { class: 'cluster' }, h('span', { class: 'src' }, polyName(p) + ' · p. ' + str(p.pages))),
         nx ? h('a', { class: 'btn btn--primary btn--block', href: '#/parasito/' + encodeURIComponent(nx.id) }, 'Fiche suivante : ' + str(nx.title))
           : h('a', { class: 'btn btn--secondary btn--block', href: '#/parasito' }, 'Toutes les fiches'));
     }
@@ -376,7 +392,7 @@
     const g = GROUPS.find(function (x) { return x[0] === p.group; });
     page.append(
       h('div', {},
-        h('div', { class: 'caption' }, (g ? g[1] : 'Parasito') + ' · rang A' + (p.items && p.items.length ? ' · items ' + p.items.join(', ') : '')),
+        h('div', { class: 'caption' }, (g ? g[1] : 'Parasito') + (polyOf(p) === 'bacterio' ? ' · poly bactério' : ' · rang A') + (p.items && p.items.length ? ' · items ' + p.items.join(', ') : '')),
         h('h2', { style: 'margin:4px 0 0' }, str(p.title)),
         p.agent ? h('p', { class: 'pz-card__agent', style: 'margin-top:2px' }, str(p.agent)) : null),
       p.hook ? h('div', { class: 'pz-hook' }, str(p.hook)) : null,
@@ -507,9 +523,9 @@
     const n = counts(scope);
     if (!n.total) return null;
     const nf = allCards(scope, 'flash').length, nq = allCards(scope, 'qroc').length;
-    const base = '#/parasito/' + encodeURIComponent(scope ? scope.id : 'toutes') + '/cartes';
+    const base = '#/parasito/' + encodeURIComponent(scope ? scope.id : 'toutes') + '/cartes' + (scope ? '' : '?poly=' + curPoly);
     return h('div', { class: 'pz-train' },
-      h('div', { class: 'pz-train__t' }, scope ? 'S’entraîner sur cette fiche' : 'Réviser les cartes parasito'),
+      h('div', { class: 'pz-train__t' }, scope ? 'S’entraîner sur cette fiche' : (curPoly === 'bacterio' ? 'Réviser les cartes bactério' : 'Réviser les cartes parasito')),
       h('div', { class: 'pz-train__s' }, nf + ' flashcards · ' + nq + ' QROC — ' + (n.due ? n.due + ' à revoir · ' : '') + n.fresh + ' nouvelles · ' + n.known + ' bien sues'),
       h('div', { style: 'margin-top:6px' }, trainChooser(base, n.total)));
   }
@@ -525,7 +541,7 @@
     const head = h('div', { class: 'cluster' });
     const stage = h('div', { class: 'stack' });
     const back = scope && !multi ? '#/parasito/' + encodeURIComponent(scope.id) : '#/parasito';
-    page.append(h('div', {}, h('div', { class: 'caption' }, (type === 'qroc' ? 'QROC' : type === 'flash' ? 'Flashcards' : 'Flashcards + QROC') + ' parasito · rang A'), h('h2', { style: 'margin:4px 0 0' }, multi ? scope.length + ' fiches choisies' : scope ? str(scope.title) : 'Toutes les fiches'),
+    page.append(h('div', {}, h('div', { class: 'caption' }, (type === 'qroc' ? 'QROC' : type === 'flash' ? 'Flashcards' : 'Flashcards + QROC') + (curPoly === 'bacterio' ? ' bactério · poly DFGSM3' : ' parasito · rang A')), h('h2', { style: 'margin:4px 0 0' }, multi ? scope.length + ' fiches choisies' : scope ? str(scope.title) : 'Toutes les fiches'),
       multi ? h('p', { class: 'secondary muted', style: 'margin:2px 0 0' }, scope.map(function (x) { return str(x.title); }).join(' · ')) : null), head, stage);
     root.appendChild(page);
     if (!total) {
@@ -606,18 +622,22 @@
     next();
   }
 
-  function render(params, query) {
+  // le titre de l'en-tête suit le poly affiché (Parasito-myco / Bactério)
+  function render(params, query) { const el = renderInner(params, query); return { el: el, title: el.dataset.title || '' }; }
+  function renderInner(params, query) {
     ensureStyles();
     const root = h('div', { class: 'view-parasito' });
     const id = str(params && params.id);
     if (params && params.train) {
-      let scope = id === 'toutes' ? null : list().find(function (x) { return x.id === id; });
+      if (query && query.poly) setPoly(query.poly);
+      let scope = id === 'toutes' ? null : listAll().find(function (x) { return x.id === id; });
+      if (scope) setPoly(polyOf(scope));
       if (id === 'choix') {
         const ids = str(query && query.ids).split(',').map(function (s) { return decodeURIComponent(s.trim()); }).filter(Boolean);
-        scope = list().filter(function (x) { return ids.indexOf(x.id) >= 0; });
+        scope = listAll().filter(function (x) { return ids.indexOf(x.id) >= 0; });
         if (!scope.length) scope = null;
       }
-      root.dataset.title = 'Cartes parasito';
+      root.dataset.title = curPoly === 'bacterio' ? 'Cartes bactério' : 'Cartes parasito';
       const sz = query && query.size === 'all' ? 100000 : query && Number(query.size) > 0 ? Math.min(500, Number(query.size)) : 20;
       trainCounts = !!(query && query.pj === '1');
       trainSec = query && /^e?\d+$/.test(str(query.sec)) ? str(query.sec) : null;
@@ -625,22 +645,24 @@
       return root;
     }
     if (id) {
-      const p = list().find(function (x) { return x.id === id; });
+      const p = listAll().find(function (x) { return x.id === id; });
+      if (p) setPoly(polyOf(p));
       root.dataset.title = p ? str(p.title) : 'Parasito';
       if (!p) root.appendChild(h('div', { class: 'page' }, h('div', { class: 'empty' }, 'Fiche introuvable.')));
       else renderFiche(p, root);
       return root;
     }
-    root.dataset.title = 'Parasito-myco';
+    if (query && query.poly) setPoly(query.poly);
+    root.dataset.title = curPoly === 'bacterio' ? 'Bactério' : 'Parasito-myco';
     root.appendChild(buildList());
     return root;
   }
 
   /* Pour la méthode des J : parties fragiles d'une fiche (au moins 3 cartes faites, < 70 %), les plus faibles d'abord. */
   function fragileOf(id) {
-    const p = list().find(function (x) { return x.id === id; });
+    const p = listAll().find(function (x) { return x.id === id; });
     if (!p) return [];
     return sectionScores(p).filter(function (s) { return s.seen >= 3 && s.pct < 70; }).sort(function (a, b) { return a.pct - b.pct; });
   }
-  CARDIO.views.parasito = { render: render, available: function () { return list().length > 0; }, fragileOf: fragileOf };
+  CARDIO.views.parasito = { render: render, available: function () { return listAll().length > 0; }, fragileOf: fragileOf };
 })();
