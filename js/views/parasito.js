@@ -21,7 +21,7 @@
   const GROUPS = [
     ['generalites', 'Généralités'], ['protozoaires', 'Protozoaires'], ['helminthes', 'Helminthes'],
     ['ectoparasites', 'Ectoparasites'], ['mycologie', 'Mycologie'],
-    ['bact-gen', 'Généralités de bactériologie'], ['bact-fam', 'Les bactéries'], ['bact-synd', 'Approche par syndrome']
+    ['bact-gen', 'Généralités de bactériologie'], ['bact-fam', 'Les bactéries (résumé du poly)'], ['bact-lz', 'Fiches par bactérie (LISAzay)'], ['bact-synd', 'Approche par syndrome']
   ];
   const LS = 'cardio.parasito';
 
@@ -340,7 +340,8 @@
       const hidden = [];
       body.replaceChildren();
       (p.sections || []).forEach(function (s, i) {
-        const ul = h('ul', {}, (s.points || []).map(function (pt) { return h('li', {}, inlineMd(pt)); }));
+        // « (B) » en tête de point = rang B (fiches LISAzay) : pastille B
+        const ul = h('ul', {}, (s.points || []).map(function (pt) { const b = /^\(B\)\s*/.test(pt); return h('li', {}, b ? h('span', { class: 'pill pill--B', style: 'margin-right:4px' }, 'B') : null, inlineMd(b ? pt.replace(/^\(B\)\s*/, '') : pt)); }));
         const nSec = secMap ? Object.keys(secMap).filter(function (k) { return secMap[k] === i; }).length : 0;
         body.appendChild(h('section', { class: 'pz-sec', id: 'pz-s' + i }, h('h3', {}, str(s.h)), ul,
           nSec ? h('a', { class: 'btn btn--outline btn--sm', style: 'margin-top:8px', href: '#/parasito/' + encodeURIComponent(p.id) + '/cartes?sec=' + i + '&size=6&order=random' }, '▶ Me tester sur cette partie · ' + Math.min(6, nSec) + ' cartes') : null));
@@ -392,7 +393,7 @@
     const g = GROUPS.find(function (x) { return x[0] === p.group; });
     page.append(
       h('div', {},
-        h('div', { class: 'caption' }, (g ? g[1] : 'Parasito') + (polyOf(p) === 'bacterio' ? ' · poly bactério' : ' · rang A') + (p.items && p.items.length ? ' · items ' + p.items.join(', ') : '')),
+        h('div', { class: 'caption' }, (g ? g[1] : 'Parasito') + (/^bact-lz-/.test(p.id) ? ' · fiche LISAzay n° ' + (p.num || '') + ' · rangs A et B' : polyOf(p) === 'bacterio' ? ' · poly bactério' : ' · rang A') + (p.items && p.items.length ? ' · items ' + p.items.join(', ') : '')),
         h('h2', { style: 'margin:4px 0 0' }, str(p.title)),
         p.agent ? h('p', { class: 'pz-card__agent', style: 'margin-top:2px' }, str(p.agent)) : null),
       p.hook ? h('div', { class: 'pz-hook' }, str(p.hook)) : null,

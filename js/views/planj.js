@@ -420,6 +420,7 @@
   function freqOf(d, m, tiers) {
     if (d.freq[m.key]) return { v: d.freq[m.key], est: false };
     if (REL[m.key]) return { v: REL[m.key], est: true };
+    if (/^p:bact-/.test(m.key)) return { v: 2, est: true };   // fiches bactério sans réglage : importantes
     if (m.key.charAt(0) === 'p') return { v: 1, est: true };
     if (!m.weight || !tiers) return { v: 2, est: true };
     return { v: m.weight >= tiers.hi ? 3 : m.weight >= tiers.lo ? 2 : 1, est: true };
