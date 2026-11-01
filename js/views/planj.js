@@ -202,6 +202,11 @@
       if (!p || !p.id) return;
       out.push({ key: 'p:' + p.id, weight: 0, group: 'Parasito-myco', title: p.title || p.id, href: '#/parasito/' + encodeURIComponent(p.id), train: '#/parasito/' + encodeURIComponent(p.id) + '/cartes' });
     });
+    // poly de virologie (privé) : pôle « Virologie »
+    (Array.isArray(r.viro) ? r.viro : []).forEach(function (p) {
+      if (!p || !p.id) return;
+      out.push({ key: 'p:' + p.id, weight: 0, group: 'Virologie', title: 'Viro · ' + (p.title || p.id), href: '#/parasito/' + encodeURIComponent(p.id), train: '#/parasito/' + encodeURIComponent(p.id) + '/cartes' });
+    });
     // poly de bactériologie (privé) : même fonctionnement que les fiches parasito, pôle « Bactério »
     (Array.isArray(r.bacterio) ? r.bacterio : []).forEach(function (p) {
       if (!p || !p.id) return;
@@ -420,7 +425,7 @@
   function freqOf(d, m, tiers) {
     if (d.freq[m.key]) return { v: d.freq[m.key], est: false };
     if (REL[m.key]) return { v: REL[m.key], est: true };
-    if (/^p:bact-/.test(m.key)) return { v: 2, est: true };   // fiches bactério sans réglage : importantes
+    if (/^p:(bact|viro)-/.test(m.key)) return { v: /^p:viro-(vih-clinique|hepatite-b-d|hepatite-c|herpes-hsv|vzv|grippe|physiopath|arbo)$/.test(m.key) ? 3 : 2, est: true };   // fiches bactério sans réglage : importantes
     if (m.key.charAt(0) === 'p') return { v: 1, est: true };
     if (!m.weight || !tiers) return { v: 2, est: true };
     return { v: m.weight >= tiers.hi ? 3 : m.weight >= tiers.lo ? 2 : 1, est: true };
@@ -494,8 +499,10 @@
     const dueN = list(d).filter(function (c) { return c.state === 'active' && c.due && c.due <= t; }).length;
     // le créneau rappel « Bactério / viro (hors app) » devient un vrai créneau Bactério quand le poly est dans l'app
     const hasB = !!(CARDIO.registry && Array.isArray(CARDIO.registry.bacterio) && CARDIO.registry.bacterio.length);
+    const hasV = !!(CARDIO.registry && Array.isArray(CARDIO.registry.viro) && CARDIO.registry.viro.length);
     const tpl = (d.stage ? d.tplStage : d.template).reduce(function (a, s) {
-      if (hasB && s.m === 'memo' && /bact/i.test(s.g)) return a.concat([{ g: 'Bactério', m: 'auto', min: s.min }, { g: 'Virologie (hors app)', m: 'memo', min: 10 }]);
+      if (hasB && s.m === 'memo' && /bact/i.test(s.g)) return a.concat([{ g: 'Bactério', m: 'auto', min: s.min }, hasV ? { g: 'Virologie', m: 'auto', min: s.min } : { g: 'Virologie (hors app)', m: 'memo', min: 10 }]);
+      if (hasV && s.m === 'memo' && /viro/i.test(s.g)) return a.concat([{ g: 'Virologie', m: 'auto', min: Math.max(15, s.min) }]);
       return a.concat([s]);
     }, []);
     const autoN = tpl.filter(function (s) { return s.m !== 'memo'; }).length;

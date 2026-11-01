@@ -394,6 +394,7 @@
       { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
       { label: 'Parasito-myco', href: '#/parasito?poly=parasito', ico: 'list', parasito: true },
       { label: 'Bactério', href: '#/parasito?poly=bacterio', ico: 'list', parasito: true, bacterio: true },
+      { label: 'Virologie', href: '#/parasito?poly=viro', ico: 'list', parasito: true, viro: true },
       { label: 'Traitements · 3 Collèges', href: ttt2Spe ? '#/ttt2' : '#/ttt', ico: 'pill' },
       { label: 'Traitements ' + String(speShort).toLowerCase(), href: '#/ttt2', ico: 'pill', keep: true, dp: true },
       { label: 'Examens en pneumo', href: '#/points/pneumo-examens', ico: 'search' },
@@ -418,11 +419,12 @@
       { label: 'Flashcards', href: '#/review?mode=smart&kind=flash&autostart=1', ico: 'flash', simple: true }
     ]).filter(function (c) {
       const simple = (function () { try { return localStorage.getItem('cardio.simple') !== '0'; } catch (e) { return true; } })();
-      const KEEP = { 'Traitements cardio': 1, 'Observation': 1, 'QROC': 1, 'QCM': 1, 'Flashcards': 1, 'Mes erreurs': 1, 'Rang A': 1, 'Parasito-myco': 1, 'Bactério': 1 };
+      const KEEP = { 'Traitements cardio': 1, 'Observation': 1, 'QROC': 1, 'QCM': 1, 'Flashcards': 1, 'Mes erreurs': 1, 'Rang A': 1, 'Parasito-myco': 1, 'Bactério': 1, 'Virologie': 1 };
       if (c.obs) { const v = CARDIO.views && CARDIO.views.observation; if (!(v && v.available && v.available(spe))) return false; }
       if (c.dp && !((spe === 'dermato' || spe === 'pneumo') && ttt2Spe)) return false;
       if (simple && !KEEP[c.label] && !c.keep) return false;
       if (!simple && c.simple) return false;
+      if (c.viro) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.viro) && CARDIO.registry.viro.length);
       if (c.bacterio) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.bacterio) && CARDIO.registry.bacterio.length);
       if (c.parasito) { const v = CARDIO.views && CARDIO.views.parasito; return !!(v && v.available && v.available()); }
       return !(cardioOnly && c.cardio);

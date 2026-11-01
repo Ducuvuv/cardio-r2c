@@ -21,7 +21,8 @@
   const GROUPS = [
     ['generalites', 'Généralités'], ['protozoaires', 'Protozoaires'], ['helminthes', 'Helminthes'],
     ['ectoparasites', 'Ectoparasites'], ['mycologie', 'Mycologie'],
-    ['bact-gen', 'Généralités de bactériologie'], ['bact-fam', 'Les bactéries (résumé du poly)'], ['bact-lz', 'Fiches par bactérie (LISAzay)'], ['bact-synd', 'Approche par syndrome']
+    ['bact-gen', 'Généralités de bactériologie'], ['bact-fam', 'Les bactéries (résumé du poly)'], ['bact-lz', 'Fiches par bactérie (LISAzay)'], ['bact-synd', 'Approche par syndrome'],
+    ['viro-gen', 'Généralités de virologie'], ['viro-vir', 'Les virus']
   ];
   const LS = 'cardio.parasito';
 
@@ -30,14 +31,16 @@
   function str(v) { return v === undefined || v === null ? '' : String(v); }
   /* Deux polys dans la même rubrique : parasito-myco (CARDIO.registry.parasito) et bactériologie (CARDIO.registry.bacterio,
    * ids « bact-… », docs/BACTERIO.md). list() = les fiches du poly affiché ; listAll() = toutes (recherche par id). */
-  function listAll() { const r = CARDIO.registry || {}; return (Array.isArray(r.parasito) ? r.parasito : []).concat(Array.isArray(r.bacterio) ? r.bacterio : []); }
-  function polyOf(p) { return p && /^bact-/.test(p.id) ? 'bacterio' : 'parasito'; }
-  function hasBact() { const r = CARDIO.registry || {}; return Array.isArray(r.bacterio) && r.bacterio.length > 0; }
+  // 3e poly : virologie (CARDIO.registry.viro, ids « viro-… », docs/VIRO.md)
+  function listAll() { const r = CARDIO.registry || {}; return (Array.isArray(r.parasito) ? r.parasito : []).concat(Array.isArray(r.bacterio) ? r.bacterio : [], Array.isArray(r.viro) ? r.viro : []); }
+  function polyOf(p) { return p && /^bact-/.test(p.id) ? 'bacterio' : p && /^viro-/.test(p.id) ? 'viro' : 'parasito'; }
+  function hasPoly(x) { const r = CARDIO.registry || {}; return Array.isArray(r[x]) && r[x].length > 0; }
+  function hasBact() { return hasPoly('bacterio') || hasPoly('viro'); }
   let curPoly = 'parasito';
-  try { if (sessionStorage.getItem('cardio.micro.poly') === 'bacterio') curPoly = 'bacterio'; } catch (e) { /* ignore */ }
-  function setPoly(x) { curPoly = x === 'bacterio' && hasBact() ? 'bacterio' : 'parasito'; try { sessionStorage.setItem('cardio.micro.poly', curPoly); } catch (e) { /* ignore */ } }
+  try { const s0 = sessionStorage.getItem('cardio.micro.poly'); if (s0 === 'bacterio' || s0 === 'viro') curPoly = s0; } catch (e) { /* ignore */ }
+  function setPoly(x) { curPoly = (x === 'bacterio' || x === 'viro') && hasPoly(x) ? x : 'parasito'; try { sessionStorage.setItem('cardio.micro.poly', curPoly); } catch (e) { /* ignore */ } }
   function list() { return listAll().filter(function (p) { return polyOf(p) === curPoly; }); }
-  function polyName(p) { return polyOf(p) === 'bacterio' ? 'Poly bactério' : 'Poly parasito-myco'; }
+  function polyName(p) { return polyOf(p) === 'bacterio' ? 'Poly bactério' : polyOf(p) === 'viro' ? 'Poly viro' : 'Poly parasito-myco'; }
   function noA() { const r = CARDIO.registry || {}; return Array.isArray(r.parasitoNoA) ? r.parasitoNoA : []; }
   function loadState() { try { return JSON.parse(localStorage.getItem(LS) || '{}') || {}; } catch (e) { return {}; } }
   function saveState(st) { try { localStorage.setItem(LS, JSON.stringify(st)); } catch (e) { /* stockage indisponible */ } }
@@ -152,10 +155,12 @@
     const sel = getSel().filter(function (id) { return all.some(function (p) { return p.id === id; }); });
     const redraw = function () { const v = page.parentNode; if (v) v.replaceChild(buildList(), page); };
     if (hasBact()) page.appendChild(h('div', { class: 'pj-chips', style: 'display:flex;gap:6px;flex-wrap:wrap' },
-      [['parasito', '🪱 Parasito-myco'], ['bacterio', '🧫 Bactério']].map(function (x) {
+      [['parasito', '🪱 Parasito-myco'], ['bacterio', '🧫 Bactério'], ['viro', '🦠 Viro']].filter(function (x) { return x[0] === 'parasito' || hasPoly(x[0]); }).map(function (x) {
         return h('button', { type: 'button', class: 'btn btn--sm ' + (curPoly === x[0] ? 'btn--primary' : 'btn--outline'), on: { click: function () { setPoly(x[0]); selMode = false; redraw(); } } }, x[1]);
       })));
-    page.appendChild(h('p', { class: 'secondary' }, curPoly === 'bacterio'
+    page.appendChild(h('p', { class: 'secondary' }, curPoly === 'viro'
+      ? 'Une fiche par virus ou par chapitre du poly de virologie (DFGSM3). Ce poly n’a pas de code couleur rang A/B : tout le contenu utile au partiel est repris, résumé. Mode « Me tester » : les mots-clés sont cachés, à toi de les retrouver.'
+      : curPoly === 'bacterio'
       ? 'Une fiche par chapitre du poly de bactériologie (DFGSM3). Ce poly n’a pas de code couleur rang A/B : tout le contenu utile au partiel est repris, résumé. Mode « Me tester » : les mots-clés sont cachés, à toi de les retrouver.'
       : 'Une fiche par parasite et par mycose, avec uniquement ce qui est en rouge (rang A) dans le poly de parasitologie-mycologie. Mode « Me tester » : les mots-clés sont cachés, à toi de les retrouver.'));
     if (!all.length) {
@@ -393,7 +398,7 @@
     const g = GROUPS.find(function (x) { return x[0] === p.group; });
     page.append(
       h('div', {},
-        h('div', { class: 'caption' }, (g ? g[1] : 'Parasito') + (/^bact-lz-/.test(p.id) ? ' · fiche LISAzay n° ' + (p.num || '') + ' · rangs A et B' : polyOf(p) === 'bacterio' ? ' · poly bactério' : ' · rang A') + (p.items && p.items.length ? ' · items ' + p.items.join(', ') : '')),
+        h('div', { class: 'caption' }, (g ? g[1] : 'Parasito') + (/^bact-lz-/.test(p.id) ? ' · fiche LISAzay n° ' + (p.num || '') + ' · rangs A et B' : polyOf(p) === 'bacterio' ? ' · poly bactério' : polyOf(p) === 'viro' ? ' · poly viro' : ' · rang A') + (p.items && p.items.length ? ' · items ' + p.items.join(', ') : '')),
         h('h2', { style: 'margin:4px 0 0' }, str(p.title)),
         p.agent ? h('p', { class: 'pz-card__agent', style: 'margin-top:2px' }, str(p.agent)) : null),
       p.hook ? h('div', { class: 'pz-hook' }, str(p.hook)) : null,
@@ -526,7 +531,7 @@
     const nf = allCards(scope, 'flash').length, nq = allCards(scope, 'qroc').length;
     const base = '#/parasito/' + encodeURIComponent(scope ? scope.id : 'toutes') + '/cartes' + (scope ? '' : '?poly=' + curPoly);
     return h('div', { class: 'pz-train' },
-      h('div', { class: 'pz-train__t' }, scope ? 'S’entraîner sur cette fiche' : (curPoly === 'bacterio' ? 'Réviser les cartes bactério' : 'Réviser les cartes parasito')),
+      h('div', { class: 'pz-train__t' }, scope ? 'S’entraîner sur cette fiche' : (curPoly === 'bacterio' ? 'Réviser les cartes bactério' : curPoly === 'viro' ? 'Réviser les cartes viro' : 'Réviser les cartes parasito')),
       h('div', { class: 'pz-train__s' }, nf + ' flashcards · ' + nq + ' QROC — ' + (n.due ? n.due + ' à revoir · ' : '') + n.fresh + ' nouvelles · ' + n.known + ' bien sues'),
       h('div', { style: 'margin-top:6px' }, trainChooser(base, n.total)));
   }
@@ -542,7 +547,7 @@
     const head = h('div', { class: 'cluster' });
     const stage = h('div', { class: 'stack' });
     const back = scope && !multi ? '#/parasito/' + encodeURIComponent(scope.id) : '#/parasito';
-    page.append(h('div', {}, h('div', { class: 'caption' }, (type === 'qroc' ? 'QROC' : type === 'flash' ? 'Flashcards' : 'Flashcards + QROC') + (curPoly === 'bacterio' ? ' bactério · poly DFGSM3' : ' parasito · rang A')), h('h2', { style: 'margin:4px 0 0' }, multi ? scope.length + ' fiches choisies' : scope ? str(scope.title) : 'Toutes les fiches'),
+    page.append(h('div', {}, h('div', { class: 'caption' }, (type === 'qroc' ? 'QROC' : type === 'flash' ? 'Flashcards' : 'Flashcards + QROC') + (curPoly === 'bacterio' ? ' bactério · poly DFGSM3' : curPoly === 'viro' ? ' viro · poly DFGSM3' : ' parasito · rang A')), h('h2', { style: 'margin:4px 0 0' }, multi ? scope.length + ' fiches choisies' : scope ? str(scope.title) : 'Toutes les fiches'),
       multi ? h('p', { class: 'secondary muted', style: 'margin:2px 0 0' }, scope.map(function (x) { return str(x.title); }).join(' · ')) : null), head, stage);
     root.appendChild(page);
     if (!total) {
@@ -638,7 +643,7 @@
         scope = listAll().filter(function (x) { return ids.indexOf(x.id) >= 0; });
         if (!scope.length) scope = null;
       }
-      root.dataset.title = curPoly === 'bacterio' ? 'Cartes bactério' : 'Cartes parasito';
+      root.dataset.title = curPoly === 'bacterio' ? 'Cartes bactério' : curPoly === 'viro' ? 'Cartes viro' : 'Cartes parasito';
       const sz = query && query.size === 'all' ? 100000 : query && Number(query.size) > 0 ? Math.min(500, Number(query.size)) : 20;
       trainCounts = !!(query && query.pj === '1');
       trainSec = query && /^e?\d+$/.test(str(query.sec)) ? str(query.sec) : null;
@@ -654,7 +659,7 @@
       return root;
     }
     if (query && query.poly) setPoly(query.poly);
-    root.dataset.title = curPoly === 'bacterio' ? 'Bactério' : 'Parasito-myco';
+    root.dataset.title = curPoly === 'bacterio' ? 'Bactério' : curPoly === 'viro' ? 'Viro' : 'Parasito-myco';
     root.appendChild(buildList());
     return root;
   }
