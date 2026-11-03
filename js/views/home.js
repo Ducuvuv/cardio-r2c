@@ -392,6 +392,7 @@
       { label: 'Méthode des J', href: '#/planj', ico: 'calendar', keep: true },
       { label: 'Observation', href: '#/observation', ico: 'case', obs: true },
       { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
+      { label: 'Atlas photo', href: '#/atlas', ico: 'eye', keep: true, atlas: true },
       { label: 'Parasito-myco', href: '#/parasito?poly=parasito', ico: 'list', parasito: true },
       { label: 'Bactério', href: '#/parasito?poly=bacterio', ico: 'list', parasito: true, bacterio: true },
       { label: 'Virologie', href: '#/parasito?poly=viro', ico: 'list', parasito: true, viro: true },
@@ -424,6 +425,7 @@
       if (c.dp && !((spe === 'dermato' || spe === 'pneumo') && ttt2Spe)) return false;
       if (simple && !KEEP[c.label] && !c.keep) return false;
       if (!simple && c.simple) return false;
+      if (c.atlas) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.atlas) && CARDIO.registry.atlas.length);
       if (c.viro) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.viro) && CARDIO.registry.viro.length);
       if (c.bacterio) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.bacterio) && CARDIO.registry.bacterio.length);
       if (c.parasito) { const v = CARDIO.views && CARDIO.views.parasito; return !!(v && v.available && v.available()); }

@@ -307,6 +307,7 @@
   /* ---------- fiche ---------- */
   function renderFiche(p, root) {
     const page = h('div', { class: 'page stack' });
+    const atlasStrip = (function () { try { return CARDIO.views.atlas && CARDIO.views.atlas.strip(p.id); } catch (e) { return null; } })();
     const body = h('div', { class: 'stack' });
     const after = h('div', { class: 'stack' });
     const seg = h('div', { class: 'seg seg--block', role: 'tablist' });
@@ -402,6 +403,7 @@
         h('h2', { style: 'margin:4px 0 0' }, str(p.title)),
         p.agent ? h('p', { class: 'pz-card__agent', style: 'margin-top:2px' }, str(p.agent)) : null),
       p.hook ? h('div', { class: 'pz-hook' }, str(p.hook)) : null,
+      atlasStrip,
       h('a', { class: 'card', href: '#/planj?tab=cours', style: 'display:block;padding:12px 14px;text-decoration:none;color:inherit' },
         h('div', { style: 'display:flex;justify-content:space-between;gap:8px' }, h('b', {}, 'Méthode des J'), h('span', { class: 'secondary muted' }, 'Modifier')),
         pjStatus(p.id, true) || h('p', { class: 'secondary muted', style: 'margin:4px 0 0' }, 'Pas encore placée dans ton planning.')),

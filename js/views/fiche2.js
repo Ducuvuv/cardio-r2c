@@ -870,6 +870,13 @@
     const page = h('div', { class: 'page f2', dataset: { rank: 'all' } });
     page.innerHTML = ficheHtml(num, f);
     root.appendChild(page);
+    // Atlas photo (views/atlas.js) : images de l'item à reconnaître, sous l'en-tête de la fiche
+    try {
+      const at = CARDIO.views.atlas;
+      const st = at && at.strip(num, '#/item/' + encodeURIComponent(num) + '/cours');
+      if (st) page.insertBefore(st, page.children[1] || null);
+      if (at) at.inline(num, page);
+    } catch (e) { /* ignore */ }
 
     let filter = lsGet(LS_RANK, 'all');
     if (['all', 'A', 'B'].indexOf(filter) < 0) filter = 'all';
