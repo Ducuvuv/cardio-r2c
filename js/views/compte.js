@@ -32,7 +32,8 @@
       } else {
         const input = h('input', { type: 'email', placeholder: 'ton.adresse@mail.com', autocomplete: 'email', style: 'width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:1rem' });
         const msg = h('p', { class: 'secondary', style: 'margin:0' });
-        const btn = h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: send } }, 'Recevoir le lien de connexion');
+        const btn = h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: send } }, 'Me connecter (lien par e-mail)');
+        input.addEventListener('keydown', function (e) { if (e.key === 'Enter') send(); });
         function send() {
           const email = String(input.value || '').trim();
           if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { msg.textContent = 'Adresse e-mail invalide.'; return; }
@@ -45,9 +46,14 @@
           });
         }
         acc.replaceChildren(
-          h('strong', {}, '💾 Sauvegarde ta progression'),
-          h('p', { class: 'secondary', style: 'margin:0' }, 'Pour l’instant elle n’est gardée que dans ce navigateur. Connecte-toi avec ton e-mail (pas de mot de passe : tu reçois un lien) pour la retrouver partout et ne jamais la perdre. Ce que tu as déjà fait ici sera conservé.'),
-          input, btn, msg);
+          h('strong', {}, '💾 Connecte-toi pour sauvegarder ta progression'),
+          h('p', { class: 'secondary', style: 'margin:0' }, 'Entre ton e-mail, ouvre le lien reçu (pense aux spams) : c’est tout, ta progression s’enregistre ensuite toute seule. Pour l’instant elle n’est gardée que dans ce navigateur. Connecte-toi avec ton e-mail (pas de mot de passe : tu reçois un lien) pour la retrouver partout et ne jamais la perdre. Ce que tu as déjà fait ici sera conservé.'),
+          input, btn, msg,
+          h('button', { type: 'button', class: 'btn btn--ghost btn--sm', style: 'justify-self:start', on: { click: function () {
+            try { localStorage.setItem('cardio.login.later', String(Date.now())); } catch (e) { /* ignore */ }
+            location.hash = '#/';
+          } } }, 'Plus tard'));
+        setTimeout(function () { try { input.focus(); } catch (e) { /* ignore */ } }, 50);
       }
     });
 

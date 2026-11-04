@@ -101,7 +101,22 @@
   };
 
   // Progression arrivée du cloud après l'affichage : on redessine la page courante.
+  // Pas encore connecté·e : on ouvre directement « Mon compte » (e-mail) à l'arrivée, sauf si « Plus tard » < 3 jours.
   document.addEventListener('DOMContentLoaded', function () {
+    try {
+      const later = Number(lsGet('cardio.login.later') || 0);
+      if (Date.now() - later >= 3 * 864e5) {
+        let n = 0;
+        const iv = setInterval(function () {             // attend que l'app ait démarré (routeur actif)
+          if (++n > 75) { clearInterval(iv); return; }
+          if (!(C.router && C.router.started)) return;
+          clearInterval(iv);
+          session().then(function (s) {
+            if (!s && (location.hash || '#/') === '#/') C.router.go('#/compte');
+          }, function () { /* hors ligne : on laisse */ });
+        }, 200);
+      }
+    } catch (e) { /* ignore */ }
     try {
       C.util && C.util.on && C.util.on('store:change', function (e) {
         if (e && e.reason === 'cloud-merge' && C.router && C.router.started) C.router.go(location.hash || '#/', { force: true });
