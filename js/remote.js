@@ -183,6 +183,24 @@
         return sb.auth.signInWithOtp({ email: email, options: { emailRedirectTo: location.origin + location.pathname } });
       }).then(function (r) { if (r.error) throw r.error; return true; });
     },
+    // connexion e-mail + mot de passe ; si l'adresse n'a pas encore de compte, il est créé (confirmation e-mail désactivée)
+    signInPassword: function (email, password) {
+      return client().then(function (sb) {
+        return sb.auth.signInWithPassword({ email: email, password: password }).then(function (r) {
+          if (!r.error && r.data && r.data.session) return 'signed';
+          return sb.auth.signUp({ email: email, password: password }).then(function (u) {
+            if (u.error) {
+              if (/registered|exists/i.test(u.error.message || '')) throw err('wrong_password', u.error);
+              throw u.error;
+            }
+            if (u.data && u.data.session) return 'created';
+            // adresse déjà inscrite (Supabase renvoie un utilisateur sans identités) → mauvais mot de passe
+            if (u.data && u.data.user && Array.isArray(u.data.user.identities) && !u.data.user.identities.length) throw err('wrong_password');
+            throw err('confirm_needed');
+          });
+        });
+      });
+    },
     signOut: function () {
       return client().then(function (sb) { return sb.auth.signOut(); }).then(function () { location.reload(); });
     },

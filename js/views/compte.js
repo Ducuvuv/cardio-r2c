@@ -26,29 +26,36 @@
         acc.replaceChildren(
           h('strong', {}, '💾 Progression sauvegardée en ligne'),
           h('p', { style: 'margin:0' }, 'Connecté·e avec ', h('b', {}, s.user.email), '.'),
-          h('p', { class: 'secondary', style: 'margin:0' }, 'Sur un autre téléphone ou navigateur, connecte-toi avec la même adresse : tu retrouves tout. ' +
+          h('p', { class: 'secondary', style: 'margin:0' }, 'Sur un autre téléphone ou navigateur, connecte-toi avec le même e-mail et le même mot de passe : tu retrouves tout. ' +
             (st.cloud === 'ok' ? 'Synchronisation : à jour.' : st.cloud === 'syncing' ? 'Synchronisation en cours…' : st.cloud === 'error' ? 'Synchronisation : erreur, nouvel essai automatique.' : '')),
           h('button', { type: 'button', class: 'btn btn--outline', style: 'justify-self:start', on: { click: function () { R.signOut(); } } }, 'Se déconnecter'));
       } else {
-        const input = h('input', { type: 'email', placeholder: 'ton.adresse@mail.com', autocomplete: 'email', style: 'width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:1rem' });
+        const css = 'width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:1rem';
+        const input = h('input', { type: 'email', placeholder: 'ton.adresse@mail.com', autocomplete: 'email', style: css });
+        const pw = h('input', { type: 'password', placeholder: 'Mot de passe (6 caractères min.)', autocomplete: 'current-password', style: css });
         const msg = h('p', { class: 'secondary', style: 'margin:0' });
-        const btn = h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: send } }, 'Me connecter (lien par e-mail)');
-        input.addEventListener('keydown', function (e) { if (e.key === 'Enter') send(); });
+        const btn = h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: send } }, 'Me connecter');
+        [input, pw].forEach(function (el) { el.addEventListener('keydown', function (e) { if (e.key === 'Enter') send(); }); });
         function send() {
           const email = String(input.value || '').trim();
+          const pass = String(pw.value || '');
           if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { msg.textContent = 'Adresse e-mail invalide.'; return; }
-          btn.disabled = true; msg.textContent = 'Envoi…';
-          R.signIn(email).then(function () {
-            msg.textContent = '✉️ Lien envoyé à ' + email + '. Ouvre-le sur cet appareil (pense aux spams) : tu seras connecté·e et ta progression sera sauvegardée.';
+          if (pass.length < 6) { msg.textContent = 'Mot de passe : 6 caractères minimum.'; return; }
+          btn.disabled = true; msg.textContent = 'Connexion…';
+          R.signInPassword(email, pass).then(function (r) {
+            msg.textContent = r === 'created' ? 'Compte créé ✓ Ta progression est maintenant sauvegardée.' : 'Connecté·e ✓';
+            setTimeout(function () { location.hash = '#/'; location.reload(); }, 600);
           }, function (e) {
             btn.disabled = false;
-            msg.textContent = 'Échec de l’envoi (' + (e && e.message ? e.message : 'erreur') + '). Réessaie dans une minute.';
+            msg.textContent = e && e.code === 'wrong_password' ? 'Mot de passe incorrect pour cette adresse.' :
+              e && e.code === 'confirm_needed' ? 'Compte créé, mais la confirmation par e-mail est activée dans Supabase : il faut la désactiver.' :
+              'Échec (' + (e && e.message ? e.message : 'erreur') + '). Réessaie.';
           });
         }
         acc.replaceChildren(
           h('strong', {}, '💾 Connecte-toi pour sauvegarder ta progression'),
-          h('p', { class: 'secondary', style: 'margin:0' }, 'Entre ton e-mail, ouvre le lien reçu (pense aux spams) : c’est tout, ta progression s’enregistre ensuite toute seule. Pour l’instant elle n’est gardée que dans ce navigateur. Connecte-toi avec ton e-mail (pas de mot de passe : tu reçois un lien) pour la retrouver partout et ne jamais la perdre. Ce que tu as déjà fait ici sera conservé.'),
-          input, btn, msg,
+          h('p', { class: 'secondary', style: 'margin:0' }, 'Première fois : choisis un mot de passe, ton compte est créé. Ensuite, sur n’importe quel appareil, même e-mail + même mot de passe : tu retrouves tout. Ta progression s’enregistre toute seule, et ce que tu as déjà fait ici est conservé.'),
+          input, pw, btn, msg,
           h('button', { type: 'button', class: 'btn btn--ghost btn--sm', style: 'justify-self:start', on: { click: function () {
             try { localStorage.setItem('cardio.login.later', String(Date.now())); } catch (e) { /* ignore */ }
             location.hash = '#/';
@@ -60,8 +67,7 @@
     function drawPriv() {
       if (R.privUnlocked()) {
         priv.replaceChildren(h('strong', {}, '🔓 Polys débloqués'),
-          h('p', { class: 'secondary', style: 'margin:0' }, 'Parasito, bactério, viro et l’atlas parasito sont disponibles sur ce navigateur.'),
-          h('button', { type: 'button', class: 'btn btn--outline', style: 'justify-self:start', on: { click: function () { R.lock(); } } }, 'Verrouiller sur ce navigateur'));
+          h('p', { class: 'secondary', style: 'margin:0' }, 'Parasito, bactério, viro et l’atlas parasito sont disponibles sur ce navigateur.'));
         return;
       }
       priv.replaceChildren(h('strong', {}, '🔒 Polys de la fac (parasito, bactério, viro)'),
