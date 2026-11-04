@@ -392,6 +392,7 @@
       { label: 'Méthode des J', href: '#/planj', ico: 'calendar', keep: true },
       { label: 'Observation', href: '#/observation', ico: 'case', obs: true },
       { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
+      { label: 'Mon compte', href: '#/compte', ico: 'user', keep: true, remote: true },
       { label: 'Atlas photo', href: '#/atlas', ico: 'eye', keep: true, atlas: true },
       { label: 'Parasito-myco', href: '#/parasito?poly=parasito', ico: 'list', parasito: true },
       { label: 'Bactério', href: '#/parasito?poly=bacterio', ico: 'list', parasito: true, bacterio: true },
@@ -425,6 +426,7 @@
       if (c.dp && !((spe === 'dermato' || spe === 'pneumo') && ttt2Spe)) return false;
       if (simple && !KEEP[c.label] && !c.keep) return false;
       if (!simple && c.simple) return false;
+      if (c.remote) return !!(CARDIO.remote && CARDIO.remote.active);
       if (c.atlas) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.atlas) && CARDIO.registry.atlas.length);
       if (c.viro) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.viro) && CARDIO.registry.viro.length);
       if (c.bacterio) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.bacterio) && CARDIO.registry.bacterio.length);
@@ -585,7 +587,10 @@
     ensureStyles();
     const root = h('div', { class: 'view-home' });
     root.dataset.title = 'Accueil';
-    root.appendChild(build());
+    // version partagée (js/remote.js) : bandeau « sauvegarde ta progression » tant que non connecté
+    try { const bn = CARDIO.views.compte && CARDIO.views.compte.banner(); if (bn) root.appendChild(bn); } catch (e) { /* ignore */ }
+    let main = build();
+    root.appendChild(main);
 
     // Rafraîchissement sur changement du store ; désabonnement dès que la vue quitte le DOM.
     const u = util();
@@ -605,7 +610,8 @@
           if (!root.isConnected) return;
           try {
             const fresh = build();
-            root.replaceChild(fresh, root.firstChild);
+            root.replaceChild(fresh, main);
+            main = fresh;
           } catch (e) { console.warn('[home] refresh', e); }
         });
       };

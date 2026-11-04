@@ -81,6 +81,8 @@
      chargés à la demande ; à défaut (copie locale), le fichier img/atlas/<id>.* est utilisé. */
   const chunkP = {};
   function loadChunk(src) {
+    // version partagée : paquets parasito chiffrés, déchiffrés par js/remote.js
+    if (!chunkP[src] && /atlas-img-micro-/.test(src) && typeof CARDIO.privChunk === 'function' && CARDIO.remote && CARDIO.remote.active) chunkP[src] = CARDIO.privChunk(src);
     if (!chunkP[src]) chunkP[src] = new Promise(function (res) {
       const s = document.createElement('script'); s.src = src; s.charset = 'utf-8'; s.onload = res; s.onerror = res; document.head.appendChild(s);
     });

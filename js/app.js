@@ -92,6 +92,7 @@
     ['#/algos',                   'algos',      'items',    'Algos de stage',      true,  {}],
     ['#/algos/:id',               'algos',      'items',    'Algo',                true,  {}],
     ['#/atlas',                   'atlas',      'items',    'Atlas photo',         true,  {}],
+    ['#/compte',                  'compte',     'settings', 'Mon compte',          true,  {}],
     ['#/parasito',                'parasito',   'items',    'Parasito-myco',       true,  {}],
     ['#/parasito/:id',            'parasito',   'items',    'Fiche parasito',      true,  {}],
     ['#/parasito/:id/cartes',     'parasito',   'items',    'Cartes parasito',     true,  { train: true }],
