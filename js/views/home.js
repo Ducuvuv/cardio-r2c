@@ -591,6 +591,8 @@
     root.dataset.title = 'Accueil';
     // version partagée (js/remote.js) : bandeau « sauvegarde ta progression » tant que non connecté
     try { const bn = CARDIO.views.compte && CARDIO.views.compte.banner(); if (bn) root.appendChild(bn); } catch (e) { /* ignore */ }
+    // rubrique Flashcards (views/fc.js), bien visible en haut de l'accueil
+    try { const fcard = CARDIO.views.fc && CARDIO.views.fc.homeCard(); if (fcard) root.appendChild(fcard); } catch (e) { /* ignore */ }
     let main = build();
     root.appendChild(main);
 

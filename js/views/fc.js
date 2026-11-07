@@ -15,7 +15,7 @@
 
   const DEFAULT_EASE = 2.5, MIN_EASE = 1.3, SESSION_CAP = 40, NEW_DAILY_LIMIT = 20;
   const LS_SESSION = 'cardio.fc.session.v1';
-  const POLYS = { parasito: '🪱 Parasito', bacterio: '🧫 Bactério', viro: '🦠 Viro', dermato: '🩺 Dermato · images', pneumo: '🫁 Pneumo · images', cardio: '❤️ Cardio · images' };
+  const POLYS = { parasito: '🪱 Parasito', bacterio: '🧫 Bactério', viro: '🦠 Viro', dermato: '🩺 Dermato', pneumo: '🫁 Pneumo', cardio: '❤️ Cardio' };
 
   /* Cartes texte (content/fc-micro.js) + cartes image tirées de l'atlas photo (views/atlas.js, images déjà vérifiées) :
      recto = photo + « Quel diagnostic ? », verso = diagnostic + signes à repérer. Parasito : rangées dans la fiche
@@ -23,16 +23,18 @@
   let merged = null, mergedKey = '';
   function reg() {
     const r = C.registry || {};
-    const base = r.fc && Array.isArray(r.fc.cards) ? r.fc : { cards: [], fiches: {} };
+    const priv = r.fc && Array.isArray(r.fc.cards) ? r.fc : { cards: [], fiches: {} };       // polys (privé)
+    const pub = r.fcPub && Array.isArray(r.fcPub.cards) ? r.fcPub : { cards: [], fiches: {} }; // items du Collège
     const atlas = Array.isArray(r.atlas) ? r.atlas : [];
-    const key = base.cards.length + ':' + atlas.length;
+    const key = priv.cards.length + ':' + pub.cards.length + ':' + atlas.length;
     if (merged && mergedKey === key) return merged;
-    const cards = base.cards.slice(), fiches = Object.assign({}, base.fiches);
+    const cards = priv.cards.concat(pub.cards), fiches = Object.assign({}, priv.fiches, pub.fiches);
+    const F2 = r.fiche2 || {};
     const A = C.views && C.views.atlas;
     atlas.forEach(function (x) {
       if (x.quiz === false || !POLYS[x.cat] || !x.items || !x.items[0]) return;
-      const fiche = x.cat === 'parasito' ? x.items[0] : 'img-' + x.items[0];
-      if (!fiches[fiche]) fiches[fiche] = { title: x.cat === 'parasito' ? x.items[0] : (A && A.itemLabel ? A.itemLabel(x) : x.items[0]), poly: x.cat };
+      const fiche = x.items[0];                          // même paquet que les cartes texte de la fiche / de l'item
+      if (!fiches[fiche]) fiches[fiche] = { title: F2[fiche] && F2[fiche].title ? F2[fiche].title : (A && A.itemLabel ? A.itemLabel(x) : fiche), poly: x.cat };
       cards.push({ id: 'fci-' + x.id, poly: x.cat, fiche: fiche, img: x, front: x.q || 'Quel diagnostic ?',
         back: '**' + x.dx + '**' + ((x.signs || []).length ? '\n' + x.signs.map(function (s) { return '· ' + s; }).join('\n') : ''),
         prio: x.rank === 'B' ? 'P2' : 'P1', sec: null });
@@ -321,5 +323,25 @@
       h('p', { class: 'secondary muted', style: 'margin:4px 0 0' }, c.due ? c.due + ' à revoir aujourd’hui' : c.fresh ? c.fresh + ' nouvelles à découvrir' : 'Toutes vues · revient au bon moment'));
   }
 
-  C.views.fc = { render: render, ficheBlock: ficheBlock, counts: counts, nextState: nextState };
+  /* Rubrique « Flashcards » de l'accueil : cartes dues aujourd'hui (toutes matières), bouton de révision, détail par matière. */
+  function homeCard() {
+    const R = reg();
+    if (!R.cards.length) return null;
+    ensureStyles();
+    const polys = Object.keys(POLYS).filter(function (p) { return R.cards.some(function (c) { return c.poly === p; }); });
+    const per = polys.map(function (p) { return { p: p, c: counts({ poly: p }) }; });
+    const tot = counts({});
+    const todo = tot.due + Math.min(tot.fresh, Math.max(0, NEW_DAILY_LIMIT - newStartedToday()));
+    return h('section', { class: 'card stack', style: 'margin:0 0 14px;border:1px solid var(--accent)' },
+      h('div', { class: 'row', style: 'justify-content:space-between;align-items:center;gap:8px' },
+        h('strong', { style: 'font-size:1.05rem' }, '🃏 Flashcards'),
+        h('span', { class: 'secondary' }, tot.total + ' cartes · ' + tot.known + ' sues')),
+      h('p', { class: 'secondary', style: 'margin:0' }, tot.due ? tot.due + ' à revoir aujourd’hui' + (todo > tot.due ? ' + ' + (todo - tot.due) + ' nouvelles' : '') : todo ? todo + ' nouvelles cartes à découvrir aujourd’hui' : 'Rien de dû aujourd’hui ✓ Reviens demain.'),
+      h('a', { class: 'btn btn--primary btn--block', href: todo ? '#/fc?mode=due&poly=' + (per.find(function (x) { return x.c.due; }) || per.find(function (x) { return x.c.todo; }) || per[0]).p : '#/fc' }, todo ? 'Réviser mes flashcards' : 'Ouvrir les flashcards'),
+      h('div', { class: 'fc-chips' }, per.map(function (x) {
+        return h('a', { class: 'btn btn--sm btn--secondary', href: '#/fc?poly=' + x.p }, POLYS[x.p] + (x.c.due ? ' · ' + x.c.due : ''));
+      })));
+  }
+
+  C.views.fc = { render: render, ficheBlock: ficheBlock, counts: counts, nextState: nextState, homeCard: homeCard };
 })();

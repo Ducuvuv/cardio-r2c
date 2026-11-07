@@ -852,6 +852,7 @@
       inner);
   }
 
+  function C2fc(num) { try { return CARDIO.views.fc && CARDIO.views.fc.ficheBlock(num); } catch (e) { return null; } }
   function render(params, query) {
     const num = str(params && (params.num || params.item));
     const q = query || {};
@@ -876,6 +877,9 @@
       const st = at && at.strip(num, '#/item/' + encodeURIComponent(num) + '/cours');
       if (st) page.insertBefore(st, page.children[1] || null);
       if (at) at.inline(num, page);
+      // flashcards de l'item (views/fc.js), juste après le bandeau d'images
+      const fb = C2fc(num);
+      if (fb) page.insertBefore(fb, page.children[st ? 2 : 1] || null);
     } catch (e) { /* ignore */ }
 
     let filter = lsGet(LS_RANK, 'all');
