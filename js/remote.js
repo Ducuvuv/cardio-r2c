@@ -205,6 +205,21 @@
       return client().then(function (sb) { return sb.auth.signOut(); }).then(function () { location.reload(); });
     },
     privUnlocked: function () { return !!privKey; },
+    // code de déblocage (ex. donné à la promo) : déchiffre la clé enveloppée dans content/enc/index.json
+    unlockCode: function (code) {
+      return encIndex().then(function (ix) {
+        if (!ix.wrap) throw new Error('nocode');
+        const enc = new TextEncoder();
+        return crypto.subtle.importKey('raw', enc.encode(String(code).trim()), 'PBKDF2', false, ['deriveKey']).then(function (base) {
+          return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64.dec(ix.wrap.salt), iterations: ix.wrap.iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+        }).then(function (kek) {
+          const blob = b64.dec(ix.wrap.blob);
+          return crypto.subtle.decrypt({ name: 'AES-GCM', iv: blob.slice(0, 12) }, kek, blob.slice(12));
+        }).then(function (raw) {
+          return unlockWith(raw).then(function () { lsSet(LS_PRIV, b64.enc(raw)); return true; });
+        });
+      });
+    },
     lock: function () { lsSet(LS_PRIV, null); location.reload(); }
   };
   // Déverrouillage automatique (mot de passe déjà saisi sur ce navigateur), avant le démarrage de l'app si possible

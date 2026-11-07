@@ -70,8 +70,20 @@
           h('p', { class: 'secondary', style: 'margin:0' }, 'Parasito, bactério, viro et l’atlas parasito sont disponibles sur ce navigateur.'));
         return;
       }
+      const code = h('input', { type: 'text', placeholder: 'Code de déblocage', autocomplete: 'off', autocapitalize: 'off', style: 'width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:1rem' });
+      const msg = h('p', { class: 'secondary', style: 'margin:0' });
+      const btn = h('button', { type: 'button', class: 'btn btn--secondary btn--block', on: { click: go } }, 'Débloquer');
+      function go() {
+        btn.disabled = true; msg.textContent = 'Vérification…';
+        R.unlockCode(code.value).then(function () {
+          msg.textContent = 'Débloqué ✓';
+          setTimeout(function () { location.hash = '#/'; location.reload(); }, 400);
+        }, function () { btn.disabled = false; msg.textContent = 'Code incorrect.'; });
+      }
+      code.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
       priv.replaceChildren(h('strong', {}, '🔒 Polys de la fac (parasito, bactério, viro)'),
-        h('p', { class: 'secondary', style: 'margin:0' }, 'Réservés à la promo : ouvre une fois, sur ce navigateur, le lien complet qu’on t’a envoyé pour les débloquer.'));
+        h('p', { class: 'secondary', style: 'margin:0' }, 'Réservés à la promo : entre le code de déblocage (ou ouvre le lien complet qu’on t’a envoyé). Il est retenu sur ce navigateur.'),
+        code, btn, msg);
     }
     drawPriv();
     return { el: root, title: 'Mon compte' };
@@ -85,7 +97,11 @@
       h('strong', {}, '💾 Sauvegarde ta progression'),
       h('p', { class: 'secondary', style: 'margin:4px 0 0' }, 'Connecte-toi avec ton e-mail pour la retrouver sur tous tes appareils →'));
     R.session().then(function (s) { if (!s) box.style.display = 'block'; }, function () { box.style.display = 'block'; });
-    return box;
+    if (R.privUnlocked()) return box;
+    const lock = h('a', { class: 'card', href: '#/compte', style: 'display:block;margin:0 0 12px;text-decoration:none;color:inherit' },
+      h('strong', {}, '🔒 Débloquer parasito, bactério et viro'),
+      h('p', { class: 'secondary', style: 'margin:4px 0 0' }, 'Entre le code de déblocage de la promo →'));
+    return h('div', {}, box, lock);
   }
 
   C.views.compte = { render: render, banner: banner };
