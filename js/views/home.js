@@ -390,7 +390,6 @@
     const speShort = m ? safe(function () { return m.short(spe); }, spe) : spe;
     const chips = [
       { label: 'Méthode des J', href: '#/planj', ico: 'calendar', keep: true },
-      { label: 'Observation', href: '#/observation', ico: 'case', obs: true },
       { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
       { label: 'Mon compte', href: '#/compte', ico: 'user', keep: true, remote: true },
       { label: 'Flashcards', href: '#/fc', ico: 'flash', keep: true, fcards: true },
@@ -422,7 +421,7 @@
       { label: 'Flashcards', href: '#/review?mode=smart&kind=flash&autostart=1', ico: 'flash', simple: true }
     ]).filter(function (c) {
       const simple = (function () { try { return localStorage.getItem('cardio.simple') !== '0'; } catch (e) { return true; } })();
-      const KEEP = { 'Traitements cardio': 1, 'Observation': 1, 'QROC': 1, 'QCM': 1, 'Flashcards': 1, 'Mes erreurs': 1, 'Rang A': 1, 'Parasito-myco': 1, 'Bactério': 1, 'Virologie': 1 };
+      const KEEP = { 'Traitements cardio': 1, 'QROC': 1, 'QCM': 1, 'Flashcards': 1, 'Mes erreurs': 1, 'Rang A': 1, 'Parasito-myco': 1, 'Bactério': 1, 'Virologie': 1 };
       if (c.obs) { const v = CARDIO.views && CARDIO.views.observation; if (!(v && v.available && v.available(spe))) return false; }
       if (c.dp && !((spe === 'dermato' || spe === 'pneumo') && ttt2Spe)) return false;
       if (simple && !KEEP[c.label] && !c.keep) return false;
