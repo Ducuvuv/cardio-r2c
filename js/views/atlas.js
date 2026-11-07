@@ -363,5 +363,5 @@
     });
   }
 
-  CARDIO.views.atlas = { render: render, strip: strip, inline: inline, lightbox: lightbox };
+  CARDIO.views.atlas = { render: render, strip: strip, inline: inline, lightbox: lightbox, img: img, itemLabel: itemLabel };
 })();

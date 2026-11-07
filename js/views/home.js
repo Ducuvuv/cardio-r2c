@@ -393,6 +393,7 @@
       { label: 'Observation', href: '#/observation', ico: 'case', obs: true },
       { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
       { label: 'Mon compte', href: '#/compte', ico: 'user', keep: true, remote: true },
+      { label: 'Flashcards', href: '#/fc', ico: 'flash', keep: true, fcards: true },
       { label: 'Atlas photo', href: '#/atlas', ico: 'eye', keep: true, atlas: true },
       { label: 'Parasito-myco', href: '#/parasito?poly=parasito', ico: 'list', parasito: true },
       { label: 'Bactério', href: '#/parasito?poly=bacterio', ico: 'list', parasito: true, bacterio: true },
@@ -426,6 +427,7 @@
       if (c.dp && !((spe === 'dermato' || spe === 'pneumo') && ttt2Spe)) return false;
       if (simple && !KEEP[c.label] && !c.keep) return false;
       if (!simple && c.simple) return false;
+      if (c.fcards) return !!(CARDIO.registry && CARDIO.registry.fc && CARDIO.registry.fc.cards && CARDIO.registry.fc.cards.length);
       if (c.remote) return !!(CARDIO.remote && CARDIO.remote.active);
       if (c.atlas) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.atlas) && CARDIO.registry.atlas.length);
       if (c.viro) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.viro) && CARDIO.registry.viro.length);

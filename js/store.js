@@ -356,7 +356,8 @@
       cards: {}, daily: {},
       streak: { current: 0, best: 0, lastDay: null },
       xp: 0, badges: [],
-      errors: {}, notes: {}, bookmarks: [], itemStats: {}, sessions: [], planJ: null
+      errors: {}, notes: {}, bookmarks: [], itemStats: {}, sessions: [], planJ: null,
+      fc: {}                                    // flashcards style Pass2P2 (views/fc.js) : {id: {due, interval, ease, reps, lapses, at}}
     };
   }
   function normItemStat(s) {
@@ -467,6 +468,12 @@
     st.sessions = trimSessions((Array.isArray(r.sessions) ? r.sessions : []).map(normSession).filter(Boolean));
     // Méthode des J (views/planj.js normalise le contenu) : copie profonde, sinon rien
     if (isObj(r.planJ)) { try { st.planJ = JSON.parse(JSON.stringify(r.planJ)); } catch (e) { st.planJ = null; } }
+    if (isObj(r.fc)) {
+      Object.keys(r.fc).forEach(function (id) {
+        const c = r.fc[id];
+        if (isObj(c) && typeof c.due === 'string') st.fc[id] = { due: c.due, interval: Math.max(0, int(c.interval)), ease: Number(c.ease) || 2.5, reps: Math.max(0, int(c.reps)), lapses: Math.max(0, int(c.lapses)), at: int(c.at), first: typeof c.first === 'string' ? c.first : null };
+      });
+    }
     return st;
   }
 
@@ -556,6 +563,11 @@
     out.sessions = trimSessions(Object.keys(byId).map(function (k) { return byId[k]; }));
     // Méthode des J : le planning modifié le plus récemment gagne
     out.planJ = A.planJ && B.planJ ? ((B.planJ.updatedAt || 0) > (A.planJ.updatedAt || 0) ? B.planJ : A.planJ) : (A.planJ || B.planJ || null);
+    // flashcards : par carte, la note la plus récente gagne
+    uniqStrings(Object.keys(A.fc || {}).concat(Object.keys(B.fc || {}))).forEach(function (id) {
+      const fa = (A.fc || {})[id], fb = (B.fc || {})[id];
+      out.fc[id] = !fa ? fb : !fb ? fa : ((fb.at || 0) > (fa.at || 0) ? fb : fa);
+    });
     out.streak = computeStreak(out.daily, out.profile.dailyGoal, dateKey(nowMs()), { best: Math.max(A.streak.best, B.streak.best) });
     return out;
   }
