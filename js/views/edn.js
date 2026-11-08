@@ -433,8 +433,26 @@
     const credit = e && e.credit ? e.credit : (eb.credit || 'ECG : PTB-XL (PhysioNet), CC BY 4.0 — tracé redessiné');
     return h('figure', { class: 'edn-fig' }, sc, h('figcaption', { class: 'edn-figbar' }, h('span', {}, credit), btn));
   }
+  // image de l'atlas (radio, scanner, photo clinique…) : jamais le diagnostic, seulement le crédit
+  function imgFigure(ref) {
+    const x = ((C.registry || {}).atlas || []).find(function (a) { return a.id === String(ref); }) || null;
+    const A = C.views && C.views.atlas;
+    let im;
+    if (x && A && typeof A.img === 'function') im = A.img(x, { class: 'edn-img', alt: 'Image', decoding: 'async' });
+    else { im = h('img', { class: 'edn-img is-missing', alt: 'Image' }); if (x && x.file) im.src = x.file; }
+    let zoom = false;
+    const sc = h('div', { class: 'edn-scroll' }, im);
+    const btn = h('button', { type: 'button', class: 'btn btn--sm btn--outline', on: { click: toggle } }, 'Zoomer ×2,5');
+    function toggle() { zoom = !zoom; sc.classList.toggle('is-zoom', zoom); btn.textContent = zoom ? 'Ajuster à l’écran' : 'Zoomer ×2,5'; }
+    im.addEventListener('dblclick', toggle);
+    const cr = x ? [x.credit, x.srcName].filter(Boolean).join(' · ') : '';
+    // pas de lien vers la page source pendant l'épreuve : son nom de fichier contient souvent le diagnostic
+    const cap = h('span', {}, cr || 'Image sous licence libre');
+    return h('figure', { class: 'edn-fig' }, sc, h('figcaption', { class: 'edn-figbar' }, cap, btn));
+  }
   function mediaEl(b) {
-    return (b.media || []).filter(function (m) { return m && m.type === 'ecg'; }).map(function (m) { return ecgFigure(m.ref); });
+    return (b.media || []).filter(function (m) { return m && (m.type === 'ecg' || m.type === 'img'); })
+      .map(function (m) { return m.type === 'img' ? imgFigure(m.ref) : ecgFigure(m.ref); });
   }
 
   /* ================================================================ accueil de la rubrique */
@@ -904,6 +922,7 @@
       const card = h('div', { class: 'card edn-q' + (disabled ? ' is-locked' : '') + (isActive && !disabled && b.kind === 'TCS' ? ' is-active' : ''), id: 'edn-q-' + q.id, dataset: { qid: q.id },
         on: { click: function () { if (b.kind === 'TCS' && tcsActive !== q.id) { tcsActive = q.id; markActive(q.id); paintPills(); paintBar(); } } } },
         progressive(b) && i > 0 && q.reveal ? h('div', { class: 'edn-reveal' }, mdEl(q.reveal)) : null,
+        q.media && q.media.length ? mediaEl(q) : null,     // image introduite à cette question (DP : visible seulement à partir d'ici)
         h('div', { class: 'edn-q__head' },
           h('span', { class: 'pill pill--kind' }, (b.questions.length > 1 ? 'Question ' + (i + 1) + ' · ' : '') + (FMT_LABEL[q.format] || q.format) + (q.options ? ' · ' + q.options.length + ' propositions' : '')),
           h('span', { class: 'grow' }), flagBtn),
@@ -1137,6 +1156,7 @@
                 h('summary', {}, h('strong', {}, b.questions.length > 1 ? 'Q' + (i + 1) : 'Question'), h('span', { class: 'secondary', style: 'font-size:.85rem' }, FMT_LABEL[q.format] + ' · ' + fmt(res.score) + ' / 1'), run.flags[q.id] ? h('span', { style: 'color:var(--bad)' }, '⚑') : null),
                 h('div', { class: 'stack stack--sm', style: 'margin-top:6px' },
                   i > 0 && q.reveal && (b.kind === 'DP' || b.kind === 'KFP') ? h('div', { class: 'edn-reveal' }, mdEl(q.reveal)) : null,
+                  q.media && q.media.length ? mediaEl(q) : null,
                   q.stem ? h('div', { class: 'edn-stem' }, mdEl(q.stem), stemSuffix(q) ? h('small', {}, stemSuffix(q)) : null) : null,
                   correction(q, a, res, optOrder(run, b, q), { weight: run.weights ? run.weights[q.id] : null,
                     itemLink: h('a', { href: '#/item/' + encodeURIComponent(b.item), style: 'font-size:.8rem' }, itemLabel(b.item)),
