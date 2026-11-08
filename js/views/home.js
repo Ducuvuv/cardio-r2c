@@ -406,7 +406,8 @@
       { label: 'Mes erreurs', href: '#/errors', ico: 'refresh' },
       { label: 'Rang A', href: '#/review?mode=rank&rank=A', ico: 'target' },
       { label: 'Examen blanc', href: '#/review?mode=exam', ico: 'clock' },
-      { label: 'ECG du jour', href: '#/ecg?daily=1', ico: 'ecg', cardio: true },
+      { label: 'Banque ECG', href: '#/ecg', ico: 'ecg', cardio: true, ecgb: true },
+      { label: 'ECG du jour', href: '#/ecg?daily=1', ico: 'ecg', cardio: true, ecgb: true },
       { label: 'Arbres', href: '#/trees', ico: 'tree', cardio: true },
       // « Toutes » : la v2 montre toutes les matières dès qu'il y a des situations dermato / pneumo
       { label: ttt2 ? (spe === 'all' && ttt2Multi ? 'Traitements' : 'Traitements cardio') : 'Traitements', href: ttt2 ? '#/ttt2' : '#/treatments', ico: 'pill', cardio: true, keep: ttt2 },
@@ -421,13 +422,14 @@
       { label: 'Flashcards', href: '#/review?mode=smart&kind=flash&autostart=1', ico: 'flash', simple: true }
     ]).filter(function (c) {
       const simple = (function () { try { return localStorage.getItem('cardio.simple') !== '0'; } catch (e) { return true; } })();
-      const KEEP = { 'Traitements cardio': 1, 'QROC': 1, 'QCM': 1, 'Flashcards': 1, 'Mes erreurs': 1, 'Rang A': 1, 'Parasito-myco': 1, 'Bactério': 1, 'Virologie': 1 };
+      const KEEP = { 'Traitements cardio': 1, 'QROC': 1, 'QCM': 1, 'Flashcards': 1, 'Mes erreurs': 1, 'Rang A': 1, 'Parasito-myco': 1, 'Bactério': 1, 'Virologie': 1, 'Banque ECG': 1 };
       if (c.obs) { const v = CARDIO.views && CARDIO.views.observation; if (!(v && v.available && v.available(spe))) return false; }
       if (c.dp && !((spe === 'dermato' || spe === 'pneumo') && ttt2Spe)) return false;
       if (simple && !KEEP[c.label] && !c.keep) return false;
       if (!simple && c.simple) return false;
       if (c.fcards) return !!(CARDIO.registry && CARDIO.registry.fc && CARDIO.registry.fc.cards && CARDIO.registry.fc.cards.length);
       if (c.remote) return !!(CARDIO.remote && CARDIO.remote.active);
+      if (c.ecgb) { const v = CARDIO.views && CARDIO.views.ecg; if (!(v && v.available && v.available())) return false; }
       if (c.atlas) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.atlas) && CARDIO.registry.atlas.length);
       if (c.viro) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.viro) && CARDIO.registry.viro.length);
       if (c.bacterio) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.bacterio) && CARDIO.registry.bacterio.length);

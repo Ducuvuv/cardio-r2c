@@ -174,8 +174,9 @@
   function cardTier(id) {
     const reg = registry();
     const key = String(id || '');
-    if (reg && isObj(reg.tiers)) { const t = reg.tiers[key]; return t === undefined ? 1 : int(t); }
     const kind = kindOfId(key);
+    if (kind === 'ecg') return 0;   // anciens ECG synthétiques retirés (banque d'ECG réels : views/ecg.js, hors séances)
+    if (reg && isObj(reg.tiers)) { const t = reg.tiers[key]; return t === undefined ? 1 : int(t); }
     if (kind === 'tree') return 0;
     if (kind === 'kfp' || kind === 'tcs') return 3;
     let rank = null, diff = null;
@@ -337,7 +338,7 @@
       if (!it || !isObj(it.counts)) return 0;
       // Seules les cartes révisables comptent (pas les arbres, fiches flash, récaps Pareto ni rubriques).
       let t = 0;
-      ['qcm', 'qroc', 'open', 'kfp', 'tcs', 'flash', 'tx', 'cases', 'ecg', 'echo'].forEach(function (k) { t += Math.max(0, int(it.counts[k])); });
+      ['qcm', 'qroc', 'open', 'kfp', 'tcs', 'flash', 'tx', 'cases', 'echo'].forEach(function (k) { t += Math.max(0, int(it.counts[k])); });
       return t;
     } catch (e) { return 0; }
   }
@@ -357,7 +358,8 @@
       streak: { current: 0, best: 0, lastDay: null },
       xp: 0, badges: [],
       errors: {}, notes: {}, bookmarks: [], itemStats: {}, sessions: [], planJ: null,
-      fc: {}                                    // flashcards style Pass2P2 (views/fc.js) : {id: {due, interval, ease, reps, lapses, at}}
+      fc: {},                                   // flashcards style Pass2P2 (views/fc.js) : {id: {due, interval, ease, reps, lapses, at}}
+      ecgq: {}                                  // banque ECG (views/ecg.js) : {questionId: {n, ok, at, last}} (ok = somme des scores)
     };
   }
   function normItemStat(s) {
@@ -474,6 +476,14 @@
         if (isObj(c) && typeof c.due === 'string') st.fc[id] = { due: c.due, interval: Math.max(0, int(c.interval)), ease: Number(c.ease) || 2.5, reps: Math.max(0, int(c.reps)), lapses: Math.max(0, int(c.lapses)), at: int(c.at), first: typeof c.first === 'string' ? c.first : null };
       });
     }
+    if (isObj(r.ecgq)) {
+      Object.keys(r.ecgq).forEach(function (id) {
+        const c = r.ecgq[id];
+        if (!isObj(c)) return;
+        const n = Math.max(0, int(c.n));
+        if (n) st.ecgq[id] = { n: n, ok: clamp(num(c.ok, 0), 0, n), at: int(c.at), last: clamp(num(c.last, 0), 0, 1) };
+      });
+    }
     return st;
   }
 
@@ -567,6 +577,11 @@
     uniqStrings(Object.keys(A.fc || {}).concat(Object.keys(B.fc || {}))).forEach(function (id) {
       const fa = (A.fc || {})[id], fb = (B.fc || {})[id];
       out.fc[id] = !fa ? fb : !fb ? fa : ((fb.at || 0) > (fa.at || 0) ? fb : fa);
+    });
+    // banque ECG : par question, la tentative la plus récente gagne
+    uniqStrings(Object.keys(A.ecgq || {}).concat(Object.keys(B.ecgq || {}))).forEach(function (id) {
+      const qa = (A.ecgq || {})[id], qb = (B.ecgq || {})[id];
+      out.ecgq[id] = !qa ? qb : !qb ? qa : ((qb.at || 0) > (qa.at || 0) ? qb : qa);
     });
     out.streak = computeStreak(out.daily, out.profile.dailyGoal, dateKey(nowMs()), { best: Math.max(A.streak.best, B.streak.best) });
     return out;

@@ -75,10 +75,7 @@
       target.treatments.strategies = target.treatments.strategies.concat(arr(frag.treatments.strategies));
     }
     target.cases = target.cases.concat(arr(frag.cases));
-    if (frag.ecg) {
-      target.ecg.data = target.ecg.data.concat(arr(frag.ecg.data));
-      if (frag.ecg.method) target.ecg.method = frag.ecg.method;
-    }
+    // frag.ecg (anciens ECG synthétiques) ignoré : remplacé par la banque d'ECG réels (content/ecg-bank.js, views/ecg.js)
     if (frag.echo) target.echo.data = target.echo.data.concat(arr(frag.echo.data));
     if (frag.flash && typeof frag.flash === 'object') target.flash = frag.flash;
     if (frag.pareto && typeof frag.pareto === 'object') target.pareto = frag.pareto;
@@ -354,7 +351,6 @@
     c.trees.forEach(function (t) { push('tree', t); });
     c.treatments.data.forEach(function (t) { push('tx', t, t.objective || null); });
     c.cases.forEach(function (cs) { push('case', cs, cs.objective || null); });
-    c.ecg.data.forEach(function (e) { push('ecg', e); });
     c.echo.data.forEach(function (e) { push('echo', e); });
     return out;
   }
@@ -406,7 +402,7 @@
     return c.objectives.find(function (o) { return o.id === objId; }) || null;
   }
 
-  /* Cartes rattachées à un objectif (questions, edn, arbres, ecg, echo dont .objective === objId). */
+  /* Cartes rattachées à un objectif (questions, edn, arbres, echo dont .objective === objId). */
   function cardsForObjective(num, objId) {
     return cards(num).filter(function (c) { return c.objective === objId; });
   }

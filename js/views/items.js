@@ -124,7 +124,7 @@
   }
 
   const KIND_SEGMENTS = { qcm: ['qcm', 'qru'], qroc: ['qroc'], open: ['open'], kfp: ['kfp'], tcs: ['tcs'],
-    flash: ['ess', 'num', 'mn'], trees: ['tree'], tx: ['tx'], cases: ['case'], ecg: ['ecg'], echo: ['echo'] };
+    flash: ['ess', 'num', 'mn'], trees: ['tree'], tx: ['tx'], cases: ['case'], echo: ['echo'] };
 
   /* Maîtrise par kind d'un item (sans contenu) : moyenne des scores sur le total du manifest. */
   function kindMastery(num, countKeys, counts) {
@@ -447,7 +447,6 @@
     { key: 'traitements', title: 'Traitements', ico: 'pill', route: 'traitements', counts: ['tx'], countLabel: function (c) { return (c.tx || 0) + ' classe' + (c.tx > 1 ? 's' : ''); } },
     { key: 'cas', title: 'Cas cliniques', ico: 'case', route: 'cas', counts: ['cases'], countLabel: function (c) { return (c.cases || 0) + ' dossier' + (c.cases > 1 ? 's' : ''); } },
     { key: 'mnemos', title: 'Mnémos & flashcards', ico: 'flash', route: 'mnemos', counts: ['flash'], countLabel: function (c) { return (c.flash || 0) + ' carte' + (c.flash > 1 ? 's' : ''); } },
-    { key: 'ecg', title: 'ECG', ico: 'ecg', route: 'ecg', counts: ['ecg'], countLabel: function (c) { return (c.ecg || 0) + ' tracé' + (c.ecg > 1 ? 's' : ''); }, onlyIf: 'ecg' },
     { key: 'echo', title: 'Écho', ico: 'echo', route: 'echo', counts: ['echo'], countLabel: function (c) { return (c.echo || 0) + ' vue' + (c.echo > 1 ? 's' : ''); }, onlyIf: 'echo' }
   ];
 

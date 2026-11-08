@@ -11,7 +11,7 @@
   var DEFAULTS = { name: '', dailyGoal: 30, newPerDay: 15, retention: 0.9, theme: 'system', sound: false, haptics: true };
   var COUNT_LABELS = [
     ['qcm', 'QCM'], ['qroc', 'QROC'], ['open', 'ouvertes'], ['kfp', 'KFP'], ['flash', 'flash'],
-    ['trees', 'arbres'], ['tx', 'traitements'], ['cases', 'cas'], ['ecg', 'ECG'], ['echo', 'écho']
+    ['trees', 'arbres'], ['tx', 'traitements'], ['cases', 'cas'], ['echo', 'écho']
   ];
 
   /* ------------------------------------------------------------------ helpers */
@@ -589,7 +589,8 @@
     var nItems = manifestItems().filter(function (it) { return it.available !== false; }).length;
     var text = 'CardioR2C est construit uniquement à partir des Collèges fournis : **cardiologie** (CNEC, « Médecine cardiovasculaire », édition R2C), ' +
       '**dermatologie** (CEDEF, 8e édition) et **pneumologie** (CEP, référentiel 2023). ' +
-      'Fiches, récaps, questions, arbres, traitements, dossiers, ECG et écho en sont des synthèses, chacune référencée à la page du livre, sans aucun ajout extérieur. ' +
+      'Fiches, récaps, questions, arbres, traitements, dossiers et écho en sont des synthèses, chacune référencée à la page du livre, sans aucun ajout extérieur. ' +
+      'La **banque ECG** montre de vrais tracés (PTB-XL, PhysioNet, CC BY 4.0, redessinés), interprétés et questionnés d’après le Collège. ' +
       'Les révisions sont planifiées par l’algorithme de répétition espacée **FSRS** : chaque carte revient juste avant que tu ne l’oublies, selon la rétention cible choisie dans ton profil.';
     var body = h('div', { class: 'set-about' });
     var html = md(text);

@@ -1544,7 +1544,7 @@
    * sinon difficile = demain) ; J pas encore dû → note enregistrée, et rappel avancé à demain si < 50 %.
    * Cours pas encore placé → placé (vu aujourd'hui). Cours acquis → réactivé si < 65 %. La note est affichée sur le
    * planning et pèse dans la maîtrise (pastille, priorités). */
-  const QUIZ_KINDS = { qcm: 1, qroc: 1, open: 1, kfp: 1, tcs: 1, case: 1, cases: 1, ecg: 1, echo: 1, parasito: 1 };
+  const QUIZ_KINDS = { qcm: 1, qroc: 1, open: 1, kfp: 1, tcs: 1, case: 1, cases: 1, echo: 1, parasito: 1 };
   const QUIZ_MIN = 20;
   function gradeOfPct(p) { return p >= 85 ? 'facile' : p >= 65 ? 'moyen' : 'difficile'; }
   function applyQuiz(d, key, acc) {

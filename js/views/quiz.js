@@ -8,7 +8,7 @@
  * Paramètres de requête : mode, item, kind (liste), rank, size (10|20|40|inf), objective (liste
  * d'ids), autostart=1.
  * Script classique ES2020. Toutes les dépendances (util, store, registry, srs, shell, autres vues,
- * CARDIO.ecg) sont résolues à l'exécution et de façon défensive.
+ * autres vues) sont résolues à l'exécution et de façon défensive.
  */
 (function () {
   'use strict';
@@ -27,12 +27,12 @@
   const DEFAULT_SIZE = 20;
   const EXAM_SIZE = 22;
   const MEDIAN_MIN_SAMPLES = 5;
-  const REQUEUE_KINDS = ['qcm', 'qroc', 'flash', 'ecg', 'echo', 'tx'];   // « Encore » → reproposée dans la séance
+  const REQUEUE_KINDS = ['qcm', 'qroc', 'flash', 'echo', 'tx'];   // « Encore » → reproposée dans la séance
   const REQUEUE_GAP = 4;
 
   const KINDS = [
     ['qcm', 'QCM'], ['qroc', 'QROC'], ['open', 'Ouvertes'], ['kfp', 'KFP'],
-    ['flash', 'Flash'], ['tx', 'Traitements'], ['case', 'Cas'], ['ecg', 'ECG'], ['echo', 'Écho']
+    ['flash', 'Flash'], ['tx', 'Traitements'], ['case', 'Cas'], ['echo', 'Écho']
   ];
   const KIND_IDS = KINDS.map((k) => k[0]);
 
@@ -42,7 +42,7 @@
     { id: 'item', title: 'Cet item', desc: 'Un chapitre, à ton niveau actuel sur cet item.', icon: 'book' },
     { id: 'errors', title: 'Mes erreurs', desc: 'Le cahier d’erreurs, les plus fréquentes d’abord.', icon: 'refresh' },
     { id: 'rank', title: 'Rang A seulement', desc: 'Les incontournables de l’EDN.', icon: 'target' },
-    { id: 'kind', title: 'Par type', desc: 'QCM, QROC, flashcards, ECG…', icon: 'filter' },
+    { id: 'kind', title: 'Par type', desc: 'QCM, QROC, flashcards, cas…', icon: 'filter' },
     { id: 'exam', title: 'Examen blanc', desc: '18 QCM · 2 KFP · 1 TCS · 1 dossier.', icon: 'clock' }
   ];
   const MODE_LABEL = { endless: 'Mode illimité', smart: 'Séance intelligente', item: 'Cet item', errors: 'Mes erreurs', rank: 'Rang A', kind: 'Par type', exam: 'Examen blanc', single: 'Révision ciblée' };
@@ -2188,7 +2188,7 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* ECG / Écho (moteurs dédiés, repli quiz simple)                       */
+  /* Écho (moteur dédié, repli quiz simple)                               */
   /* ------------------------------------------------------------------ */
 
   function onGradeFromEngine(ctx) {
@@ -2253,22 +2253,6 @@
     return h('div', { class: 'card' }, h('span', { class: 'caption', style: 'display:block;margin-bottom:6px' }, caption), h('ul', { class: 'kp' }, items.map((x) => h('li', {}, txt(x)))));
   }
 
-  function renderEcg(card, ctx) {
-    const api = (C.ecg && typeof C.ecg.renderQuiz === 'function') ? C.ecg
-      : (C.views.ecg && typeof C.views.ecg.renderQuiz === 'function') ? C.views.ecg : null;
-    if (api) {
-      let body = null;
-      try { body = api.renderQuiz(ctx.data, { onGrade: onGradeFromEngine(ctx), item: card.item, record: false }); }
-      catch (e) { console.error('[quiz] ecg.renderQuiz a échoué', e); body = null; }
-      if (body) { ctx.action.set({ label: null, hint: 'Lis le tracé, réponds, puis note-toi' }); return h('div', { class: 'stack' }, body); }
-    } else warnOnce('ecg', 'CARDIO.ecg.renderQuiz indisponible : quiz ECG simplifié (sans tracé).');
-    const d = ctx.data;
-    const reveal = h('div', { class: 'stack' },
-      d.diagnosis ? h('div', { class: 'explain' }, h('span', { class: 'caption' }, 'Diagnostic'), h('div', { class: 'qz-answer' }, txt(d.diagnosis))) : null,
-      listCard('Éléments du tracé', d.findings), explainEl('Enseignement', d.teaching), srcEl(d.src));
-    return simpleQuiz(card, ctx, { caption: 'ECG', reveal, figure: h('div', { class: 'callout' }, h('p', { class: 'secondary', style: 'margin:0' }, 'Le tracé synthétisé n’est pas disponible ici : réponds d’après le titre et tes connaissances, puis vérifie.')) });
-  }
-
   function renderEcho(card, ctx) {
     const api = C.views.echo && typeof C.views.echo.renderQuiz === 'function' ? C.views.echo : null;
     if (api) {
@@ -2308,7 +2292,7 @@
 
   const RENDERERS = {
     qcm: renderQcm, qroc: renderQroc, open: renderOpen, kfp: renderKfp, tcs: renderTcs,
-    flash: renderFlash, tree: renderTree, tx: renderTx, case: renderCase, ecg: renderEcg, echo: renderEcho
+    flash: renderFlash, tree: renderTree, tx: renderTx, case: renderCase, echo: renderEcho
   };
 
   /* ------------------------------------------------------------------ */
