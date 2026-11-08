@@ -359,8 +359,42 @@
       xp: 0, badges: [],
       errors: {}, notes: {}, bookmarks: [], itemStats: {}, sessions: [], planJ: null,
       fc: {},                                   // flashcards style Pass2P2 (views/fc.js) : {id: {due, interval, ease, reps, lapses, at}}
-      ecgq: {}                                  // banque ECG (views/ecg.js) : {questionId: {n, ok, at, last}} (ok = somme des scores)
+      ecgq: {},                                 // banque ECG (views/ecg.js) : {questionId: {n, ok, at, last}} (ok = somme des scores)
+      edn: { attempts: [], q: {} }              // EDN / Partiels (views/edn.js) : épreuves terminées (résumés) + {questionId: {n, sum, last, at}}
     };
+  }
+  /* EDN / Partiels : résumés d'épreuves (50 derniers) + statistiques par question */
+  const EDN_ATTEMPTS_MAX = 50;
+  function normEdnAttempt(a) {
+    if (!isObj(a) || typeof a.id !== 'string' || !a.id) return null;
+    const o = { id: a.id.slice(0, 64), mode: ['edn', 'train', 'partiel'].indexOf(a.mode) >= 0 ? a.mode : 'edn', title: typeof a.title === 'string' ? a.title.slice(0, 120) : '',
+      at: int(a.at), spe: typeof a.spe === 'string' ? a.spe.slice(0, 16) : 'all', nQ: Math.max(0, int(a.nQ)), dur: Math.max(0, int(a.dur)),
+      note: clamp(num(a.note, 0), 0, 20), aa: a.aa == null ? null : clamp(num(a.aa, 0), 0, 20), nAA: Math.max(0, int(a.nAA)) };
+    return o;
+  }
+  function normEdn(r) {
+    const o = { attempts: [], q: {} };
+    if (!isObj(r)) return o;
+    const seen = {};
+    (Array.isArray(r.attempts) ? r.attempts : []).map(normEdnAttempt).filter(Boolean).forEach(function (a) { if (!seen[a.id]) { seen[a.id] = 1; o.attempts.push(a); } });
+    o.attempts.sort(function (x, y) { return x.at - y.at; });
+    o.attempts = o.attempts.slice(-EDN_ATTEMPTS_MAX);
+    if (isObj(r.q)) Object.keys(r.q).forEach(function (id) {
+      const c = r.q[id];
+      if (!isObj(c)) return;
+      const n = Math.max(0, int(c.n));
+      if (n) o.q[id] = { n: n, sum: clamp(num(c.sum, 0), 0, n), last: clamp(num(c.last, 0), 0, 1), at: int(c.at) };
+    });
+    return o;
+  }
+  function mergeEdn(a, b) {
+    const A = normEdn(a), B = normEdn(b);
+    const out = normEdn({ attempts: A.attempts.concat(B.attempts), q: {} });
+    uniqStrings(Object.keys(A.q).concat(Object.keys(B.q))).forEach(function (id) {
+      const qa = A.q[id], qb = B.q[id];
+      out.q[id] = !qa ? qb : !qb ? qa : ((qb.at || 0) > (qa.at || 0) ? qb : qa);
+    });
+    return out;
   }
   function normItemStat(s) {
     const o = { lastVisited: num(s.lastVisited, 0), sessions: Math.max(0, int(s.sessions)) };
@@ -484,6 +518,7 @@
         if (n) st.ecgq[id] = { n: n, ok: clamp(num(c.ok, 0), 0, n), at: int(c.at), last: clamp(num(c.last, 0), 0, 1) };
       });
     }
+    if (isObj(r.edn)) st.edn = normEdn(r.edn);
     return st;
   }
 
@@ -583,6 +618,8 @@
       const qa = (A.ecgq || {})[id], qb = (B.ecgq || {})[id];
       out.ecgq[id] = !qa ? qb : !qb ? qa : ((qb.at || 0) > (qa.at || 0) ? qb : qa);
     });
+    // EDN / Partiels : union des épreuves (par id), par question la tentative la plus récente gagne
+    out.edn = mergeEdn(A.edn, B.edn);
     out.streak = computeStreak(out.daily, out.profile.dailyGoal, dateKey(nowMs()), { best: Math.max(A.streak.best, B.streak.best) });
     return out;
   }

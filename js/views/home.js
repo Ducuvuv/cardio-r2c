@@ -390,6 +390,7 @@
     const speShort = m ? safe(function () { return m.short(spe); }, spe) : spe;
     const chips = [
       { label: 'Méthode des J', href: '#/planj', ico: 'calendar', keep: true },
+      { label: 'EDN / Partiels', href: '#/edn', ico: 'timer', keep: true, edn: true },
       { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
       { label: 'Mon compte', href: '#/compte', ico: 'user', keep: true, remote: true },
       { label: 'Flashcards', href: '#/fc', ico: 'flash', keep: true, fcards: true },
@@ -429,6 +430,7 @@
       if (!simple && c.simple) return false;
       if (c.fcards) return !!(CARDIO.registry && CARDIO.registry.fc && CARDIO.registry.fc.cards && CARDIO.registry.fc.cards.length);
       if (c.remote) return !!(CARDIO.remote && CARDIO.remote.active);
+      if (c.edn) { const v = CARDIO.views && CARDIO.views.edn; return !!(v && v.available && v.available()); }
       if (c.ecgb) { const v = CARDIO.views && CARDIO.views.ecg; if (!(v && v.available && v.available())) return false; }
       if (c.atlas) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.atlas) && CARDIO.registry.atlas.length);
       if (c.viro) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.viro) && CARDIO.registry.viro.length);

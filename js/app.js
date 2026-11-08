@@ -84,6 +84,8 @@
     ['#/stats',                   'stats',      'stats',    'Stats',               false, {}],
     ['#/settings',                'settings',   'settings', 'Plus',                false, {}],
     ['#/ecg',                     'ecg',        'items',    'Bibliothèque ECG',    true,  { mode: 'library' }],
+    ['#/edn',                     'edn',        'review',   'EDN / Partiels',      true,  {}],
+    ['#/edn/:mode',               'edn',        'review',   'EDN / Partiels',      true,  {}],
     ['#/treatments',              'treatments', 'items',    'Traitements',         true,  { mode: 'library' }],
     ['#/trees',                   'trees',      'items',    'Arbres décisionnels', true,  { mode: 'library' }],
     ['#/flash',                   'flash',      'items',    'Fiches flash',        true,  {}],
