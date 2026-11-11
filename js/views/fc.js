@@ -128,7 +128,8 @@
   /* ---------- texte : **gras** ---------- */
   function md(s) {
     const e = String(s || '').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
-    return h('span', { html: e.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>') });
+    return h('span', { html: e.replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*\s][^*]*)\*/g, '<em>$1</em>').replace(/\n/g, '<br>') });
   }
 
   let styled = false;

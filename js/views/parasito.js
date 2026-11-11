@@ -135,7 +135,7 @@
       const qs = (o.type ? '&type=' + o.type : '') + '&size=' + o.size + '&order=' + o.order;
       const href = base.indexOf('?') < 0 ? base + '?' + qs.slice(1) : base + qs;
       wrap.replaceChildren(
-        chips('Cartes', 'type', [['', 'Mixte'], ['qroc', 'QROC'], ['flash', 'Flashcards']].concat(curPoly === 'parasito' ? [['ttt', '💊 Traitements']] : [], [['pieges', '🎯 Mes cartes pièges']])),
+        chips('Cartes', 'type', [['', 'Mixte'], ['qroc', 'QROC'], ['flash', 'Flashcards']].concat([['ttt', '💊 Traitements']], [['pieges', '🎯 Mes cartes pièges']])),
         o.type === 'pieges' ? h('p', { class: 'secondary muted', style: 'margin:0' }, 'Les cartes que tu as ratées au moins ' + PIEGE + ' fois (« À revoir »).') : null,
         chips('Nombre', 'size', [['10', '10'], ['20', '20'], ['30', '30'], ['50', '50'], ['all', 'Toutes (' + nCards + ')']]),
         chips('Ordre', 'order', [['random', 'Au hasard'], ['srs', 'Répétition espacée']]),
