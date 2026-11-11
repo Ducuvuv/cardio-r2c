@@ -164,6 +164,7 @@
   /** Inline formatting on an already-escaped line. */
   function inline(s) {
     return s
+      .replace(/\*\*\*([^*\n]+?)\*\*\*/g, '<strong><em>$1</em></strong>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/(^|[^*\w])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>')
       .replace(/\[([AB])\]/g, '<span class="pill pill--$1" title="Rang $1">$1</span>');
