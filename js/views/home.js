@@ -389,6 +389,7 @@
     const m = matiere();
     const speShort = m ? safe(function () { return m.short(spe); }, spe) : spe;
     const chips = [
+      { label: '📱 Mode Scroll', href: '#/scroll', ico: 'flash', keep: true, parasito: true },
       { label: 'Méthode des J', href: '#/planj', ico: 'calendar', keep: true },
       { label: 'EDN / Partiels', href: '#/edn', ico: 'timer', keep: true, edn: true },
       { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
