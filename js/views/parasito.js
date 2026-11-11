@@ -120,7 +120,7 @@
   /* ---------- liste ---------- */
   /* Réglages d'une séance : type, nombre de cartes, ordre (mémorisés), puis bouton Lancer. */
   const OPT_KEY = 'cardio.parasito.opts';
-  function getOpts() { try { return Object.assign({ type: '', size: '20', order: 'random' }, JSON.parse(localStorage.getItem(OPT_KEY) || '{}')); } catch (e) { return { type: '', size: '20', order: 'random' }; } }
+  function getOpts() { const def = { type: '', size: '20', order: 'random', newcap: '20', typed: '0' }; try { return Object.assign(def, JSON.parse(localStorage.getItem(OPT_KEY) || '{}')); } catch (e) { return def; } }
   function trainChooser(base, nCards) {
     const o = getOpts();
     const wrap = h('div', { style: 'display:grid;gap:8px' });
@@ -135,9 +135,12 @@
       const qs = (o.type ? '&type=' + o.type : '') + '&size=' + o.size + '&order=' + o.order;
       const href = base.indexOf('?') < 0 ? base + '?' + qs.slice(1) : base + qs;
       wrap.replaceChildren(
-        chips('Cartes', 'type', [['', 'Mixte'], ['qroc', 'QROC'], ['flash', 'Flashcards']]),
+        chips('Cartes', 'type', [['', 'Mixte'], ['qroc', 'QROC'], ['flash', 'Flashcards']].concat(curPoly === 'parasito' ? [['ttt', '💊 Traitements']] : [], [['pieges', '🎯 Mes cartes pièges']])),
+        o.type === 'pieges' ? h('p', { class: 'secondary muted', style: 'margin:0' }, 'Les cartes que tu as ratées au moins ' + PIEGE + ' fois (« À revoir »).') : null,
         chips('Nombre', 'size', [['10', '10'], ['20', '20'], ['30', '30'], ['50', '50'], ['all', 'Toutes (' + nCards + ')']]),
         chips('Ordre', 'order', [['random', 'Au hasard'], ['srs', 'Répétition espacée']]),
+        o.order === 'srs' ? chips('Nouvelles / jour', 'newcap', [['10', '10'], ['20', '20'], ['30', '30'], ['all', 'Sans limite']]) : null,
+        chips('Flashcards', 'typed', [['0', 'Je retourne la carte'], ['1', 'Je tape ma réponse']]),
         h('p', { class: 'secondary muted', style: 'margin:0' }, o.order === 'random' ? 'Tirage au hasard à chaque séance, en évitant les cartes que tu viens de voir.' : 'Les cartes dues d’abord, puis les nouvelles, puis les moins récemment vues.'),
         h('a', { class: 'btn btn--primary btn--block', href: href }, 'Lancer · ' + n + ' carte' + (n > 1 ? 's' : '')));
     }
@@ -416,6 +419,11 @@
 
   /* ---------- cartes : flashcards + QROC, répétition espacée locale ---------- */
   const LS_SRS = 'cardio.parasito.srs';
+  const PIEGE = 3;   // ratée au moins 3 fois = carte piège
+  const LS_NEW = 'cardio.parasito.newday';   // nouvelles cartes vues aujourd'hui (plafond quotidien)
+  function today() { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+  function newToday() { try { const o = JSON.parse(localStorage.getItem(LS_NEW) || '{}'); return o.d === today() ? (o.n || 0) : 0; } catch (e) { return 0; } }
+  function bumpNew() { try { localStorage.setItem(LS_NEW, JSON.stringify({ d: today(), n: newToday() + 1 })); } catch (e) { /* ignore */ } }
   const STEPS = [0, 1, 3, 7, 15, 30, 60];
   const DAY = 86400000;
   function loadSrs() { try { return JSON.parse(localStorage.getItem(LS_SRS) || '{}') || {}; } catch (e) { return {}; } }
@@ -440,6 +448,8 @@
       const ex = String(trainSec).charAt(0) === 'e', n = Number(String(trainSec).replace(/^e/, ''));
       const m = cardSections(scope, ex); all = all.filter(function (c) { return m[c.id] === n; });
     }
+    if (type === 'ttt') return all.filter(function (c) { return c.tag === 'ttt'; });
+    if (type === 'pieges') { const st = loadSrs(); return all.filter(function (c) { return st[c.id] && (st[c.id].l || 0) >= PIEGE; }); }
     return type === 'qroc' || type === 'flash' ? all.filter(function (c) { return c.kind === type; }) : all;
   }
   function counts(scope, type) {
@@ -477,17 +487,24 @@
     const due = byFreshness(cards.filter(function (c) { return st[c.id] && st[c.id].d <= now; }), shown);
     const fresh = byFreshness(cards.filter(function (c) { return !st[c.id]; }), shown);
     fresh.sort(function (a, b) { return (a.rank === 'B' ? 1 : 0) - (b.rank === 'B' ? 1 : 0); });
-    let out = due.slice(0, size).concat(fresh.slice(0, Math.max(0, size - due.length)));
+    const cap = getOpts().newcap, left = cap === 'all' ? 100000 : Math.max(0, (Number(cap) || 20) - newToday());
+    let out = due.slice(0, size).concat(fresh.slice(0, Math.min(left, Math.max(0, size - due.length))));
     if (out.length < size) {
       const used = {}; out.forEach(function (c) { used[c.id] = 1; });
-      out = out.concat(byFreshness(cards.filter(function (c) { return !used[c.id]; }), shown).slice(0, size - out.length));
+      out = out.concat(byFreshness(cards.filter(function (c) { return !used[c.id] && st[c.id]; }), shown).slice(0, size - out.length));
     }
     return shuffle(out);
   }
-  function grade(id, ok) {
-    const st = loadSrs(), cur = st[id] || { b: 0 };
-    const b = ok ? Math.min(STEPS.length - 1, (cur.b || 0) + 1) : 0;
-    st[id] = { b: b, d: ok ? Date.now() + STEPS[b] * DAY : Date.now() + 10 * 60000, r: ok ? 1 : 0 };   // r : dernier résultat (zones de fragilité)
+  /* Note 0 À revoir · 1 Difficile · 2 Bien · 3 Facile (true/false = Bien/À revoir). l : nombre d'oublis (cartes pièges). */
+  function grade(id, q) {
+    if (q === true) q = 2; else if (q === false) q = 0;
+    const st = loadSrs(), cur = st[id] || { b: 0 }, now = Date.now();
+    if (!st[id]) bumpNew();
+    let b = cur.b || 0, d;
+    if (q === 0) { b = 0; d = now + 10 * 60000; }
+    else if (q === 1) { b = Math.max(1, b); d = now + Math.max(1, Math.round(STEPS[b] / 2)) * DAY; }
+    else { b = Math.min(STEPS.length - 1, b + (q === 3 ? 2 : 1)); d = now + STEPS[b] * DAY; }
+    st[id] = { b: b, d: d, r: q >= 1 ? 1 : 0, l: (cur.l || 0) + (q === 0 ? 1 : 0) };   // r : dernier résultat (zones de fragilité)
     saveSrs(st);
   }
   /* Indice : nombre d'éléments attendus + première lettre de chaque mot-clé ; chiffres remplacés par « ? ». */
@@ -528,6 +545,16 @@
     });
   }
 
+  /* Réponse tapée à une flashcard : juste si chaque mot-clé en gras (ou la réponse entière) figure dans la saisie. */
+  function flashRight(input, c) {
+    const n = normAns(input);
+    if (!n) return false;
+    const re = /\*\*(.+?)\*\*/g; let m; const terms = [];
+    while ((m = re.exec(str(c.a)))) terms.push(m[1]);
+    if (!terms.length) terms.push(str(c.a));
+    return terms.every(function (t) { const k = normAns(t); return !k || n.indexOf(k) >= 0 || (n.length >= 4 && k.indexOf(n) >= 0); });
+  }
+
   function trainBlock(scope) {
     const n = counts(scope);
     if (!n.total) return null;
@@ -550,7 +577,7 @@
     const head = h('div', { class: 'cluster' });
     const stage = h('div', { class: 'stack' });
     const back = scope && !multi ? '#/parasito/' + encodeURIComponent(scope.id) : '#/parasito';
-    page.append(h('div', {}, h('div', { class: 'caption' }, (type === 'qroc' ? 'QROC' : type === 'flash' ? 'Flashcards' : 'Flashcards + QROC') + (curPoly === 'bacterio' ? ' bactério · poly DFGSM3' : curPoly === 'viro' ? ' viro · poly DFGSM3' : ' parasito · rang A')), h('h2', { style: 'margin:4px 0 0' }, multi ? scope.length + ' fiches choisies' : scope ? str(scope.title) : 'Toutes les fiches'),
+    page.append(h('div', {}, h('div', { class: 'caption' }, (type === 'qroc' ? 'QROC' : type === 'flash' ? 'Flashcards' : type === 'ttt' ? 'Flashcards traitements' : type === 'pieges' ? 'Cartes pièges' : 'Flashcards + QROC') + (curPoly === 'bacterio' ? ' bactério · poly DFGSM3' : curPoly === 'viro' ? ' viro · poly DFGSM3' : ' parasito · rang A')), h('h2', { style: 'margin:4px 0 0' }, multi ? scope.length + ' fiches choisies' : scope ? str(scope.title) : 'Toutes les fiches'),
       multi ? h('p', { class: 'secondary muted', style: 'margin:2px 0 0' }, scope.map(function (x) { return str(x.title); }).join(' · ')) : null), head, stage);
     root.appendChild(page);
     if (!total) {
@@ -563,9 +590,11 @@
       if (!queue.length) { finish(); return; }
       show(queue.shift());
     }
-    function answer(c, ok) {
+    function answer(c, q) {
+      if (q === true) q = 2; else if (q === false) q = 0;
+      const ok = q >= 1;
       if (!missed[c.id]) {
-        grade(c.id, ok);
+        grade(c.id, q);
         // Méthode des J (views/planj.js) : 20 cartes d'une fiche dans la journée → note de la fiche
         if (trainCounts) try { const u = util(); if (u.emit && c.fiche) u.emit('quiz:answer', { pkey: 'p:' + c.fiche.id, kind: 'parasito', score: ok ? 1 : 0, at: Date.now() }); } catch (e) { /* ignore */ }
         if (ok) good++;
@@ -574,6 +603,14 @@
       }
       next();
     }
+    /* Contexte de la carte : fiche › partie de la fiche (devinée d'après le contenu), pour ne pas réviser « hors sol ». */
+    const secCache = {};
+    function ctxLine(c) {
+      const p = c.fiche; if (!p || !p.sections || !p.sections.length) return null;
+      if (!secCache[p.id]) secCache[p.id] = cardSections(p, false);
+      const i = secCache[p.id][c.id], sec = i != null ? p.sections[i] : null;
+      return h('div', { class: 'secondary muted', style: 'font-size:.8125rem;margin:2px 0 4px' }, '📍 ' + str(p.title) + (sec && sec.h ? ' › ' + str(sec.h) : ''));
+    }
     function show(c) {
       markShown(c.id);
       const card = h('div', { class: 'pz-card-q' },
@@ -581,6 +618,7 @@
           h('span', { class: 'pill ' + (c.kind === 'qroc' ? 'pill--info' : 'pill--kind') }, c.kind === 'qroc' ? 'QROC' : 'Flashcard'),
           !scope || Array.isArray(scope) ? h('span', { class: 'secondary muted' }, str(c.fiche.title)) : null,
           missed[c.id] ? h('span', { class: 'pill pill--warn' }, 'deuxième passage') : null),
+        ctxLine(c),
         h('div', { class: 'pz-q' }, inlineMd(c.q)),
         c.img ? h('figure', { class: 'card-fig' }, h('a', { href: c.img, target: '_blank', rel: 'noopener' }, h('img', { src: c.img, alt: 'Image de la question', loading: 'lazy' })),
           h('figcaption', {}, str(c.credit || ''), c.src ? h('a', { href: c.src, target: '_blank', rel: 'noopener' }, ' · source') : null)) : null);
@@ -592,9 +630,26 @@
       card.append(hintBox);
       stage.replaceChildren(card, hintBtn, ans);
       function gradeBtns(hint) {
-        return h('div', { class: 'grades', style: 'grid-template-columns:1fr 1fr' },
-          h('button', { type: 'button', class: 'btn grade--again' + (hint === false ? ' is-hint' : ''), on: { click: function () { answer(c, false); } } }, 'À revoir'),
-          h('button', { type: 'button', class: 'btn grade--good' + (hint === true ? ' is-hint' : ''), on: { click: function () { answer(c, true); } } }, 'Su'));
+        function b(cls, q, label, sub) {
+          return h('button', { type: 'button', class: 'btn ' + cls + ((hint === false && q === 0) || (hint === true && q === 2) ? ' is-hint' : ''), on: { click: function () { answer(c, q); } } }, label, h('small', {}, sub));
+        }
+        return h('div', { class: 'grades' },
+          b('grade--again', 0, 'À revoir', 'raté'), b('grade--hard', 1, 'Difficile', 'avec peine'),
+          b('grade--good', 2, 'Bien', 'su'), b('grade--easy', 3, 'Facile', 'évident'));
+      }
+      if (c.kind === 'flash' && getOpts().typed === '1') {
+        const fin = h('input', { type: 'text', class: 'input', placeholder: 'Ta réponse', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+        const fcheck = function () {
+          const v = fin.value.trim(), ok = flashRight(v, c);
+          hintBtn.remove();
+          ans.replaceChildren(h('div', { class: 'feedback ' + (ok ? 'feedback--ok' : 'feedback--warn') }, ok ? 'Correct !' : (v ? 'Compare avec la réponse attendue' : 'Réponse attendue')),
+            h('div', { class: 'pz-a' }, inlineMd(c.a)), v ? h('p', { class: 'secondary muted' }, 'Ta réponse : ' + v) : null,
+            explBox(c, 'pz-expl'), gradeBtns(v ? ok : undefined));
+        };
+        fin.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); fcheck(); } });
+        ans.append(fin, h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: fcheck } }, 'Valider'));
+        setTimeout(function () { try { fin.focus(); } catch (e) { /* ignore */ } }, 50);
+        return;
       }
       if (c.kind === 'flash') {
         ans.appendChild(h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: function () {
