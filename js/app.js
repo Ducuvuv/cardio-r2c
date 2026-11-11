@@ -99,6 +99,7 @@
     ['#/parasito',                'parasito',   'items',    'Parasito-myco',       true,  {}],
     ['#/parasito/:id',            'parasito',   'items',    'Fiche parasito',      true,  {}],
     ['#/parasito/:id/cartes',     'parasito',   'items',    'Cartes parasito',     true,  { train: true }],
+    ['#/scroll',                  'parasito',   'review',   'Mode Scroll',         true,  { scroll: true }],
     ['#/points',                  'points',     'items',    'Points cours',        true,  {}],
     ['#/points/:id',              'points',     'items',    'Point cours',         true,  {}],
     ['#/points/:id/:exam',        'points',     'items',    'Point cours',         true,  {}],

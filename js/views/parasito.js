@@ -563,7 +563,8 @@
     return h('div', { class: 'pz-train' },
       h('div', { class: 'pz-train__t' }, scope ? 'S’entraîner sur cette fiche' : (curPoly === 'bacterio' ? 'Réviser les cartes bactério' : curPoly === 'viro' ? 'Réviser les cartes viro' : 'Réviser les cartes parasito')),
       h('div', { class: 'pz-train__s' }, nf + ' flashcards · ' + nq + ' QROC — ' + (n.due ? n.due + ' à revoir · ' : '') + n.fresh + ' nouvelles · ' + n.known + ' bien sues'),
-      h('div', { style: 'margin-top:6px' }, trainChooser(base, n.total)));
+      h('div', { style: 'margin-top:6px' }, trainChooser(base, n.total)),
+      h('a', { class: 'btn btn--secondary btn--block', style: 'margin-top:8px', href: '#/scroll' }, '📱 Mode Scroll · swipe, combos, cœurs'));
   }
 
   let trainCounts = false;   // séance lancée depuis la Méthode des J (?pj=1) : seule celle-ci compte pour la note
@@ -686,12 +687,180 @@
     next();
   }
 
+  /* ---------- Mode Scroll : fil infini façon réseau social, branché sur la répétition espacée ----------
+   * Tap = retourner · swipe droite = Bien · swipe gauche = À revoir (boutons gardés dessous).
+   * Combo (À revoir le casse, Difficile le garde, bouclier tous les 25), modes Zen / Défi (3 cœurs par run, relance immédiate),
+   * carte ratée reproposée 3-4 cartes plus loin, cartes bonus ×2 au hasard, objectif du jour, dosage auto ≈ 85 % de réussite.
+   * État de jeu à part (localStorage « cardio.scroll.game »), jamais mélangé avec la progression SRS. */
+  const LS_GAME = 'cardio.scroll.game', LS_SCROLL = 'cardio.scroll.opts', GOAL = 50;
+  function loadGame() { try { return Object.assign({ xp: 0, bestCombo: 0, bestRun: 0, days: {} }, JSON.parse(localStorage.getItem(LS_GAME) || '{}')); } catch (e) { return { xp: 0, bestCombo: 0, bestRun: 0, days: {} }; } }
+  function saveGame(g) { try { localStorage.setItem(LS_GAME, JSON.stringify(g)); } catch (e) { /* ignore */ } }
+  function scrollOpts() { try { return Object.assign({ mode: 'zen', poly: 'all' }, JSON.parse(localStorage.getItem(LS_SCROLL) || '{}')); } catch (e) { return { mode: 'zen', poly: 'all' }; } }
+  function streakOf(g) {
+    let n = 0; const d = new Date();
+    for (;;) { const k = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); if ((g.days[k] || 0) > 0) { n++; d.setDate(d.getDate() - 1); } else break; }
+    return n;
+  }
+  function renderScroll(root) {
+    const o = scrollOpts();
+    const page = h('div', { class: 'page stack' });
+    root.appendChild(page);
+    function chip(key, val, label) {
+      return h('button', { type: 'button', class: 'btn btn--sm ' + (o[key] === val ? 'btn--primary' : 'btn--outline'), on: { click: function () { o[key] = val; try { localStorage.setItem(LS_SCROLL, JSON.stringify(o)); } catch (e) { /* ignore */ } start(); } } }, label);
+    }
+    function start() {
+      const g = loadGame();
+      const polys = [['all', 'Tout'], ['parasito', '🪱 Parasito']].concat(hasPoly('bacterio') ? [['bacterio', '🧫 Bactério']] : [], hasPoly('viro') ? [['viro', '🦠 Viro']] : []);
+      page.replaceChildren(
+        h('h2', { style: 'margin:0' }, '📱 Mode Scroll'),
+        h('p', { class: 'secondary muted', style: 'margin:0' }, 'Tape la carte pour la retourner, puis glisse ➡️ si tu savais, ⬅️ sinon. Les cartes viennent de ta répétition espacée : chaque swipe compte.'),
+        h('div', { class: 'card', style: 'display:grid;gap:8px' },
+          h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'secondary muted', style: 'min-width:64px' }, 'Mode'), chip('mode', 'zen', '🧘 Zen'), chip('mode', 'defi', '❤️ Défi (3 cœurs)')),
+          h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'secondary muted', style: 'min-width:64px' }, 'Matière'), polys.map(function (x) { return chip('poly', x[0], x[1]); })),
+          h('p', { class: 'secondary muted', style: 'margin:0' }, '🔥 Série : ' + streakOf(g) + ' jour' + (streakOf(g) > 1 ? 's' : '') + ' · ⭐ ' + g.xp + ' XP · record de combo ' + g.bestCombo + (o.mode === 'defi' ? ' · record de run ' + g.bestRun : '')),
+          h('button', { type: 'button', class: 'btn btn--primary btn--block btn--lg', on: { click: play } }, 'C’est parti')));
+    }
+    function play() {
+      const g = loadGame(), defi = o.mode === 'defi';
+      const pool = listAll().filter(function (p) { return o.poly === 'all' || polyOf(p) === o.poly; }).reduce(function (a, p) { return a.concat(cardsOf(p)); }, []);
+      const queued = {}, recent = [], feed = [];
+      let combo = 0, shields = 0, hearts = 3, runCards = 0, runGood = 0, runXp = 0, runBest = 0, msg = '';
+      const today = (function () { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); })();
+      function refill() {
+        const st = loadSrs(), now = Date.now(), shown = loadShown();
+        const acc = recent.length >= 8 ? recent.reduce(function (a, b) { return a + b; }, 0) / recent.length : 0.85;
+        const freshShare = acc < 0.75 ? 0.1 : acc > 0.92 ? 0.5 : 0.3;   // dosage pour rester autour de 85 % de réussite
+        const cap = getOpts().newcap, capLeft = cap === 'all' ? 100000 : Math.max(0, (Number(cap) || 20) - newToday());
+        const free = function (c) { return !queued[c.id]; };
+        const due = byFreshness(pool.filter(function (c) { return free(c) && st[c.id] && st[c.id].d <= now; }), shown);
+        const fresh = byFreshness(pool.filter(function (c) { return free(c) && !st[c.id]; }), shown);
+        const seen = byFreshness(pool.filter(function (c) { return free(c) && st[c.id] && st[c.id].d > now; }), shown);
+        const freshQueued = feed.filter(function (c) { return !st[c.id]; }).length;
+        let batch = due.slice(0, 12);
+        batch = batch.concat(fresh.slice(0, Math.max(0, Math.min(capLeft - freshQueued, Math.round(20 * freshShare), 20 - batch.length))));
+        batch = batch.concat(seen.slice(0, Math.max(0, 20 - batch.length)));
+        if (!batch.length) batch = byFreshness(pool, shown).slice(0, 20);   // tout est vu : on repasse les moins récentes
+        shuffle(batch).forEach(function (c) { queued[c.id] = 1; feed.push(Object.assign({}, c, { bonus: Math.random() < 1 / 12 })); });
+      }
+      const hud = h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-weight:600' });
+      const ring = h('div', { class: 'bar' }, h('span', { class: 'bar__fill' }));
+      const note = h('div', { class: 'secondary', style: 'min-height:1.4em;text-align:center;font-weight:600' });
+      const stage = h('div', {});
+      page.replaceChildren(hud, ring, note, stage);
+      function drawHud() {
+        const n = loadGame().days[today] || 0;
+        hud.replaceChildren(
+          h('span', { class: 'pill pill--accent' }, '🔥 ' + combo + (shields ? ' 🛡️' + (shields > 1 ? '×' + shields : '') : '')),
+          defi ? h('span', { class: 'pill' }, '❤️'.repeat(hearts) + '🤍'.repeat(3 - hearts)) : null,
+          h('span', { class: 'pill' }, '⭐ ' + runXp + ' XP'),
+          h('span', { class: 'secondary muted', style: 'margin-left:auto' }, Math.min(n, GOAL) + ' / ' + GOAL + ' aujourd’hui'),
+          h('a', { href: '#/scroll', class: 'btn btn--ghost btn--sm', on: { click: function (e) { e.preventDefault(); finish(true); } } }, 'Stop'));
+        ring.firstChild.style.width = Math.min(100, Math.round(100 * n / GOAL)) + '%';
+      }
+      function say(t) { msg = t; note.textContent = t || ''; }
+      function vibrate(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* ignore */ } }
+      function next() {
+        if (feed.length < 5) refill();
+        if (!feed.length) { stage.replaceChildren(h('div', { class: 'empty' }, h('div', { class: 'empty__title' }, 'Aucune carte disponible'))); return; }
+        show(feed.shift());
+      }
+      function show(c) {
+        markShown(c.id);
+        drawHud();
+        let flipped = false;
+        const secMap = c.fiche && c.fiche.sections ? cardSections(c.fiche, false) : {};
+        const sec = c.fiche && c.fiche.sections && secMap[c.id] != null ? c.fiche.sections[secMap[c.id]] : null;
+        const back = h('div', { style: 'display:none' });
+        const card = h('div', { class: 'card card--raised', style: 'min-height:52vh;display:flex;flex-direction:column;justify-content:center;gap:12px;touch-action:none;user-select:none;cursor:pointer;transition:transform .2s ease, opacity .2s ease;position:relative' },
+          h('div', { class: 'secondary muted', style: 'font-size:.8125rem' }, '📍 ' + str(c.fiche && c.fiche.title) + (sec && sec.h ? ' › ' + str(sec.h) : '')),
+          c.bonus ? h('span', { class: 'pill pill--warn', style: 'align-self:flex-start' }, '🎁 Carte bonus ×2') : null,
+          c.retry ? h('span', { class: 'pill pill--info', style: 'align-self:flex-start' }, '↩️ Rattrapage' + (defi && hearts < 3 ? ' : un cœur à gagner' : '')) : null,
+          h('div', { class: 'pz-q', style: 'font-size:1.25rem' }, inlineMd(c.q)),
+          back,
+          h('div', { class: 'secondary muted', style: 'font-size:.75rem;text-align:center;margin-top:auto' }, 'Tape pour retourner'));
+        const btns = h('div', { class: 'grades', style: 'display:none' });
+        function flip() {
+          if (flipped) return; flipped = true;
+          back.style.display = '';
+          back.replaceChildren(h('div', { class: 'pz-a', style: 'font-size:1.15rem' }, inlineMd(c.kind === 'qroc' ? '**' + str(c.a) + '**' : c.a)), c.x ? h('div', { class: 'secondary' }, inlineMd(c.x)) : null, explBox(c, 'pz-expl'));
+          card.lastChild.textContent = '⬅️ À revoir · Bien ➡️';
+          btns.style.display = '';
+        }
+        function b(cls, q, label) { return h('button', { type: 'button', class: 'btn ' + cls, on: { click: function (e) { e.stopPropagation(); rate(q); } } }, label); }
+        btns.append(b('grade--again', 0, 'À revoir'), b('grade--hard', 1, 'Difficile'), b('grade--good', 2, 'Bien'), b('grade--easy', 3, 'Facile'));
+        let x0 = null, y0 = 0, dx = 0;
+        card.addEventListener('pointerdown', function (e) { x0 = e.clientX; y0 = e.clientY; dx = 0; try { card.setPointerCapture(e.pointerId); } catch (er) { /* ignore */ } });
+        card.addEventListener('pointermove', function (e) { if (x0 == null || !flipped) return; dx = e.clientX - x0; card.style.transform = 'translateX(' + dx + 'px) rotate(' + (dx / 30) + 'deg)'; });
+        card.addEventListener('pointerup', function (e) {
+          if (x0 == null) return;
+          const mx = e.clientX - x0, my = e.clientY - y0; x0 = null;
+          if (!flipped) { if (Math.abs(mx) < 12 && Math.abs(my) < 12) flip(); else if (Math.abs(mx) > 60) flip(); return; }
+          if (Math.abs(mx) > 90) { rate(mx > 0 ? 2 : 0); return; }
+          card.style.transform = '';
+        });
+        function rate(q) {
+          card.style.transform = 'translateX(' + (q >= 1 ? 120 : -120) + '%)'; card.style.opacity = '0';
+          const ok = q >= 1;
+          if (!c.retry) grade(c.id, q);
+          recent.push(ok ? 1 : 0); if (recent.length > 20) recent.shift();
+          runCards++; if (ok) runGood++;
+          const gg = loadGame(); gg.days[today] = (gg.days[today] || 0) + 1;
+          let t = '';
+          if (q === 0) {
+            if (shields) { shields--; t = '🛡️ Bouclier utilisé : combo sauvé'; }
+            else { if (combo >= 5) t = 'Combo de ' + combo + ' cassé…'; combo = 0; }
+            if (defi) hearts--;
+            feed.splice(Math.min(feed.length, 3), 0, Object.assign({}, c, { retry: true, bonus: false }));
+            vibrate(40);
+          } else if (q >= 2) {
+            combo++;
+            if (combo % 25 === 0) { shields++; t = '🛡️ Bouclier gagné !'; vibrate([20, 40, 20]); }
+            else if (combo % 10 === 0) { t = '🔥 Combo ' + combo + ' !'; vibrate(25); }
+          }
+          if (ok && c.retry && defi && hearts < 3) { hearts++; t = '💚 Cœur récupéré'; }
+          const xp = ok ? Math.round((q === 1 ? 6 : q === 3 ? 12 : 10) * (c.bonus ? 2 : 1) * (1 + Math.floor(combo / 10) * 0.5)) : 0;
+          runXp += xp; gg.xp += xp;
+          runBest = Math.max(runBest, combo); gg.bestCombo = Math.max(gg.bestCombo, combo);
+          if (combo > 0 && combo === gg.bestCombo && combo >= 5 && !t) t = '🏆 Nouveau record de combo : ' + combo;
+          saveGame(gg);
+          const n = gg.days[today];
+          if (!t && n < GOAL && GOAL - n <= 5) t = 'Plus que ' + (GOAL - n) + ' carte' + (GOAL - n > 1 ? 's' : '') + ' pour ton objectif du jour';
+          if (n === GOAL) t = '🎯 Objectif du jour atteint ! Tu peux t’arrêter… ou continuer en bonus';
+          if (c.bonus && ok && !t) t = '🎁 Bonus : XP ×2';
+          say(t);
+          setTimeout(function () { if (defi && hearts <= 0) finish(false); else next(); }, 180);
+        }
+        card.addEventListener('click', function () { if (!flipped) flip(); });
+        stage.replaceChildren(card, btns);
+      }
+      function finish(stopped) {
+        const gg = loadGame();
+        if (defi && !stopped) gg.bestRun = Math.max(gg.bestRun, runGood);
+        saveGame(gg);
+        page.replaceChildren(
+          h('h2', { style: 'margin:0' }, defi && !stopped ? '💔 Plus de cœurs' : 'Session terminée'),
+          h('div', { class: 'tiles' },
+            h('div', { class: 'tile' }, h('span', { class: 'tile__label' }, 'Cartes'), h('span', { class: 'tile__value' }, String(runCards))),
+            h('div', { class: 'tile tile--ok' }, h('span', { class: 'tile__label' }, 'Réussies'), h('span', { class: 'tile__value' }, String(runGood))),
+            h('div', { class: 'tile tile--accent' }, h('span', { class: 'tile__label' }, 'Meilleur combo'), h('span', { class: 'tile__value' }, String(runBest))),
+            h('div', { class: 'tile' }, h('span', { class: 'tile__label' }, 'XP gagnés'), h('span', { class: 'tile__value' }, String(runXp)))),
+          defi && !stopped ? h('p', { class: 'secondary' }, runGood >= gg.bestRun ? '🏆 Record de run : ' + runGood + ' cartes réussies !' : 'Record de run : ' + gg.bestRun + ' — à battre.') : null,
+          h('button', { type: 'button', class: 'btn btn--primary btn--block btn--lg', on: { click: play } }, defi ? 'Rejouer un run' : 'Continuer à scroller'),
+          h('button', { type: 'button', class: 'btn btn--secondary btn--block', on: { click: start } }, 'Changer de mode'));
+      }
+      refill();
+      next();
+    }
+    start();
+  }
+
   // le titre de l'en-tête suit le poly affiché (Parasito-myco / Bactério)
   function render(params, query) { const el = renderInner(params, query); return { el: el, title: el.dataset.title || '' }; }
   function renderInner(params, query) {
     ensureStyles();
     const root = h('div', { class: 'view-parasito' });
     const id = str(params && params.id);
+    if (params && params.scroll) { root.dataset.title = 'Mode Scroll'; renderScroll(root); return root; }
     if (params && params.train) {
       if (query && query.poly) setPoly(query.poly);
       let scope = id === 'toutes' ? null : listAll().find(function (x) { return x.id === id; });
