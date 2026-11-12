@@ -9,6 +9,17 @@
   const C = (window.CARDIO = window.CARDIO || {});
   C.views = C.views || {};
 
+  // append / prepend / replaceChildren(null) écrivent « null » en texte : on ignore null / undefined / false
+  ['append', 'prepend', 'replaceChildren'].forEach(function (m) {
+    [Element.prototype, DocumentFragment.prototype].forEach(function (P) {
+      const orig = P[m];
+      if (!orig || orig.__noNull) return;
+      const fixed = function () { return orig.apply(this, Array.prototype.filter.call(arguments, function (a) { return a != null && a !== false; })); };
+      fixed.__noNull = true;
+      P[m] = fixed;
+    });
+  });
+
   /* ------------------------------------------------------------------ */
   /* Escaping                                                             */
   /* ------------------------------------------------------------------ */

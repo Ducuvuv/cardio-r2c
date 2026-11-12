@@ -60,6 +60,7 @@
     if (styled) return;
     styled = true;
     const css = [
+      '.pz-fig{margin:12px 0 4px}', '.pz-fig img{display:block;max-width:100%%;max-height:420px;margin:0 auto;border-radius:12px;background:#fff}', '.pz-fig figcaption{font-size:.8125rem;color:var(--muted);text-align:center;margin-top:6px;line-height:1.35}', '.pz-fig__cred{font-size:.6875rem;opacity:.8}',
       '.card-fig{margin:10px 0 0}', '.card-fig img{display:block;max-width:100%%;max-height:300px;margin:0 auto;border-radius:10px;background:#000}', '.card-fig figcaption{font-size:.6875rem;color:var(--muted);text-align:center;margin-top:4px}',
       '.pz-list{display:grid;gap:10px}',
       '.pz-card{display:block;padding:14px 16px;border-radius:var(--r-m);background:var(--surface);box-shadow:var(--shadow-1);color:inherit;text-decoration:none}',
@@ -328,8 +329,17 @@
       if (toc) toc.hidden = m === 'explain';
       if (m === 'explain') drawExplain(); else draw(m === 'test');
     }
+    // Figures de cours (content/figs.js : images sous licence libre, rattachées à une partie « Comprendre »)
+    const FIGS = (CARDIO.registry.figs && CARDIO.registry.figs[p.id]) || [];
+    function figsFor(i, used) {
+      return FIGS.filter(function (f, k) { if (used[k] || f.sec !== i) return false; used[k] = 1; return true; }).map(function (f) {
+        return h('figure', { class: 'pz-fig' }, h('a', { href: f.src, target: '_blank', rel: 'noopener' }, h('img', { src: f.src, alt: str(f.cap), loading: 'lazy' })),
+          h('figcaption', {}, inlineMd(f.cap), h('span', { class: 'pz-fig__cred' }, ' — ' + str(f.credit) + (f.lic ? ', ' + f.lic : ''))));
+      });
+    }
     function drawExplain() {
       const x = p.explain;
+      const usedF = {};
       body.replaceChildren();
       if (x.intro) body.appendChild(h('p', { class: 'pz-intro' }, inlineMd(x.intro)));
       const eMap = cardSections(p, true);
@@ -338,6 +348,7 @@
         const paras = str(s.text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean);
         body.appendChild(h('section', { class: 'pz-sec' }, h('h3', {}, str(s.h)),
           h('div', { class: 'pz-text' }, paras.map(function (t) { return h('p', {}, inlineMd(t)); })),
+          figsFor(i, usedF),
           Array.isArray(s.retenir) && s.retenir.length ? h('div', { class: 'pz-retenir' }, h('span', { class: 'caption' }, 'À retenir'),
             h('ul', {}, s.retenir.map(function (r) { return h('li', {}, inlineMd(r)); }))) : null,
           nSec ? h('a', { class: 'btn btn--outline btn--sm', style: 'margin-top:8px', href: '#/parasito/' + encodeURIComponent(p.id) + '/cartes?sec=e' + i + '&size=6&order=random' }, '▶ Me tester sur cette partie · ' + Math.min(6, nSec) + ' cartes') : null));
