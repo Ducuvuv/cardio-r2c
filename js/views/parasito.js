@@ -60,6 +60,7 @@
     if (styled) return;
     styled = true;
     const css = [
+      '.pz-tab{margin:12px 0 4px}', '.pz-tab .md-table{overflow-x:auto;-webkit-overflow-scrolling:touch}', '.pz-tab table{border-collapse:collapse;width:100%%;font-size:.8125rem;line-height:1.3}', '.pz-tab th,.pz-tab td{border:1px solid var(--line,#ddd);padding:5px 7px;vertical-align:top;text-align:left}', '.pz-tab th{background:var(--surface-2,#f3f4f6);font-weight:600}', '.pz-tab tr:nth-child(even) td{background:rgba(127,127,127,.05)}',
       '.pz-fig{margin:12px 0 4px}', '.pz-fig img{display:block;max-width:100%%;max-height:420px;margin:0 auto;border-radius:12px;background:#fff}', '.pz-fig figcaption{font-size:.8125rem;color:var(--muted);text-align:center;margin-top:6px;line-height:1.35}', '.pz-fig__cred{font-size:.6875rem;opacity:.8}',
       '.card-fig{margin:10px 0 0}', '.card-fig img{display:block;max-width:100%%;max-height:300px;margin:0 auto;border-radius:10px;background:#000}', '.card-fig figcaption{font-size:.6875rem;color:var(--muted);text-align:center;margin-top:4px}',
       '.pz-list{display:grid;gap:10px}',
@@ -337,6 +338,14 @@
           h('figcaption', {}, inlineMd(f.cap), h('span', { class: 'pz-fig__cred' }, ' — ' + str(f.credit) + (f.lic ? ', ' + f.lic : ''))));
       });
     }
+    // Tableaux de synthèse (content/tabs.js) : [{sec, title, md}] — markdown pipe tables, rattachés à une partie « Comprendre »
+    const TABS = (CARDIO.registry.tabs && CARDIO.registry.tabs[p.id]) || [];
+    function tabEl(t) {
+      const u = util();
+      return h('div', { class: 'pz-tab' }, h('div', { class: 'caption' }, '📊 ' + str(t.title)),
+        h('div', { class: 'md', html: typeof u.md === 'function' ? u.md(str(t.md)) : '' }));
+    }
+    function tabsFor(i) { return TABS.filter(function (t) { return t.sec === i; }).map(tabEl); }
     function drawExplain() {
       const x = p.explain;
       const usedF = {};
@@ -348,6 +357,7 @@
         const paras = str(s.text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean);
         body.appendChild(h('section', { class: 'pz-sec' }, h('h3', {}, str(s.h)),
           h('div', { class: 'pz-text' }, paras.map(function (t) { return h('p', {}, inlineMd(t)); })),
+          tabsFor(i),
           figsFor(i, usedF),
           Array.isArray(s.retenir) && s.retenir.length ? h('div', { class: 'pz-retenir' }, h('span', { class: 'caption' }, 'À retenir'),
             h('ul', {}, s.retenir.map(function (r) { return h('li', {}, inlineMd(r)); }))) : null,
@@ -376,6 +386,7 @@
         }
       });
       after.replaceChildren();
+      if (!test && TABS.length) body.appendChild(h('section', { class: 'pz-sec' }, h('h3', {}, 'Tableaux de synthèse'), TABS.map(tabEl)));
       if (!test) { mark(p.id, { seen: true }); after.appendChild(footer()); return; }
       let left = hidden.length;
       const hint = h('p', { class: 'secondary muted center' }, 'Touche chaque mot caché après l’avoir dit de tête (' + left + ' à trouver).');
