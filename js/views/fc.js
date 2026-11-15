@@ -280,7 +280,10 @@
       const opts = { poly: poly, fiches: sel, mode: mode, prios: prios };
       const cnt = counts(opts);
       const n = pool(opts).length;
+      let deckCard = null;   // Paquet du jour (js/deck.js)
+      try { deckCard = C.deck && C.deck.card(home); } catch (e) { deckCard = null; }
       put(root,
+        deckCard,
         saved && saved.ids && saved.ids.length ? h('div', { class: 'card stack' }, h('strong', {}, 'Séance en cours : ' + saved.index + ' / ' + saved.ids.length),
           h('div', { class: 'row', style: 'gap:8px' },
             h('button', { type: 'button', class: 'btn btn--primary', on: { click: function () { saved.resume = true; lsSet(LS_SESSION, saved); runSession(root, saved.ids, saved.scope, home); } } }, 'Reprendre'),

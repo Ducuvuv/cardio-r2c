@@ -378,6 +378,12 @@
     return v && Number(v.leeches) > 0 ? Number(v.leeches) : 0;
   }
 
+  /* Chip « 📦 Paquet du jour · x/N · k chapitres » (js/deck.js) */
+  function deckLabel() {
+    const d = CARDIO.deck ? safe(function () { return CARDIO.deck.summary(); }, null) : null;
+    if (!d) return '📦 Paquet du jour';
+    return '📦 Paquet du jour' + (d.total ? ' · ' + d.done + '/' + d.total : '') + ' · ' + d.k + ' chapitre' + (d.k > 1 ? 's' : '');
+  }
   function chipsBlock() {
     const spe = activeSpe();
     const cardioOnly = spe !== 'all' && spe !== 'cardio';
@@ -390,6 +396,7 @@
     const speShort = m ? safe(function () { return m.short(spe); }, spe) : spe;
     const chips = [
       { label: '📱 Mode Scroll', href: '#/scroll', ico: 'flash', keep: true, parasito: true },
+      { label: deckLabel(), href: '#/scroll?deck=1', ico: 'layers', keep: true, deck: true },
       { label: 'Méthode des J', href: '#/planj', ico: 'calendar', keep: true },
       { label: 'EDN / Partiels', href: '#/edn', ico: 'timer', keep: true, edn: true },
       { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
@@ -429,6 +436,7 @@
       if (c.dp && !((spe === 'dermato' || spe === 'pneumo') && ttt2Spe)) return false;
       if (simple && !KEEP[c.label] && !c.keep) return false;
       if (!simple && c.simple) return false;
+      if (c.deck) return !!(CARDIO.deck && safe(function () { return CARDIO.deck.available(); }, false));
       if (c.fcards) return !!(CARDIO.registry && CARDIO.registry.fc && CARDIO.registry.fc.cards && CARDIO.registry.fc.cards.length);
       if (c.remote) return !!(CARDIO.remote && CARDIO.remote.active);
       if (c.edn) { const v = CARDIO.views && CARDIO.views.edn; return !!(v && v.available && v.available()); }

@@ -44,7 +44,11 @@
   function noA() { const r = CARDIO.registry || {}; return Array.isArray(r.parasitoNoA) ? r.parasitoNoA : []; }
   function loadState() { try { return JSON.parse(localStorage.getItem(LS) || '{}') || {}; } catch (e) { return {}; } }
   function saveState(st) { try { localStorage.setItem(LS, JSON.stringify(st)); } catch (e) { /* stockage indisponible */ } }
-  function mark(id, patch) { const st = loadState(); st[id] = Object.assign({}, st[id], patch, { at: Date.now() }); saveState(st); }
+  function mark(id, patch) {
+    const st = loadState(); st[id] = Object.assign({}, st[id], patch, { at: Date.now() }); saveState(st);
+    // fiche lue : ses cartes entrent dans le Paquet du jour (js/deck.js)
+    if (patch && patch.seen) try { if (CARDIO.deck) CARDIO.deck.activate('p:' + id, 'read'); } catch (e) { /* ignore */ }
+  }
   function count(p) { return (p.sections || []).reduce(function (n, s) { return n + ((s && s.points) || []).length; }, 0); }
 
   function inlineMd(text) {
@@ -718,7 +722,7 @@
   const LS_GAME = 'cardio.scroll.game', LS_SCROLL = 'cardio.scroll.opts', GOAL = 50;
   function loadGame() { try { return Object.assign({ xp: 0, bestCombo: 0, bestRun: 0, days: {} }, JSON.parse(localStorage.getItem(LS_GAME) || '{}')); } catch (e) { return { xp: 0, bestCombo: 0, bestRun: 0, days: {} }; } }
   function saveGame(g) { try { localStorage.setItem(LS_GAME, JSON.stringify(g)); } catch (e) { /* ignore */ } }
-  function scrollOpts() { try { return Object.assign({ mode: 'zen', poly: 'all' }, JSON.parse(localStorage.getItem(LS_SCROLL) || '{}')); } catch (e) { return { mode: 'zen', poly: 'all' }; } }
+  function scrollOpts() { try { return Object.assign({ mode: 'zen', poly: 'all', src: 'feed' }, JSON.parse(localStorage.getItem(LS_SCROLL) || '{}')); } catch (e) { return { mode: 'zen', poly: 'all', src: 'feed' }; } }
   function streakOf(g) {
     let n = 0; const d = new Date();
     for (;;) { const k = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); if ((g.days[k] || 0) > 0) { n++; d.setDate(d.getDate() - 1); } else break; }
@@ -743,8 +747,11 @@
     if (!fcState(id)) bumpNew();
     s.set('fc.' + id, v.nextState(fcState(id), q === 0 ? 'again' : q === 3 ? 'easy' : 'good'));
   }
-  function renderScroll(root) {
+  /* Paquet du jour (js/deck.js) : ?deck=1 ou source « 📦 Paquet du jour » mémorisée. */
+  function deckApi() { const d = CARDIO.deck; return d && typeof d.today === 'function' && d.available() ? d : null; }
+  function renderScroll(root, query) {
     const o = scrollOpts();
+    if (query && query.deck === '1') { o.src = 'deck'; try { localStorage.setItem(LS_SCROLL, JSON.stringify(o)); } catch (e) { /* ignore */ } }
     const page = h('div', { class: 'page stack' });
     root.appendChild(page);
     function chip(key, val, label) {
@@ -753,6 +760,8 @@
     function start() {
       const g = loadGame();
       const fcN = fcCards().length;
+      const DK = deckApi(), deckOn = !!DK && o.src === 'deck';
+      const dt = deckOn ? DK.today() : null;
       const polys = [['all', 'Tout'], ['parasito', '🪱 Parasito']].concat(hasPoly('bacterio') ? [['bacterio', '🧫 Bactério']] : [], hasPoly('viro') ? [['viro', '🦠 Viro']] : [],
         fcN ? [['cardio', '❤️ Cardio'], ['dermato', '🧴 Dermato'], ['pneumo', '🫁 Pneumo']] : []);
       page.replaceChildren(
@@ -760,18 +769,29 @@
         h('p', { class: 'secondary muted', style: 'margin:0' }, 'Tape la carte pour la retourner, puis glisse ➡️ si tu savais, ⬅️ sinon. Les cartes viennent de ta répétition espacée : chaque swipe compte.'),
         h('div', { class: 'card', style: 'display:grid;gap:8px' },
           h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'secondary muted', style: 'min-width:64px' }, 'Mode'), chip('mode', 'zen', '🧘 Zen'), chip('mode', 'defi', '❤️ Défi (3 cœurs)')),
-          h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'secondary muted', style: 'min-width:64px' }, 'Matière'), polys.map(function (x) { return chip('poly', x[0], x[1]); })),
+          DK ? h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'secondary muted', style: 'min-width:64px' }, 'Cartes'), chip('src', 'feed', '🌀 Mon fil'), chip('src', 'deck', '📦 Paquet du jour')) : null,
+          deckOn ? h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center' },
+            h('span', { style: 'flex:1;min-width:160px;font-weight:600' }, !dt.k ? 'Aucun chapitre dans ton paquet' : dt.done >= dt.total ? 'Paquet du jour terminé ✓ (' + dt.total + ' cartes)' : '📦 ' + dt.done + ' / ' + dt.total + ' · ' + dt.k + ' chapitre' + (dt.k > 1 ? 's' : '') + ' · ' + dt.per + ' par chapitre'),
+            h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: function () { DK.openSheet(start); } } }, 'Mon paquet'))
+            : h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'secondary muted', style: 'min-width:64px' }, 'Matière'), polys.map(function (x) { return chip('poly', x[0], x[1]); })),
+          deckOn && !dt.k ? h('p', { class: 'secondary muted', style: 'margin:0' }, 'Ouvre un cours ou place-le dans la Méthode des J : ses flashcards reviendront ici chaque jour. Tu peux aussi l’ajouter dans « Mon paquet ».') : null,
           h('p', { class: 'secondary muted', style: 'margin:0' }, '🔥 Série : ' + streakOf(g) + ' jour' + (streakOf(g) > 1 ? 's' : '') + ' · ⭐ ' + g.xp + ' XP · record de combo ' + g.bestCombo + (o.mode === 'defi' ? ' · record de run ' + g.bestRun : '')),
-          h('button', { type: 'button', class: 'btn btn--primary btn--block btn--lg', on: { click: play } }, 'C’est parti')));
+          deckOn && dt.remaining.length === 0 ? null : h('button', { type: 'button', class: 'btn btn--primary btn--block btn--lg', on: { click: play } }, deckOn ? (dt.done ? 'Reprendre le paquet · ' : 'C’est parti · ') + dt.remaining.length + ' cartes' : 'C’est parti')));
     }
     function play() {
       const g = loadGame(), defi = o.mode === 'defi';
-      const pool = listAll().filter(function (p) { return o.poly === 'all' || polyOf(p) === o.poly; }).reduce(function (a, p) { return a.concat(cardsOf(p)); }, [])
-        .concat(fcCards().filter(function (c) { return o.poly === 'all' || c.poly === o.poly; }));
+      const DK = deckApi(), deck = DK && o.src === 'deck' ? DK.today() : null;   // Paquet du jour : file fixe, pas de recharge
+      const pool = listAll().filter(function (p) { return deck || o.poly === 'all' || polyOf(p) === o.poly; }).reduce(function (a, p) { return a.concat(cardsOf(p)); }, [])
+        .concat(fcCards().filter(function (c) { return deck || o.poly === 'all' || c.poly === o.poly; }));
       const queued = {}, recent = [], feed = [];
+      if (deck) {
+        const byId = {}; pool.forEach(function (c) { byId[c.id] = c; });
+        deck.remaining.forEach(function (id) { if (byId[id]) { queued[id] = 1; feed.push(Object.assign({}, byId[id], { bonus: Math.random() < 1 / 12 })); } });
+      }
       let combo = 0, shields = 0, hearts = 3, runCards = 0, runGood = 0, runXp = 0, runBest = 0, msg = '';
       const today = (function () { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); })();
       function refill() {
+        if (deck) return;
         const st = loadSrs(), now = Date.now(), shown = loadShown();
         const acc = recent.length >= 8 ? recent.reduce(function (a, b) { return a + b; }, 0) / recent.length : 0.85;
         const freshShare = acc < 0.75 ? 0.1 : acc > 0.92 ? 0.5 : 0.3;   // dosage pour rester autour de 85 % de réussite
@@ -796,18 +816,21 @@
       page.replaceChildren(hud, ring, note, stage);
       function drawHud() {
         const n = loadGame().days[today] || 0;
+        const dk = deck ? DK.today() : null;
         hud.replaceChildren.apply(hud, [
           h('span', { class: 'pill pill--accent' }, '🔥 ' + combo + (shields ? ' 🛡️' + (shields > 1 ? '×' + shields : '') : '')),
           defi ? h('span', { class: 'pill' }, '❤️'.repeat(hearts) + '🤍'.repeat(3 - hearts)) : null,
           h('span', { class: 'pill' }, '⭐ ' + runXp + ' XP'),
-          h('span', { class: 'secondary muted', style: 'margin-left:auto' }, Math.min(n, GOAL) + ' / ' + GOAL + ' aujourd’hui'),
+          dk ? h('span', { class: 'secondary muted', style: 'margin-left:auto' }, '📦 ' + dk.done + ' / ' + dk.total)
+            : h('span', { class: 'secondary muted', style: 'margin-left:auto' }, Math.min(n, GOAL) + ' / ' + GOAL + ' aujourd’hui'),
           h('a', { href: '#/scroll', class: 'btn btn--ghost btn--sm', on: { click: function (e) { e.preventDefault(); finish(true); } } }, 'Stop')].filter(Boolean));
-        ring.firstChild.style.width = Math.min(100, Math.round(100 * n / GOAL)) + '%';
+        ring.firstChild.style.width = (dk ? (dk.total ? Math.round(100 * dk.done / dk.total) : 100) : Math.min(100, Math.round(100 * n / GOAL))) + '%';
       }
       function say(t) { msg = t; note.textContent = t || ''; }
       function vibrate(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* ignore */ } }
       function next() {
         if (feed.length < 5) refill();
+        if (!feed.length && deck) { finish(false, true); return; }
         if (!feed.length) { stage.replaceChildren(h('div', { class: 'empty' }, h('div', { class: 'empty__title' }, 'Aucune carte disponible'))); return; }
         show(feed.shift());
       }
@@ -848,7 +871,7 @@
         function rate(q) {
           card.style.transform = 'translateX(' + (q >= 1 ? 120 : -120) + '%)'; card.style.opacity = '0';
           const ok = q >= 1;
-          if (!c.retry) { if (c.src === 'fc') fcGrade(c.fcid, q); else grade(c.id, q); }
+          if (!c.retry) { if (c.src === 'fc') fcGrade(c.fcid, q); else grade(c.id, q); if (deck) try { DK.markDone(c.id, q); } catch (e) { /* ignore */ } }
           recent.push(ok ? 1 : 0); if (recent.length > 20) recent.shift();
           runCards++; if (ok) runGood++;
           const gg = loadGame(); gg.days[today] = (gg.days[today] || 0) + 1;
@@ -871,8 +894,8 @@
           if (combo > 0 && combo === gg.bestCombo && combo >= 5 && !t) t = '🏆 Nouveau record de combo : ' + combo;
           saveGame(gg);
           const n = gg.days[today];
-          if (!t && n < GOAL && GOAL - n <= 5) t = 'Plus que ' + (GOAL - n) + ' carte' + (GOAL - n > 1 ? 's' : '') + ' pour ton objectif du jour';
-          if (n === GOAL) t = '🎯 Objectif du jour atteint ! Tu peux t’arrêter… ou continuer en bonus';
+          if (!t && !deck && n < GOAL && GOAL - n <= 5) t = 'Plus que ' + (GOAL - n) + ' carte' + (GOAL - n > 1 ? 's' : '') + ' pour ton objectif du jour';
+          if (n === GOAL && !deck) t = '🎯 Objectif du jour atteint ! Tu peux t’arrêter… ou continuer en bonus';
           if (c.bonus && ok && !t) t = '🎁 Bonus : XP ×2';
           say(t);
           setTimeout(function () { if (defi && hearts <= 0) finish(false); else next(); }, 180);
@@ -880,19 +903,23 @@
         card.addEventListener('click', function () { if (!flipped) flip(); });
         stage.replaceChildren(card, btns);
       }
-      function finish(stopped) {
+      function finish(stopped, deckEnd) {
         const gg = loadGame();
-        if (defi && !stopped) gg.bestRun = Math.max(gg.bestRun, runGood);
+        if (defi && !stopped && !deckEnd) gg.bestRun = Math.max(gg.bestRun, runGood);
         saveGame(gg);
+        const dk = deck ? DK.today() : null;
+        const deckLeft = dk ? dk.remaining.length : 0;
         page.replaceChildren.apply(page, [
-          h('h2', { style: 'margin:0' }, defi && !stopped ? '💔 Plus de cœurs' : 'Session terminée'),
+          h('h2', { style: 'margin:0' }, dk && !deckLeft ? 'Paquet du jour terminé ✓' : defi && !stopped && !deckEnd ? '💔 Plus de cœurs' : 'Session terminée'),
+          dk ? h('p', { class: 'secondary', style: 'margin:0' }, '📦 ' + dk.done + ' / ' + dk.total + ' cartes du paquet' + (deckLeft ? ' · encore ' + deckLeft + ' à faire' : ' · reviens demain pour le prochain')) : null,
           h('div', { class: 'tiles' },
             h('div', { class: 'tile' }, h('span', { class: 'tile__label' }, 'Cartes'), h('span', { class: 'tile__value' }, String(runCards))),
             h('div', { class: 'tile tile--ok' }, h('span', { class: 'tile__label' }, 'Réussies'), h('span', { class: 'tile__value' }, String(runGood))),
             h('div', { class: 'tile tile--accent' }, h('span', { class: 'tile__label' }, 'Meilleur combo'), h('span', { class: 'tile__value' }, String(runBest))),
             h('div', { class: 'tile' }, h('span', { class: 'tile__label' }, 'XP gagnés'), h('span', { class: 'tile__value' }, String(runXp)))),
-          defi && !stopped ? h('p', { class: 'secondary' }, runGood >= gg.bestRun ? '🏆 Record de run : ' + runGood + ' cartes réussies !' : 'Record de run : ' + gg.bestRun + ' — à battre.') : null,
-          h('button', { type: 'button', class: 'btn btn--primary btn--block btn--lg', on: { click: play } }, defi ? 'Rejouer un run' : 'Continuer à scroller'),
+          defi && !stopped && !deckEnd ? h('p', { class: 'secondary' }, runGood >= gg.bestRun ? '🏆 Record de run : ' + runGood + ' cartes réussies !' : 'Record de run : ' + gg.bestRun + ' — à battre.') : null,
+          dk ? (deckLeft ? h('button', { type: 'button', class: 'btn btn--primary btn--block btn--lg', on: { click: play } }, 'Reprendre le paquet · ' + deckLeft + ' cartes') : null)
+            : h('button', { type: 'button', class: 'btn btn--primary btn--block btn--lg', on: { click: play } }, defi ? 'Rejouer un run' : 'Continuer à scroller'),
           h('button', { type: 'button', class: 'btn btn--secondary btn--block', on: { click: start } }, 'Changer de mode')].filter(Boolean));
       }
       refill();
@@ -907,7 +934,7 @@
     ensureStyles();
     const root = h('div', { class: 'view-parasito' });
     const id = str(params && params.id);
-    if (params && params.scroll) { root.dataset.title = 'Mode Scroll'; renderScroll(root); return root; }
+    if (params && params.scroll) { root.dataset.title = 'Mode Scroll'; renderScroll(root, query); return root; }
     if (params && params.train) {
       if (query && query.poly) setPoly(query.poly);
       let scope = id === 'toutes' ? null : listAll().find(function (x) { return x.id === id; });

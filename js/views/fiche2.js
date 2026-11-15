@@ -857,6 +857,8 @@
     const num = str(params && (params.num || params.item));
     const q = query || {};
     const f = data(num);
+    // cours ouvert : ses flashcards entrent dans le Paquet du jour (js/deck.js)
+    if (num) try { if (CARDIO.deck) CARDIO.deck.activate('i:' + num, 'read'); } catch (e) { /* ignore */ }
     if (!f || str(q.v) === '1') return renderV1(params, query, num);
     ensureStyles();
 
