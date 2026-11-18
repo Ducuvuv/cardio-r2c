@@ -770,11 +770,12 @@
         h('div', { class: 'card', style: 'display:grid;gap:8px' },
           h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'secondary muted', style: 'min-width:64px' }, 'Mode'), chip('mode', 'zen', '🧘 Zen'), chip('mode', 'defi', '❤️ Défi (3 cœurs)')),
           DK ? h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'secondary muted', style: 'min-width:64px' }, 'Cartes'), chip('src', 'feed', '🌀 Mon fil'), chip('src', 'deck', '📦 Paquet du jour')) : null,
+          deckOn && DK.slotChips ? DK.slotChips(start) : null,
           deckOn ? h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center' },
-            h('span', { style: 'flex:1;min-width:160px;font-weight:600' }, !dt.k ? 'Aucun chapitre dans ton paquet' : dt.done >= dt.total ? 'Paquet du jour terminé ✓ (' + dt.total + ' cartes)' : '📦 ' + dt.done + ' / ' + dt.total + ' · ' + dt.k + ' chapitre' + (dt.k > 1 ? 's' : '') + ' · ' + dt.per + ' par chapitre'),
-            h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: function () { DK.openSheet(start); } } }, 'Mon paquet'))
+            h('span', { style: 'flex:1;min-width:160px;font-weight:600' }, !dt.k ? 'Aucun cours dans ce paquet' : dt.done >= dt.total ? 'Paquet du jour terminé ✓ (' + dt.total + ' cartes)' : '📦 ' + dt.done + ' / ' + dt.total + ' · ' + dt.k + ' cours · ' + dt.per + ' par cours'),
+            h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: function () { DK.openSheet(start); } } }, 'Mes paquets'))
             : h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'secondary muted', style: 'min-width:64px' }, 'Matière'), polys.map(function (x) { return chip('poly', x[0], x[1]); })),
-          deckOn && !dt.k ? h('p', { class: 'secondary muted', style: 'margin:0' }, 'Ouvre un cours ou place-le dans la Méthode des J : ses flashcards reviendront ici chaque jour. Tu peux aussi l’ajouter dans « Mon paquet ».') : null,
+          deckOn && !dt.k ? h('p', { class: 'secondary muted', style: 'margin:0' }, 'Ouvre un cours ou place-le dans la Méthode des J : ses flashcards reviendront ici chaque jour. Tu peux aussi l’ajouter dans « Mes paquets ».') : null,
           h('p', { class: 'secondary muted', style: 'margin:0' }, '🔥 Série : ' + streakOf(g) + ' jour' + (streakOf(g) > 1 ? 's' : '') + ' · ⭐ ' + g.xp + ' XP · record de combo ' + g.bestCombo + (o.mode === 'defi' ? ' · record de run ' + g.bestRun : '')),
           deckOn && dt.remaining.length === 0 ? null : h('button', { type: 'button', class: 'btn btn--primary btn--block btn--lg', on: { click: play } }, deckOn ? (dt.done ? 'Reprendre le paquet · ' : 'C’est parti · ') + dt.remaining.length + ' cartes' : 'C’est parti')));
     }

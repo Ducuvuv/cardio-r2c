@@ -30,9 +30,40 @@
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 
   function blank() { return { chapters: {}, off: {}, size: 100, min: 2, maxCh: 0, lastIn: {}, presets: [], day: null }; }
-  function load() {
+  /* ---------- slots : plusieurs paquets indépendants (cours, réglages, file du jour propres) ----------
+   * META = {cur, list:[{id, name, auto}]}. Le slot « main » garde la clé historique LS ; les autres LS + '.' + id.
+   * auto = les fiches lues et la Méthode des J y ajoutent leurs cours. */
+  const META = 'cardio.deck.slots';
+  function slotKey(id) { return !id || id === 'main' ? LS : LS + '.' + id; }
+  function meta() {
+    let m = null;
+    try { m = JSON.parse(localStorage.getItem(META) || 'null'); } catch (e) { m = null; }
+    if (m && Array.isArray(m.list) && m.list.length) {
+      m.list = m.list.filter(function (x) { return x && typeof x.id === 'string' && /^[a-z0-9]+$/.test(x.id); }).map(function (x) { return { id: x.id, name: str(x.name).slice(0, 40) || 'Paquet', auto: !!x.auto }; });
+      if (m.list.length) { if (!m.list.some(function (x) { return x.id === m.cur; })) m.cur = m.list[0].id; return m; }
+    }
+    m = { cur: 'main', list: [{ id: 'main', name: 'Paquet principal', auto: true }] };
+    /* migration : chaque paquet enregistré (v125) devient un slot */
     try {
-      const raw = JSON.parse(localStorage.getItem(LS) || 'null');
+      const d = load('main');
+      (d.presets || []).forEach(function (pr, i) {
+        const id = 's' + Date.now().toString(36) + i;
+        const nd = blank(); pr.keys.forEach(function (k) { nd.chapters[k] = { added: Date.now(), src: 'manual' }; });
+        if (pr.size) nd.size = pr.size; if (pr.min) nd.min = pr.min; if (pr.maxCh != null) nd.maxCh = pr.maxCh;
+        save(nd, id); m.list.push({ id: id, name: pr.name, auto: false });
+      });
+      if ((d.presets || []).length) { d.presets = []; save(d, 'main'); }
+    } catch (e) { /* ignore */ }
+    saveMeta(m);
+    return m;
+  }
+  function saveMeta(m) { try { localStorage.setItem(META, JSON.stringify(m)); } catch (e) { /* ignore */ } }
+  function curId() { return meta().cur; }
+  function curSlot() { const m = meta(); return m.list.find(function (x) { return x.id === m.cur; }) || m.list[0]; }
+
+  function load(id) {
+    try {
+      const raw = JSON.parse(localStorage.getItem(slotKey(id === undefined ? curId() : id)) || 'null');
       const d = blank();
       if (!raw || typeof raw !== 'object') return d;
       if (raw.chapters && typeof raw.chapters === 'object') Object.keys(raw.chapters).forEach(function (k) {
@@ -53,7 +84,7 @@
       return d;
     } catch (e) { return blank(); }
   }
-  function save(d) { try { localStorage.setItem(LS, JSON.stringify(d)); } catch (e) { /* stockage indisponible */ } }
+  function save(d, id) { try { localStorage.setItem(slotKey(id === undefined ? curId() : id), JSON.stringify(d)); } catch (e) { /* stockage indisponible */ } }
 
   /* ---------- chapitres et cartes ---------- */
   function polys() { const r = CARDIO.registry || {}; return [].concat(Array.isArray(r.parasito) ? r.parasito : [], Array.isArray(r.bacterio) ? r.bacterio : [], Array.isArray(r.viro) ? r.viro : []); }
@@ -179,7 +210,7 @@
   function ensure() {
     const d = load();
     let changed = false;
-    planjKeys().forEach(function (k) { if (!d.chapters[k] && !d.off[k]) { d.chapters[k] = { added: Date.now(), src: 'planj' }; changed = true; } });
+    if (curSlot().auto) planjKeys().forEach(function (k) { if (!d.chapters[k] && !d.off[k]) { d.chapters[k] = { added: Date.now(), src: 'planj' }; changed = true; } });
     if (!d.day || d.day.date !== today() || changed) { rebuild(d); save(d); }
     return d;
   }
@@ -189,14 +220,50 @@
     try {
       k = str(k);
       if (!/^[ip]:./.test(k)) return;
-      const d = load();
-      if (d.chapters[k]) return;
-      if (d.off[k] && !force) return;
-      delete d.off[k];
-      d.chapters[k] = { added: Date.now(), src: src || 'manual' };
-      if (d.day && d.day.date === today()) rebuild(d);
-      save(d);
+      src = src || 'manual';
+      const ids = src === 'manual' ? [curId()] : meta().list.filter(function (x) { return x.auto; }).map(function (x) { return x.id; });
+      ids.forEach(function (id) {
+        const d = load(id);
+        if (d.chapters[k]) return;
+        if (d.off[k] && !force) return;
+        delete d.off[k];
+        d.chapters[k] = { added: Date.now(), src: src };
+        if (d.day && d.day.date === today()) rebuild(d);
+        save(d, id);
+      });
     } catch (e) { /* ignore */ }
+  }
+  /* --- gestion des slots --- */
+  function slots() {
+    const m = meta();
+    return m.list.map(function (x) {
+      const d = load(x.id), t = today();
+      const q = d.day && d.day.date === t ? d.day.queue : [];
+      return { id: x.id, name: x.name, auto: x.auto, cur: x.id === m.cur, chapters: Object.keys(d.chapters).length, done: q.filter(function (k) { return d.day.done[k] != null; }).length, total: q.length };
+    });
+  }
+  function useSlot(id) { const m = meta(); if (m.list.some(function (x) { return x.id === id; })) { m.cur = id; saveMeta(m); } }
+  /* Nouveau slot : vide ou copie des cours/réglages du slot courant. Devient le slot courant. */
+  function newSlot(name, copy) {
+    try {
+      const m = meta(), id = 's' + Date.now().toString(36);
+      const src = load(), d = blank();
+      if (copy) { Object.keys(src.chapters).forEach(function (k) { d.chapters[k] = { added: Date.now(), src: 'manual' }; }); d.size = src.size; d.min = src.min; d.maxCh = src.maxCh; }
+      save(d, id);
+      m.list.push({ id: id, name: str(name).trim().slice(0, 40) || 'Paquet ' + (m.list.length + 1), auto: false });
+      m.cur = id; saveMeta(m);
+      return id;
+    } catch (e) { return null; }
+  }
+  function renameSlot(id, name) { const m = meta(), x = m.list.find(function (y) { return y.id === id; }); name = str(name).trim().slice(0, 40); if (x && name) { x.name = name; saveMeta(m); } }
+  function setAuto(id, v) { const m = meta(), x = m.list.find(function (y) { return y.id === id; }); if (x) { x.auto = !!v; saveMeta(m); } }
+  function deleteSlot(id) {
+    const m = meta();
+    if (m.list.length < 2) return;
+    m.list = m.list.filter(function (x) { return x.id !== id; });
+    if (m.cur === id) m.cur = m.list[0].id;
+    saveMeta(m);
+    try { localStorage.removeItem(slotKey(id)); } catch (e) { /* ignore */ }
   }
   function remove(k) {
     try {
@@ -254,8 +321,8 @@
       const k = d.day && d.day.chs ? d.day.chs.length : act;
       const q = d.day ? d.day.queue : [];
       const done = q.filter(function (key) { return d.day.done[key] != null; }).length;
-      return { queue: q.slice(), remaining: q.filter(function (key) { return d.day.done[key] == null; }), done: done, total: q.length, k: k, active: act, maxCh: d.maxCh, chs: d.day && d.day.chs ? d.day.chs.slice() : [], chapters: Object.keys(d.chapters).length, size: d.size, min: d.min, per: perChapter(d, k) };
-    } catch (e) { return { queue: [], remaining: [], done: 0, total: 0, k: 0, active: 0, maxCh: 0, chs: [], chapters: 0, size: 100, min: 2, per: 0 }; }
+      return { queue: q.slice(), remaining: q.filter(function (key) { return d.day.done[key] == null; }), done: done, total: q.length, k: k, active: act, slot: curSlot().name, nSlots: meta().list.length, maxCh: d.maxCh, chs: d.day && d.day.chs ? d.day.chs.slice() : [], chapters: Object.keys(d.chapters).length, size: d.size, min: d.min, per: perChapter(d, k) };
+    } catch (e) { return { queue: [], remaining: [], done: 0, total: 0, k: 0, active: 0, slot: '', nSlots: 1, maxCh: 0, chs: [], chapters: 0, size: 100, min: 2, per: 0 }; }
   }
   function summary() { const t = todayDeck(); return { done: t.done, total: t.total, k: t.k, size: t.size }; }
   function available() { return !!fcPub() || polys().length > 0; }
@@ -273,6 +340,17 @@
       });
     } catch (e) { /* ignore */ }
     return out;
+  }
+  /* Rangée de boutons pour changer de slot (null s'il n'y en a qu'un). */
+  function slotChips(onSwitch, always) {
+    try {
+      const L = slots();
+      if (L.length < 2 && !always) return null;
+      return h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, L.map(function (x) {
+        return h('button', { type: 'button', class: 'btn btn--sm ' + (x.cur ? 'btn--primary' : 'btn--outline'), on: { click: function () { useSlot(x.id); if (typeof onSwitch === 'function') onSwitch(); } } },
+          x.name + (x.total ? ' · ' + x.done + '/' + x.total : ''));
+      }));
+    } catch (e) { return null; }
   }
   const GROUPS = ['Cardio', 'Dermato', 'Pneumo', 'Parasito-myco', 'Bactério', 'Viro'];
   function openSheet(onChange) {
@@ -343,27 +421,31 @@
       const d = ensure(), t = todayDeck();
       const keys = Object.keys(d.chapters).sort(function (a, b) { return d.chapters[b].added - d.chapters[a].added; });
       const inToday = {}; t.chs.forEach(function (k) { inToday[k] = 1; });
-      const name = h('input', { type: 'text', maxlength: '40', placeholder: 'Nom (ex. Cardio EDN)', style: inputStyle });
       const status = !t.active ? 'Aucun cours actif. Un cours entre ici dès que tu ouvres sa fiche ou que tu le places dans la Méthode des J.'
         : t.total + ' cartes aujourd’hui · ' + t.k + (t.k < t.active ? ' cours sur ' + t.active + ' (rotation)' : ' cours') + ' · ' + t.per + ' carte' + (t.per > 1 ? 's' : '') + ' par cours' + (t.total > t.size ? ' (au-delà de ' + t.size + ' pour garder le minimum)' : '');
+      const sl = curSlot(), nS = meta().list.length;
+      const nm = h('input', { type: 'text', maxlength: '40', placeholder: 'Nom du nouveau paquet', style: inputStyle });
+      const ren = h('input', { type: 'text', maxlength: '40', style: inputStyle });
+      ren.value = sl.name;
+      ren.addEventListener('change', function () { renameSlot(sl.id, ren.value); changed(); });
       body.replaceChildren(
-        h('p', { class: 'secondary', style: 'margin:0' }, status),
+        h('b', {}, '🗂️ Mes paquets (' + nS + ')'),
+        slotChips(changed, true),
+        h('div', { style: 'display:flex;gap:6px;align-items:center;flex-wrap:wrap' }, nm,
+          btn('btn--secondary', '＋ Vide', function () { newSlot(nm.value, false); changed(); }),
+          btn('btn--outline', '＋ Copie', function () { newSlot(nm.value || sl.name + ' (copie)', true); changed(); }, { title: 'Nouveau paquet avec les mêmes cours et réglages' })),
+        h('div', { class: 'card', style: 'display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding:10px 12px;background:var(--surface-2);min-width:0' },
+          h('div', { style: 'display:flex;gap:6px;align-items:center' }, h('span', { class: 'secondary muted', style: 'min-width:60px' }, 'Nom'), ren,
+            nS > 1 ? btn('btn--ghost', '🗑', function () { if (window.confirm('Supprimer le paquet « ' + sl.name + ' » ? Ses cours et sa progression du jour seront effacés (tes flashcards et ta répétition espacée ne bougent pas).')) { deleteSlot(sl.id); changed(); } }, { 'aria-label': 'Supprimer ce paquet' }) : null),
+          h('label', { style: 'display:flex;gap:10px;align-items:center;cursor:pointer' },
+            (function () { const cb = h('input', { type: 'checkbox', style: 'width:20px;height:20px;flex:none' }); cb.checked = !!sl.auto; cb.addEventListener('change', function () { setAuto(sl.id, cb.checked); changed(); }); return cb; })(),
+            h('span', { class: 'secondary' }, 'Ajout auto : les fiches que tu lis et la Méthode des J ajoutent leurs cours à ce paquet')),
+          h('p', { class: 'secondary', style: 'margin:0' }, status)),
         stepper('Cartes par jour', d.size, 10, 5, 1000, setSize, null),
         stepper('Cours par jour', d.maxCh, 1, 0, 999, setMaxCh, 'Tous'),
         d.maxCh ? h('p', { class: 'secondary muted', style: 'margin:0;font-size:.8125rem' }, 'Chaque jour, l’app prend ' + d.maxCh + ' de tes cours : d’abord ceux que tu n’as pas revus depuis le plus longtemps, puis ceux qui ont le plus de cartes dues. Tous finissent par passer.') : null,
         chips('Minimum / cours', MINS, d.min, setMin),
         btn('btn--secondary btn--block', '☑️ Choisir mes cours', function () { picked = {}; Object.keys(d.chapters).forEach(function (k) { picked[k] = 1; }); q = ''; mode = 'pick'; draw(); }),
-
-        h('b', {}, '💾 Paquets enregistrés'),
-        d.presets.length ? h('div', { style: 'display:grid;gap:4px' }, d.presets.map(function (p) {
-          return h('div', { style: 'display:flex;gap:6px;align-items:center;padding:6px 0;border-top:1px solid var(--line)' },
-            h('div', { style: 'flex:1;min-width:0' }, h('div', { style: 'font-weight:600' }, p.name),
-              h('div', { class: 'secondary muted', style: 'font-size:.8125rem' }, p.keys.length + ' cours' + (p.size ? ' · ' + p.size + ' cartes/j' : '') + (p.maxCh ? ' · ' + p.maxCh + ' cours/j' : ''))),
-            btn('btn--primary', 'Charger', function () { loadPreset(p.name); changed(); }),
-            btn('btn--ghost', '🗑', function () { if (window.confirm('Supprimer le paquet « ' + p.name + ' » ?')) { deletePreset(p.name); draw(); } }, { 'aria-label': 'Supprimer ' + p.name }));
-        })) : h('p', { class: 'secondary muted', style: 'margin:0;font-size:.8125rem' }, 'Enregistre ta sélection actuelle (cours + réglages) pour la recharger en un clic plus tard.'),
-        h('div', { style: 'display:flex;gap:8px;align-items:center' }, name,
-          btn('btn--secondary', 'Enregistrer', function () { const v = name.value.trim(); if (!v) { name.focus(); return; } savePreset(v); draw(); })),
 
         h('b', {}, 'Cours actifs (' + keys.length + ')'),
         keys.length ? h('div', { style: 'display:grid;gap:4px;max-height:40vh;overflow:auto' }, keys.map(function (k) {
@@ -376,7 +458,7 @@
     }
     function draw() { if (mode === 'pick') drawPick(); else drawMain(); }
     draw();
-    sh.sheet(body, { title: '📦 Mon paquet' });
+    sh.sheet(body, { title: '📦 Mes paquets' });
   }
 
   /* Carte « 📦 Paquet du jour » (accueil des flashcards, écran du Mode Scroll). */
@@ -389,8 +471,9 @@
         const end = x.total && x.done >= x.total;
         wrap.replaceChildren(
           h('div', { style: 'display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap' },
-            h('b', {}, '📦 Paquet du jour' + (x.total ? ' · ' + x.done + '/' + x.total : '') + ' · ' + x.k + ' chapitre' + (x.k > 1 ? 's' : '')),
-            h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: function () { openSheet(function () { draw(); if (typeof onChange === 'function') onChange(); }); } } }, 'Mon paquet')),
+            h('b', {}, '📦 ' + (x.nSlots > 1 ? x.slot : 'Paquet du jour') + (x.total ? ' · ' + x.done + '/' + x.total : '') + ' · ' + x.k + ' cours'),
+            h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: function () { openSheet(function () { draw(); if (typeof onChange === 'function') onChange(); }); } } }, 'Mes paquets')),
+          slotChips(function () { draw(); if (typeof onChange === 'function') onChange(); }),
           x.total ? h('div', { class: 'fc-bar', style: 'height:6px;border-radius:3px;background:var(--surface-3);overflow:hidden' }, h('b', { style: 'display:block;height:100%;background:var(--accent);width:' + Math.round(100 * x.done / x.total) + '%' })) : null,
           h('p', { class: 'secondary muted', style: 'margin:0' }, !x.k ? 'Ouvre un cours ou place-le dans la Méthode des J : ses flashcards reviendront ici chaque jour.' : end ? 'Paquet du jour terminé ✓ Reviens demain.' : (x.total - x.done) + ' cartes à faire · ' + x.per + ' par chapitre'),
           x.total && !end ? h('a', { class: 'btn btn--primary btn--block', href: '#/scroll?deck=1' }, x.done ? 'Reprendre le paquet' : 'Lancer le paquet') : null);
@@ -402,5 +485,6 @@
 
   CARDIO.deck = { activate: activate, remove: remove, summary: summary, today: todayDeck, markDone: markDone, setSize: setSize, setMin: setMin, setMaxCh: setMaxCh, setChapters: setChapters,
     savePreset: savePreset, loadPreset: loadPreset, deletePreset: deletePreset,
+    slots: slots, useSlot: useSlot, newSlot: newSlot, renameSlot: renameSlot, setAuto: setAuto, deleteSlot: deleteSlot, slotChips: slotChips,
     openSheet: openSheet, card: card, chapterTitle: chapterTitle, available: available };
 })();
