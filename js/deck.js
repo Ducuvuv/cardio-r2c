@@ -18,7 +18,9 @@
   const CARDIO = window.CARDIO;
 
   const LS = 'cardio.deck.v1';
-  const SIZES = [30, 50, 100, 150, 200], MINS = [1, 2, 3];
+  const MINS = [1, 2, 3];
+  function okSize(n) { n = Math.round(Number(n)); return n >= 5 && n <= 1000 ? n : null; }
+  function okMax(n) { n = Math.round(Number(n)); return n >= 0 && n <= 999 ? n : null; }
   const SRC_LABEL = { planj: 'Méthode des J', read: 'Fiche lue', manual: 'Ajouté' };
 
   function h() { return CARDIO.util.h.apply(null, arguments); }
@@ -27,7 +29,7 @@
   function today() { const d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 
-  function blank() { return { chapters: {}, off: {}, size: 100, min: 2, day: null }; }
+  function blank() { return { chapters: {}, off: {}, size: 100, min: 2, maxCh: 0, lastIn: {}, presets: [], day: null }; }
   function load() {
     try {
       const raw = JSON.parse(localStorage.getItem(LS) || 'null');
@@ -38,10 +40,15 @@
         if (/^[ip]:/.test(k) && c && typeof c === 'object') d.chapters[k] = { added: Number(c.added) || Date.now(), src: SRC_LABEL[c.src] ? c.src : 'manual' };
       });
       if (raw.off && typeof raw.off === 'object') Object.keys(raw.off).forEach(function (k) { if (/^[ip]:/.test(k)) d.off[k] = Number(raw.off[k]) || 1; });
-      if (SIZES.indexOf(Number(raw.size)) >= 0) d.size = Number(raw.size);
+      if (okSize(raw.size)) d.size = okSize(raw.size);
       if (MINS.indexOf(Number(raw.min)) >= 0) d.min = Number(raw.min);
+      if (okMax(raw.maxCh) != null) d.maxCh = okMax(raw.maxCh);
+      if (raw.lastIn && typeof raw.lastIn === 'object') Object.keys(raw.lastIn).forEach(function (k) { if (/^[ip]:/.test(k) && typeof raw.lastIn[k] === 'string') d.lastIn[k] = raw.lastIn[k]; });
+      if (Array.isArray(raw.presets)) d.presets = raw.presets.filter(function (x) { return x && typeof x.name === 'string' && Array.isArray(x.keys); }).map(function (x) {
+        return { name: x.name.slice(0, 40), keys: x.keys.map(str).filter(function (k) { return /^[ip]:./.test(k); }), size: okSize(x.size), min: MINS.indexOf(Number(x.min)) >= 0 ? Number(x.min) : null, maxCh: okMax(x.maxCh) };
+      });
       if (raw.day && typeof raw.day === 'object' && typeof raw.day.date === 'string' && Array.isArray(raw.day.queue)) {
-        d.day = { date: raw.day.date, queue: raw.day.queue.map(str).filter(Boolean), done: raw.day.done && typeof raw.day.done === 'object' ? raw.day.done : {} };
+        d.day = { date: raw.day.date, queue: raw.day.queue.map(str).filter(Boolean), done: raw.day.done && typeof raw.day.done === 'object' ? raw.day.done : {}, chs: Array.isArray(raw.day.chs) ? raw.day.chs.map(str) : null };
       }
       return d;
     } catch (e) { return blank(); }
@@ -136,8 +143,9 @@
     const t = today();
     const keep = d.day && d.day.date === t ? d.day : { date: t, queue: [], done: {} };
     const done = {}; keep.queue.forEach(function (key) { if (keep.done[key] != null) done[key] = keep.done[key]; });
-    const ks = Object.keys(d.chapters).filter(hasCards);
-    const per = perChapter(d, ks.length), info = scoreInfo();
+    const info = scoreInfo();
+    const ks = pickChapters(d, keep, info);
+    const per = perChapter(d, ks.length);
     const owner = {};
     ks.forEach(function (k) { cardsOfChapter(k).forEach(function (c) { owner[c.key] = k; }); });
     const doneBy = {};
@@ -151,8 +159,21 @@
     });
     const room = d.size - kept.length - fresh.length;
     if (room > 0 && rest.length) fresh = fresh.concat(shuffle(rest).sort(byPriority).slice(0, room).map(function (x) { return x.c.key; }));
-    d.day = { date: t, queue: kept.concat(shuffle(fresh)), done: done };
+    d.day = { date: t, queue: kept.concat(shuffle(fresh)), done: done, chs: ks };
+    ks.forEach(function (k) { d.lastIn[k] = t; });
     return d;
+  }
+  /* Chapitres du jour : tous les actifs, ou au plus maxCh en rotation (jamais / le moins récemment inclus d'abord,
+   * puis le plus de cartes dues). Ceux déjà choisis aujourd'hui restent, pour que la file ne change pas en cours de journée. */
+  function pickChapters(d, keep, info) {
+    const all = Object.keys(d.chapters).filter(hasCards);
+    if (!d.maxCh || all.length <= d.maxCh) return all;
+    const stay = (keep.chs || []).filter(function (k) { return all.indexOf(k) >= 0; }).slice(0, d.maxCh);
+    const dueN = function (k) { return cardsOfChapter(k).filter(function (c) { const s = info(c); return s.due || s.lapses > 0; }).length; };
+    const others = all.filter(function (k) { return stay.indexOf(k) < 0; }).map(function (k) {
+      return { k: k, li: d.lastIn[k] || '', due: dueN(k) };
+    }).sort(function (a, b) { return a.li < b.li ? -1 : a.li > b.li ? 1 : b.due - a.due; });
+    return stay.concat(others.slice(0, d.maxCh - stay.length).map(function (x) { return x.k; }));
   }
   /* Synchronise les chapitres (Méthode des J) et construit la file une fois par jour. */
   function ensure() {
@@ -184,7 +205,38 @@
       rebuild(d); save(d);
     } catch (e) { /* ignore */ }
   }
-  function setSize(n) { try { const d = load(); if (SIZES.indexOf(n) < 0) return; d.size = n; rebuild(d); save(d); } catch (e) { /* ignore */ } }
+  function setSize(n) { try { const d = load(); n = okSize(n); if (!n) return; d.size = n; rebuild(d); save(d); } catch (e) { /* ignore */ } }
+  function setMaxCh(n) { try { const d = load(); n = okMax(n); if (n == null) return; d.maxCh = n; rebuild(d); save(d); } catch (e) { /* ignore */ } }
+  /* Sélection en bloc : `keys` devient la liste exacte des chapitres actifs. */
+  function setChapters(keys) {
+    try {
+      const d = load(), want = {};
+      keys.forEach(function (k) { if (/^[ip]:./.test(k)) want[k] = 1; });
+      Object.keys(d.chapters).forEach(function (k) { if (!want[k]) { delete d.chapters[k]; d.off[k] = Date.now(); } });
+      Object.keys(want).forEach(function (k) { if (!d.chapters[k]) { delete d.off[k]; d.chapters[k] = { added: Date.now(), src: 'manual' }; } });
+     
+      rebuild(d); save(d);
+    } catch (e) { /* ignore */ }
+  }
+  function savePreset(name) {
+    try {
+      name = str(name).trim().slice(0, 40); if (!name) return;
+      const d = load();
+      const p = { name: name, keys: Object.keys(d.chapters), size: d.size, min: d.min, maxCh: d.maxCh };
+      const i = d.presets.findIndex(function (x) { return x.name === name; });
+      if (i >= 0) d.presets[i] = p; else d.presets.push(p);
+      save(d);
+    } catch (e) { /* ignore */ }
+  }
+  function loadPreset(name) {
+    try {
+      const d = load(), p = d.presets.find(function (x) { return x.name === name; });
+      if (!p) return;
+      if (p.size) d.size = p.size; if (p.min) d.min = p.min; if (p.maxCh != null) d.maxCh = p.maxCh;
+      save(d); setChapters(p.keys);
+    } catch (e) { /* ignore */ }
+  }
+  function deletePreset(name) { try { const d = load(); d.presets = d.presets.filter(function (x) { return x.name !== name; }); save(d); } catch (e) { /* ignore */ } }
   function setMin(n) { try { const d = load(); if (MINS.indexOf(n) < 0) return; d.min = n; rebuild(d); save(d); } catch (e) { /* ignore */ } }
   function markDone(key, grade) {
     try {
@@ -198,11 +250,12 @@
   function todayDeck() {
     try {
       const d = ensure();
-      const k = Object.keys(d.chapters).filter(hasCards).length;
+      const act = Object.keys(d.chapters).filter(hasCards).length;
+      const k = d.day && d.day.chs ? d.day.chs.length : act;
       const q = d.day ? d.day.queue : [];
       const done = q.filter(function (key) { return d.day.done[key] != null; }).length;
-      return { queue: q.slice(), remaining: q.filter(function (key) { return d.day.done[key] == null; }), done: done, total: q.length, k: k, chapters: Object.keys(d.chapters).length, size: d.size, min: d.min, per: perChapter(d, k) };
-    } catch (e) { return { queue: [], remaining: [], done: 0, total: 0, k: 0, chapters: 0, size: 100, min: 2, per: 0 }; }
+      return { queue: q.slice(), remaining: q.filter(function (key) { return d.day.done[key] == null; }), done: done, total: q.length, k: k, active: act, maxCh: d.maxCh, chs: d.day && d.day.chs ? d.day.chs.slice() : [], chapters: Object.keys(d.chapters).length, size: d.size, min: d.min, per: perChapter(d, k) };
+    } catch (e) { return { queue: [], remaining: [], done: 0, total: 0, k: 0, active: 0, maxCh: 0, chs: [], chapters: 0, size: 100, min: 2, per: 0 }; }
   }
   function summary() { const t = todayDeck(); return { done: t.done, total: t.total, k: t.k, size: t.size }; }
   function available() { return !!fcPub() || polys().length > 0; }
@@ -221,40 +274,107 @@
     } catch (e) { /* ignore */ }
     return out;
   }
+  const GROUPS = ['Cardio', 'Dermato', 'Pneumo', 'Parasito-myco', 'Bactério', 'Viro'];
   function openSheet(onChange) {
     const sh = CARDIO.shell;
     if (!sh || typeof sh.sheet !== 'function') return;
     const body = h('div', { class: 'stack' });
-    function changed() { draw(); try { if (typeof onChange === 'function') onChange(); } catch (e) { /* ignore */ } }
+    let mode = 'main', picked = null, q = '';
+    function notify() { try { if (typeof onChange === 'function') onChange(); } catch (e) { /* ignore */ } }
+    function changed() { draw(); notify(); }
+    function btn(cls, label, fn, extra) { return h('button', Object.assign({ type: 'button', class: 'btn btn--sm ' + cls, on: { click: fn } }, extra || {}), label); }
     function chips(label, list, cur, set, fmt) {
       return h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'secondary muted', style: 'min-width:110px' }, label),
-        list.map(function (n) { return h('button', { type: 'button', class: 'btn btn--sm ' + (n === cur ? 'btn--primary' : 'btn--outline'), on: { click: function () { set(n); changed(); } } }, fmt ? fmt(n) : String(n)); }));
+        list.map(function (n) { return btn(n === cur ? 'btn--primary' : 'btn--outline', fmt ? fmt(n) : String(n), function () { set(n); changed(); }); }));
     }
-    function draw() {
+    /* Champ numérique libre avec − / + (valeur 0 = « Tous » si zeroLabel). Appliqué à la validation du champ. */
+    function stepper(label, cur, step, lo, hi, set, zeroLabel) {
+      const inp = h('input', { type: 'number', min: String(lo), max: String(hi), step: '1', inputmode: 'numeric', style: 'width:76px;padding:6px;border-radius:10px;border:2px solid var(--line);background:var(--surface);color:var(--ink);text-align:center;font-weight:700' });
+      inp.value = String(cur);
+      function apply(v) { v = Math.max(lo, Math.min(hi, Math.round(Number(v) || 0))); set(v); changed(); }
+      inp.addEventListener('change', function () { apply(inp.value); });
+      return h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, h('span', { class: 'secondary muted', style: 'min-width:110px' }, label),
+        btn('btn--outline', '−', function () { apply(cur - step); }, { 'aria-label': label + ' moins' }), inp,
+        btn('btn--outline', '+', function () { apply(cur + step); }, { 'aria-label': label + ' plus' }),
+        zeroLabel ? btn(cur === 0 ? 'btn--primary' : 'btn--ghost', zeroLabel, function () { apply(0); }) : null,
+        zeroLabel && cur === 0 ? h('span', { class: 'secondary muted', style: 'font-size:.8125rem' }, '(tous tes cours chaque jour)') : null);
+    }
+    const inputStyle = 'flex:1;min-width:0;padding:8px;border-radius:10px;border:2px solid var(--line);background:var(--surface);color:var(--ink)';
+
+    /* Sélecteur : cases à cocher par matière, recherche, tout / aucun ; appliqué par « Valider ». */
+    function drawPick() {
+      const cat = catalog();
+      const list = h('div', { style: 'display:grid;gap:2px;max-height:52vh;overflow:auto' });
+      const count = h('b', {});
+      function refreshCount() { count.textContent = Object.keys(picked).length + ' cours cochés'; }
+      function fill() {
+        const ql = q.toLowerCase();
+        list.replaceChildren.apply(list, GROUPS.map(function (g) {
+          const ms = cat.filter(function (m) { return m.group === g && (!ql || chapterTitle(m.key).toLowerCase().indexOf(ql) >= 0); });
+          if (!ms.length) return null;
+          const boxes = [];
+          const rows = ms.map(function (m) {
+            const cb = h('input', { type: 'checkbox', style: 'width:20px;height:20px;flex:none' });
+            cb.checked = !!picked[m.key];
+            cb.addEventListener('change', function () { if (cb.checked) picked[m.key] = 1; else delete picked[m.key]; refreshCount(); });
+            boxes.push([cb, m.key]);
+            return h('label', { style: 'display:flex;gap:10px;align-items:center;padding:7px 2px;border-top:1px solid var(--line);cursor:pointer' }, cb,
+              h('span', { style: 'flex:1;min-width:0' }, chapterTitle(m.key)), h('span', { class: 'secondary muted', style: 'font-size:.75rem' }, String(cardsOfChapter(m.key).length)));
+          });
+          function all(v) { boxes.forEach(function (b) { b[0].checked = v; if (v) picked[b[1]] = 1; else delete picked[b[1]]; }); refreshCount(); }
+          return h('div', {}, h('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:10px;position:sticky;top:0;background:var(--surface);z-index:1;padding:4px 0' },
+            h('b', { style: 'flex:1' }, g + ' (' + ms.length + ')'), btn('btn--ghost', 'Tout', function () { all(true); }), btn('btn--ghost', 'Aucun', function () { all(false); })), rows);
+        }));
+        refreshCount();
+      }
+      const search = h('input', { type: 'search', placeholder: 'Rechercher un cours…', style: inputStyle });
+      search.value = q;
+      search.addEventListener('input', function () { q = search.value; fill(); });
+      fill();
+      body.replaceChildren(
+        h('p', { class: 'secondary', style: 'margin:0' }, 'Coche les cours de ton paquet. Un cours décoché en sort, et la Méthode des J ne le remettra pas.'),
+        search, list,
+        h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, count, h('span', { style: 'flex:1' }),
+          btn('btn--outline', 'Annuler', function () { mode = 'main'; draw(); }),
+          btn('btn--primary', 'Valider', function () { setChapters(Object.keys(picked)); mode = 'main'; changed(); })));
+    }
+
+    function drawMain() {
       const d = ensure(), t = todayDeck();
       const keys = Object.keys(d.chapters).sort(function (a, b) { return d.chapters[b].added - d.chapters[a].added; });
-      const cat = catalog().filter(function (m) { return !d.chapters[m.key]; });
-      const sel = h('select', { class: 'input', style: 'flex:1;min-width:0;padding:8px;border-radius:10px;border:2px solid var(--line);background:var(--surface);color:var(--ink)' },
-        h('option', { value: '' }, 'Ajouter un chapitre…'),
-        ['Cardio', 'Dermato', 'Pneumo', 'Parasito-myco', 'Bactério', 'Viro'].map(function (g) {
-          const ms = cat.filter(function (m) { return m.group === g; });
-          return ms.length ? h('optgroup', { label: g }, ms.map(function (m) { return h('option', { value: m.key }, chapterTitle(m.key)); })) : null;
-        }));
+      const inToday = {}; t.chs.forEach(function (k) { inToday[k] = 1; });
+      const name = h('input', { type: 'text', maxlength: '40', placeholder: 'Nom (ex. Cardio EDN)', style: inputStyle });
+      const status = !t.active ? 'Aucun cours actif. Un cours entre ici dès que tu ouvres sa fiche ou que tu le places dans la Méthode des J.'
+        : t.total + ' cartes aujourd’hui · ' + t.k + (t.k < t.active ? ' cours sur ' + t.active + ' (rotation)' : ' cours') + ' · ' + t.per + ' carte' + (t.per > 1 ? 's' : '') + ' par cours' + (t.total > t.size ? ' (au-delà de ' + t.size + ' pour garder le minimum)' : '');
       body.replaceChildren(
-        h('p', { class: 'secondary', style: 'margin:0' }, t.k ? t.total + ' cartes aujourd’hui · ' + t.k + ' chapitre' + (t.k > 1 ? 's' : '') + ' · ' + t.per + ' carte' + (t.per > 1 ? 's' : '') + ' par chapitre' + (t.total > t.size ? ' (au-delà de ' + t.size + ' pour garder le minimum par chapitre)' : '') : 'Aucun chapitre actif. Un cours entre ici dès que tu ouvres sa fiche ou que tu le places dans la Méthode des J.'),
-        chips('Cartes par jour', SIZES, d.size, setSize),
-        chips('Minimum / chapitre', MINS, d.min, setMin),
-        h('div', { style: 'display:flex;gap:8px;align-items:center' }, sel,
-          h('button', { type: 'button', class: 'btn btn--secondary btn--sm', on: { click: function () { if (sel.value) { activate(sel.value, 'manual', true); changed(); } } } }, 'Ajouter')),
-        h('b', {}, 'Chapitres actifs (' + keys.length + ')'),
-        keys.length ? h('div', { style: 'display:grid;gap:4px;max-height:45vh;overflow:auto' }, keys.map(function (k) {
+        h('p', { class: 'secondary', style: 'margin:0' }, status),
+        stepper('Cartes par jour', d.size, 10, 5, 1000, setSize, null),
+        stepper('Cours par jour', d.maxCh, 1, 0, 999, setMaxCh, 'Tous'),
+        d.maxCh ? h('p', { class: 'secondary muted', style: 'margin:0;font-size:.8125rem' }, 'Chaque jour, l’app prend ' + d.maxCh + ' de tes cours : d’abord ceux que tu n’as pas revus depuis le plus longtemps, puis ceux qui ont le plus de cartes dues. Tous finissent par passer.') : null,
+        chips('Minimum / cours', MINS, d.min, setMin),
+        btn('btn--secondary btn--block', '☑️ Choisir mes cours', function () { picked = {}; Object.keys(d.chapters).forEach(function (k) { picked[k] = 1; }); q = ''; mode = 'pick'; draw(); }),
+
+        h('b', {}, '💾 Paquets enregistrés'),
+        d.presets.length ? h('div', { style: 'display:grid;gap:4px' }, d.presets.map(function (p) {
+          return h('div', { style: 'display:flex;gap:6px;align-items:center;padding:6px 0;border-top:1px solid var(--line)' },
+            h('div', { style: 'flex:1;min-width:0' }, h('div', { style: 'font-weight:600' }, p.name),
+              h('div', { class: 'secondary muted', style: 'font-size:.8125rem' }, p.keys.length + ' cours' + (p.size ? ' · ' + p.size + ' cartes/j' : '') + (p.maxCh ? ' · ' + p.maxCh + ' cours/j' : ''))),
+            btn('btn--primary', 'Charger', function () { loadPreset(p.name); changed(); }),
+            btn('btn--ghost', '🗑', function () { if (window.confirm('Supprimer le paquet « ' + p.name + ' » ?')) { deletePreset(p.name); draw(); } }, { 'aria-label': 'Supprimer ' + p.name }));
+        })) : h('p', { class: 'secondary muted', style: 'margin:0;font-size:.8125rem' }, 'Enregistre ta sélection actuelle (cours + réglages) pour la recharger en un clic plus tard.'),
+        h('div', { style: 'display:flex;gap:8px;align-items:center' }, name,
+          btn('btn--secondary', 'Enregistrer', function () { const v = name.value.trim(); if (!v) { name.focus(); return; } savePreset(v); draw(); })),
+
+        h('b', {}, 'Cours actifs (' + keys.length + ')'),
+        keys.length ? h('div', { style: 'display:grid;gap:4px;max-height:40vh;overflow:auto' }, keys.map(function (k) {
           const n = cardsOfChapter(k).length;
           return h('div', { style: 'display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)' },
             h('div', { style: 'flex:1;min-width:0' }, h('div', { style: 'font-weight:600' }, chapterTitle(k)),
-              h('div', { class: 'secondary muted', style: 'font-size:.8125rem' }, (SRC_LABEL[d.chapters[k].src] || 'Ajouté') + ' · ' + (n ? n + ' cartes' : 'pas de flashcards'))),
-            h('button', { type: 'button', class: 'btn btn--ghost btn--sm', 'aria-label': 'Retirer ' + chapterTitle(k), on: { click: function () { remove(k); changed(); } } }, '✕'));
+              h('div', { class: 'secondary muted', style: 'font-size:.8125rem' }, (SRC_LABEL[d.chapters[k].src] || 'Ajouté') + ' · ' + (n ? n + ' cartes' : 'pas de flashcards') + (t.k < t.active && inToday[k] ? ' · 📦 aujourd’hui' : ''))),
+            btn('btn--ghost', '✕', function () { remove(k); changed(); }, { 'aria-label': 'Retirer ' + chapterTitle(k) }));
         })) : null);
     }
+    function draw() { if (mode === 'pick') drawPick(); else drawMain(); }
     draw();
     sh.sheet(body, { title: '📦 Mon paquet' });
   }
@@ -280,6 +400,7 @@
     } catch (e) { return null; }
   }
 
-  CARDIO.deck = { activate: activate, remove: remove, summary: summary, today: todayDeck, markDone: markDone, setSize: setSize, setMin: setMin,
+  CARDIO.deck = { activate: activate, remove: remove, summary: summary, today: todayDeck, markDone: markDone, setSize: setSize, setMin: setMin, setMaxCh: setMaxCh, setChapters: setChapters,
+    savePreset: savePreset, loadPreset: loadPreset, deletePreset: deletePreset,
     openSheet: openSheet, card: card, chapterTitle: chapterTitle, available: available };
 })();
