@@ -220,7 +220,8 @@
             h('span', { class: 'pill pill--A' }, 'Rang A'),
             h('span', { class: 'pill pill--kind' }, count(p) + ' points'),
             REL_PILL[rel(p.id)] ? h('span', { class: 'pill ' + REL_PILL[rel(p.id)][0] }, REL_PILL[rel(p.id)][1]) : null,
-            sta ? h('span', { class: 'pill ' + sta.cls }, sta.t) : null),
+            sta ? h('span', { class: 'pill ' + sta.cls }, sta.t) : null,
+            (function () { try { return CARDIO.passes ? CARDIO.passes.badge('p:' + p.id) : null; } catch (e) { return null; } })()),
           h('div', { class: 'pz-card__title' }, str(p.title)),
           p.agent ? h('div', { class: 'pz-card__agent' }, str(p.agent)) : null,
           p.hook ? h('div', { class: 'pz-card__hook' }, str(p.hook)) : null,
@@ -438,6 +439,7 @@
       h('a', { class: 'card', href: '#/planj?tab=cours', style: 'display:block;padding:12px 14px;text-decoration:none;color:inherit' },
         h('div', { style: 'display:flex;justify-content:space-between;gap:8px' }, h('b', {}, 'Méthode des J'), h('span', { class: 'secondary muted' }, 'Modifier')),
         pjStatus(p.id, true) || h('p', { class: 'secondary muted', style: 'margin:4px 0 0' }, 'Pas encore placée dans ton planning.')),
+      (function () { try { return CARDIO.passes ? CARDIO.passes.widget('p:' + p.id) : null; } catch (e) { return null; } })(),
       fragileBlock(p),
       trainBlock(p), seg, toc, body, after);
     setMode(hasX ? 'explain' : 'read');

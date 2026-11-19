@@ -332,7 +332,8 @@
         h('div', { class: 'items__head' },
           h('span', { class: 'items__short' }, it.short),
           soon ? h('span', { class: 'pill pill--info' }, 'bientôt') : null,
-          !soon && due ? h('span', { class: 'pill pill--warn items__due' }, due + ' à revoir') : null),
+          !soon && due ? h('span', { class: 'pill pill--warn items__due' }, due + ' à revoir') : null,
+          soon ? null : (function () { try { return CARDIO.passes ? CARDIO.passes.badge('i:' + it.num) : null; } catch (e) { return null; } })()),
         h('p', { class: 'items__title' }, it.title),
         soon ? null : pjStatus(it.num),
         h('div', { class: 'items__counts' }, soon ? 'Contenu en préparation' : countsSummary(c)),
@@ -768,6 +769,7 @@
       h('h1', { class: 'hub__h1' }, it.short),
       h('p', { class: 'hub__full' }, it.title),
       it.pages ? h('div', { class: 'hub__pages' }, 'Pages ' + it.pages + ' du PDF ' + (speOf(it) === 'pneumo' ? 'du référentiel' : 'du Collège')) : null));
+    if (!soon) { const pw = (function () { try { return CARDIO.passes ? CARDIO.passes.widget('i:' + it.num) : null; } catch (e) { return null; } })(); if (pw) page.appendChild(pw); }
 
     if (soon) {
       page.appendChild(h('div', { class: 'card' },

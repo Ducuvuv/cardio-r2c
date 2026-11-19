@@ -360,6 +360,7 @@
       errors: {}, notes: {}, bookmarks: [], itemStats: {}, sessions: [], planJ: null,
       fc: {},                                   // flashcards style Pass2P2 (views/fc.js) : {id: {due, interval, ease, reps, lapses, at}}
       ecgq: {},                                 // banque ECG (views/ecg.js) : {questionId: {n, ok, at, last}} (ok = somme des scores)
+      lsx: {},                                  // progression des polys (js/lsync.js) : {cléLocalStorage: {v: texte|null, at: ms}}
       edn: { attempts: [], q: {} }              // EDN / Partiels (views/edn.js) : épreuves terminées (résumés) + {questionId: {n, sum, last, at}}
     };
   }
@@ -504,6 +505,7 @@
     st.sessions = trimSessions((Array.isArray(r.sessions) ? r.sessions : []).map(normSession).filter(Boolean));
     // Méthode des J (views/planj.js normalise le contenu) : copie profonde, sinon rien
     if (isObj(r.planJ)) { try { st.planJ = JSON.parse(JSON.stringify(r.planJ)); } catch (e) { st.planJ = null; } }
+    if (isObj(r.lsx)) Object.keys(r.lsx).forEach(function (k) { const e = r.lsx[k]; if (isObj(e) && (typeof e.v === 'string' || e.v === null)) st.lsx[k] = { v: e.v, at: num(e.at, 0) }; });
     if (isObj(r.fc)) {
       Object.keys(r.fc).forEach(function (id) {
         const c = r.fc[id];
@@ -608,6 +610,11 @@
     out.sessions = trimSessions(Object.keys(byId).map(function (k) { return byId[k]; }));
     // Méthode des J : le planning modifié le plus récemment gagne
     out.planJ = A.planJ && B.planJ ? ((B.planJ.updatedAt || 0) > (A.planJ.updatedAt || 0) ? B.planJ : A.planJ) : (A.planJ || B.planJ || null);
+    // progression des polys (lsync) : par clé, l'écriture la plus récente gagne
+    uniqStrings(Object.keys(A.lsx || {}).concat(Object.keys(B.lsx || {}))).forEach(function (k) {
+      const xa = (A.lsx || {})[k], xb = (B.lsx || {})[k];
+      out.lsx[k] = !xa ? xb : !xb ? xa : ((xb.at || 0) > (xa.at || 0) ? xb : xa);
+    });
     // flashcards : par carte, la note la plus récente gagne
     uniqStrings(Object.keys(A.fc || {}).concat(Object.keys(B.fc || {}))).forEach(function (id) {
       const fa = (A.fc || {})[id], fb = (B.fc || {})[id];

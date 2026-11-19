@@ -878,6 +878,8 @@
       const at = CARDIO.views.atlas;
       const st = at && at.strip(num, '#/item/' + encodeURIComponent(num) + '/cours');
       if (st) page.insertBefore(st, page.children[1] || null);
+      const pw = CARDIO.passes && CARDIO.passes.widget('i:' + num);
+      if (pw) page.insertBefore(pw, page.children[1] || null);
       if (at) at.inline(num, page);
       // flashcards de l'item (views/fc.js), juste après le bandeau d'images
       const fb = C2fc(num);
