@@ -49,6 +49,18 @@
     // fiche lue : ses cartes entrent dans le Paquet du jour (js/deck.js)
     if (patch && patch.seen) try { if (CARDIO.deck) CARDIO.deck.activate('p:' + id, 'read'); } catch (e) { /* ignore */ }
   }
+  /* Rang B (texte violet du poly parasito, sections/cartes « rank: 'B' ») : affichable ou masquable. */
+  const LS_B = 'cardio.parasito.showB';
+  function showB() { try { return localStorage.getItem(LS_B) !== '0'; } catch (e) { return true; } }
+  function setShowB(v) { try { localStorage.setItem(LS_B, v ? '1' : '0'); } catch (e) { /* ignore */ } }
+  function isB(x) { return !!x && x.rank === 'B'; }
+  function bPill() { return h('span', { class: 'pill pill--B', style: 'margin-left:6px;vertical-align:middle;font-size:.72rem' }, 'Rang B'); }
+  function rankLabel(p) { const secs = p.sections || []; const nb = secs.filter(isB).length; return !nb ? 'Rang A' : nb === secs.length ? 'Rang B' : 'Rangs A + B'; }
+  function bToggle(onChange) {
+    const on = showB();
+    return h('button', { type: 'button', class: 'btn btn--sm ' + (on ? 'btn--outline' : 'btn--ghost'), on: { click: function () { setShowB(!on); if (typeof onChange === 'function') onChange(); } } },
+      on ? '🟣 Rang B affiché · masquer' : '🟣 Rang B masqué · afficher');
+  }
   function count(p) { return (p.sections || []).reduce(function (n, s) { return n + ((s && s.points) || []).length; }, 0); }
 
   function inlineMd(text) {
@@ -171,7 +183,8 @@
       ? 'Une fiche par virus ou par chapitre du poly de virologie (DFGSM3). Ce poly n’a pas de code couleur rang A/B : tout le contenu utile au partiel est repris, résumé. Mode « Me tester » : les mots-clés sont cachés, à toi de les retrouver.'
       : curPoly === 'bacterio'
       ? 'Une fiche par chapitre du poly de bactériologie (DFGSM3). Ce poly n’a pas de code couleur rang A/B : tout le contenu utile au partiel est repris, résumé. Mode « Me tester » : les mots-clés sont cachés, à toi de les retrouver.'
-      : 'Une fiche par parasite et par mycose, avec uniquement ce qui est en rouge (rang A) dans le poly de parasitologie-mycologie. Mode « Me tester » : les mots-clés sont cachés, à toi de les retrouver.'));
+      : 'Une fiche par parasite et par mycose : le rouge du poly (rang A) et le violet (rang B, pastille 🟣). Mode « Me tester » : les mots-clés sont cachés, à toi de les retrouver.'));
+    if (curPoly === 'parasito' && list().some(function (p) { return p.hasB; })) page.appendChild(h('div', { class: 'cluster' }, bToggle(redraw)));
     if (!all.length) {
       page.appendChild(h('div', { class: 'empty' }, h('div', { class: 'empty__title' }, 'Fiches non disponibles ici'), 'Cette rubrique est réservée à ta version privée de l’app.'));
       return page;
@@ -217,7 +230,7 @@
           on: selMode ? { click: function (e) { e.preventDefault(); let s = getSel(); if (on) s = s.filter(function (x) { return x !== p.id; }); else s.push(p.id); setSel(s); redraw(); } } : null },
           selMode ? h('span', { 'aria-hidden': 'true', style: 'position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;' + (on ? 'background:var(--accent);color:#fff' : 'border:2px solid var(--line);background:var(--surface)') }, on ? '✓' : '') : null,
           h('div', { class: 'pz-card__top' },
-            h('span', { class: 'pill pill--A' }, 'Rang A'),
+            h('span', { class: 'pill ' + (rankLabel(p) === 'Rang B' ? 'pill--B' : 'pill--A') }, rankLabel(p)),
             h('span', { class: 'pill pill--kind' }, count(p) + ' points'),
             REL_PILL[rel(p.id)] ? h('span', { class: 'pill ' + REL_PILL[rel(p.id)][0] }, REL_PILL[rel(p.id)][1]) : null,
             sta ? h('span', { class: 'pill ' + sta.cls }, sta.t) : null,
@@ -358,9 +371,10 @@
       if (x.intro) body.appendChild(h('p', { class: 'pz-intro' }, inlineMd(x.intro)));
       const eMap = cardSections(p, true);
       x.sections.forEach(function (s, i) {
+        if (isB(s) && !showB()) return;
         const nSec = Object.keys(eMap).filter(function (k) { return eMap[k] === i; }).length;
         const paras = str(s.text).split(/\n\s*\n/).map(function (t) { return t.trim(); }).filter(Boolean);
-        body.appendChild(h('section', { class: 'pz-sec' }, h('h3', {}, str(s.h)),
+        body.appendChild(h('section', { class: 'pz-sec' }, h('h3', {}, str(s.h), isB(s) ? bPill() : null),
           h('div', { class: 'pz-text' }, paras.map(function (t) { return h('p', {}, inlineMd(t)); })),
           tabsFor(i),
           figsFor(i, usedF),
@@ -376,10 +390,11 @@
       const hidden = [];
       body.replaceChildren();
       (p.sections || []).forEach(function (s, i) {
+        if (isB(s) && !showB()) return;
         // « (B) » en tête de point = rang B (fiches LISAzay) : pastille B
         const ul = h('ul', {}, (s.points || []).map(function (pt) { const b = /^\(B\)\s*/.test(pt); return h('li', {}, b ? h('span', { class: 'pill pill--B', style: 'margin-right:4px' }, 'B') : null, inlineMd(b ? pt.replace(/^\(B\)\s*/, '') : pt)); }));
         const nSec = secMap ? Object.keys(secMap).filter(function (k) { return secMap[k] === i; }).length : 0;
-        body.appendChild(h('section', { class: 'pz-sec', id: 'pz-s' + i }, h('h3', {}, str(s.h)), ul,
+        body.appendChild(h('section', { class: 'pz-sec', id: 'pz-s' + i }, h('h3', {}, str(s.h), isB(s) ? bPill() : null), ul,
           nSec ? h('a', { class: 'btn btn--outline btn--sm', style: 'margin-top:8px', href: '#/parasito/' + encodeURIComponent(p.id) + '/cartes?sec=' + i + '&size=6&order=random' }, '▶ Me tester sur cette partie · ' + Math.min(6, nSec) + ' cartes') : null));
         if (test) {
           ul.querySelectorAll('strong').forEach(function (el) {
@@ -425,14 +440,16 @@
     }
 
     const toc = (p.sections || []).length > 3 ? h('div', { class: 'pz-toc' }, (p.sections || []).map(function (s, i) {
-      return h('a', { class: 'pill pill--kind', href: 'javascript:void 0', on: { click: function (e) { e.preventDefault(); const el = document.getElementById('pz-s' + i); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } } }, str(s.h));
+      if (isB(s) && !showB()) return null;
+      return h('a', { class: 'pill pill--kind', href: 'javascript:void 0', on: { click: function (e) { e.preventDefault(); const el = document.getElementById('pz-s' + i); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } } }, str(s.h) + (isB(s) ? ' 🟣' : ''));
     })) : null;
     const g = GROUPS.find(function (x) { return x[0] === p.group; });
     page.append(
       h('div', {},
-        h('div', { class: 'caption' }, (g ? g[1] : 'Parasito') + (/^bact-lz-/.test(p.id) ? ' · fiche LISAzay n° ' + (p.num || '') + ' · rangs A et B' : polyOf(p) === 'bacterio' ? ' · poly bactério' : polyOf(p) === 'viro' ? ' · poly viro' : ' · rang A') + (p.items && p.items.length ? ' · items ' + p.items.join(', ') : '')),
+        h('div', { class: 'caption' }, (g ? g[1] : 'Parasito') + (/^bact-lz-/.test(p.id) ? ' · fiche LISAzay n° ' + (p.num || '') + ' · rangs A et B' : polyOf(p) === 'bacterio' ? ' · poly bactério' : polyOf(p) === 'viro' ? ' · poly viro' : ' · ' + rankLabel(p).toLowerCase()) + (p.items && p.items.length ? ' · items ' + p.items.join(', ') : '')),
         h('h2', { style: 'margin:4px 0 0' }, str(p.title)),
-        p.agent ? h('p', { class: 'pz-card__agent', style: 'margin-top:2px' }, str(p.agent)) : null),
+        p.agent ? h('p', { class: 'pz-card__agent', style: 'margin-top:2px' }, str(p.agent)) : null,
+        p.hasB && rankLabel(p) !== 'Rang B' ? h('div', { style: 'margin-top:6px' }, bToggle(function () { try { window.dispatchEvent(new HashChangeEvent('hashchange')); } catch (e) { /* ignore */ } })) : null),
       p.hook ? h('div', { class: 'pz-hook' }, str(p.hook)) : null,
       atlasStrip,
       (function () { try { return CARDIO.views.fc && CARDIO.views.fc.ficheBlock(p.id); } catch (e) { return null; } })(),
@@ -460,8 +477,9 @@
   /* Flashcards et QROC entrelacés proportionnellement, pour qu'une session mélange toujours les deux. */
   function cardsOf(p) {
     const c = p.cards || {};
-    const f = (c.flash || []).map(function (x) { return Object.assign({ kind: 'flash', fiche: p }, x); });
-    const q = (c.qroc || []).map(function (x) { return Object.assign({ kind: 'qroc', fiche: p }, x); });
+    const okB = function (x) { return !isB(x) || showB(); };
+    const f = (c.flash || []).filter(okB).map(function (x) { return Object.assign({ kind: 'flash', fiche: p }, x); });
+    const q = (c.qroc || []).filter(okB).map(function (x) { return Object.assign({ kind: 'qroc', fiche: p }, x); });
     const out = [];
     let i = 0, j = 0;
     while (i < f.length || j < q.length) {
@@ -607,7 +625,7 @@
     const head = h('div', { class: 'cluster' });
     const stage = h('div', { class: 'stack' });
     const back = scope && !multi ? '#/parasito/' + encodeURIComponent(scope.id) : '#/parasito';
-    page.append(h('div', {}, h('div', { class: 'caption' }, (type === 'qroc' ? 'QROC' : type === 'flash' ? 'Flashcards' : type === 'ttt' ? 'Flashcards traitements' : type === 'pieges' ? 'Cartes pièges' : 'Flashcards + QROC') + (curPoly === 'bacterio' ? ' bactério · poly DFGSM3' : curPoly === 'viro' ? ' viro · poly DFGSM3' : ' parasito · rang A')), h('h2', { style: 'margin:4px 0 0' }, multi ? scope.length + ' fiches choisies' : scope ? str(scope.title) : 'Toutes les fiches'),
+    page.append(h('div', {}, h('div', { class: 'caption' }, (type === 'qroc' ? 'QROC' : type === 'flash' ? 'Flashcards' : type === 'ttt' ? 'Flashcards traitements' : type === 'pieges' ? 'Cartes pièges' : 'Flashcards + QROC') + (curPoly === 'bacterio' ? ' bactério · poly DFGSM3' : curPoly === 'viro' ? ' viro · poly DFGSM3' : ' parasito' + (showB() ? '' : ' · rang A seul'))), h('h2', { style: 'margin:4px 0 0' }, multi ? scope.length + ' fiches choisies' : scope ? str(scope.title) : 'Toutes les fiches'),
       multi ? h('p', { class: 'secondary muted', style: 'margin:2px 0 0' }, scope.map(function (x) { return str(x.title); }).join(' · ')) : null), head, stage);
     root.appendChild(page);
     if (!total) {

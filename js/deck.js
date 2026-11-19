@@ -119,7 +119,8 @@
         (fcIndex()[id] || []).forEach(function (c) { out.push({ key: 'fc:' + c.id, fc: c.id, prio: c.prio }); });
       } else {
         const p = fiche(id), c = (p && p.cards) || {};
-        (c.flash || []).concat(c.qroc || []).forEach(function (x) { if (x && x.id) out.push({ key: str(x.id) }); });
+        let hideB = false; try { hideB = localStorage.getItem('cardio.parasito.showB') === '0'; } catch (e) { hideB = false; }
+        (c.flash || []).concat(c.qroc || []).forEach(function (x) { if (x && x.id && !(hideB && x.rank === 'B')) out.push({ key: str(x.id) }); });
       }
     } catch (e) { /* registre absent */ }
     return out;
