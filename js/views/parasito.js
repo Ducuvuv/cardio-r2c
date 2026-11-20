@@ -379,10 +379,10 @@
     const TABS = (CARDIO.registry.tabs && CARDIO.registry.tabs[p.id]) || [];
     function tabEl(t) {
       const u = util();
-      return h('div', { class: 'pz-tab' }, h('div', { class: 'caption' }, '📊 ' + str(t.title)),
+      return h('div', { class: 'pz-tab' }, h('div', { class: 'caption' }, '📊 ' + str(t.title), rkPill(t)),
         h('div', { class: 'md', html: typeof u.md === 'function' ? u.md(str(t.md)) : '' }));
     }
-    function tabsFor(i) { return TABS.filter(function (t) { return t.sec === i; }).map(tabEl); }
+    function tabsFor(i) { return TABS.filter(function (t) { return t.sec === i && !hid(t); }).map(tabEl); }
     function drawExplain() {
       const x = p.explain;
       const usedF = {};
@@ -425,7 +425,8 @@
         }
       });
       after.replaceChildren();
-      if (!test && TABS.length) body.appendChild(h('section', { class: 'pz-sec' }, h('h3', {}, 'Tableaux de synthèse'), TABS.map(tabEl)));
+      const tabsV = TABS.filter(function (t) { return !hid(t); });
+      if (!test && tabsV.length) body.appendChild(h('section', { class: 'pz-sec' }, h('h3', {}, 'Tableaux de synthèse'), tabsV.map(tabEl)));
       if (!test) { mark(p.id, { seen: true }); after.appendChild(footer()); return; }
       let left = hidden.length;
       const hint = h('p', { class: 'secondary muted center' }, 'Touche chaque mot caché après l’avoir dit de tête (' + left + ' à trouver).');
