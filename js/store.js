@@ -562,6 +562,27 @@
 
   /* ---------- fusion (SPEC §4) : cloud ↔ local, import fusionné ---------- */
 
+  /* lsx : les clés « carte » {id: {…, at}} (compteur Vu N fois, fiches lues) fusionnent entrée par entrée (la plus
+   * récente gagne), pour qu'une écriture faite avant la synchro, ou sur un autre appareil, n'efface pas les autres. */
+  const LSX_MAPS = { 'cardio.passes': 1, 'cardio.parasito': 1 };
+  function lsxMergeMaps(va, vb) {
+    let a = null, b = null;
+    try { a = JSON.parse(va); } catch (e) { a = null; }
+    try { b = JSON.parse(vb); } catch (e) { b = null; }
+    if (!isObj(a) || !isObj(b)) return null;
+    const out = {};
+    uniqStrings(Object.keys(a).concat(Object.keys(b))).forEach(function (id) {
+      const ea = a[id], eb = b[id];
+      out[id] = !isObj(ea) ? eb : !isObj(eb) ? ea : ((Number(eb.at) || 0) > (Number(ea.at) || 0) ? eb : ea);
+    });
+    return out;
+  }
+  function lsxMerge(k, xa, xb) {
+    const newer = (xb.at || 0) > (xa.at || 0) ? xb : xa;
+    if (!LSX_MAPS[k] || typeof xa.v !== 'string' || typeof xb.v !== 'string') return newer;
+    const m = lsxMergeMaps(xa.v, xb.v);
+    return m ? { v: JSON.stringify(m), at: Math.max(xa.at || 0, xb.at || 0) } : newer;
+  }
   function mergeStates(a, b) {
     const A = normalize(a), B = normalize(b);
     const bNewer = B.updatedAt > A.updatedAt;
@@ -613,7 +634,7 @@
     // progression des polys (lsync) : par clé, l'écriture la plus récente gagne
     uniqStrings(Object.keys(A.lsx || {}).concat(Object.keys(B.lsx || {}))).forEach(function (k) {
       const xa = (A.lsx || {})[k], xb = (B.lsx || {})[k];
-      out.lsx[k] = !xa ? xb : !xb ? xa : ((xb.at || 0) > (xa.at || 0) ? xb : xa);
+      out.lsx[k] = !xa ? xb : !xb ? xa : lsxMerge(k, xa, xb);
     });
     // flashcards : par carte, la note la plus récente gagne
     uniqStrings(Object.keys(A.fc || {}).concat(Object.keys(B.fc || {}))).forEach(function (id) {
@@ -1821,7 +1842,7 @@
     setNote: setNote, toggleBookmark: toggleBookmark, visitItem: visitItem,
     exportJSON: exportJSON, importJSON: importJSON, resetAll: resetAll,
     save: save, flush: flush, syncStatus: syncStatus,
-    mergeStates: mergeStates, computeStreak: computeStreak,
+    mergeStates: mergeStates, computeStreak: computeStreak, LSX_MAPS: LSX_MAPS, lsxMergeMaps: lsxMergeMaps,
     itemOfId: itemOfId, kindOfId: kindOfId, cardMeta: cardMeta, dateKey: dateKey, today: today,
     TIER_LABELS: TIER_LABELS, LEVEL_MODES: LEVEL_MODES.slice(), TIER_UNLOCK: TIER_UNLOCK, LEECH_FAILS: LEECH_FAILS,
     cardTier: cardTier, levelMode: levelMode, itemTier: itemTier, setItemTier: setItemTier, tierProgress: tierProgress,

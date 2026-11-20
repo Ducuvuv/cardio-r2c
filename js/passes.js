@@ -15,7 +15,7 @@
       k = String(k || ''); if (!/^[ip]:./.test(k)) return 0;
       n = Math.max(0, Math.min(99, Math.round(Number(n) || 0)));
       const o = all();
-      if (n) o[k] = { n: n, at: Date.now() }; else delete o[k];
+      o[k] = { n: n, at: Date.now() };   // n = 0 gardé (avec sa date) pour que la remise à zéro se synchronise
       localStorage.setItem(LS, JSON.stringify(o));
       if (n >= 1 && CARDIO.deck) try { CARDIO.deck.activate(k, 'read'); } catch (e) { /* ignore */ }
       try { if (CARDIO.util && CARDIO.util.emit) CARDIO.util.emit('passes:change', { key: k, n: n }); } catch (e) { /* ignore */ }
