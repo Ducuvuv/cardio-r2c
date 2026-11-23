@@ -406,6 +406,7 @@
       { label: 'Parasito-myco', href: '#/parasito?poly=parasito', ico: 'list', parasito: true },
       { label: 'Bactério', href: '#/parasito?poly=bacterio', ico: 'list', parasito: true, bacterio: true },
       { label: 'Virologie', href: '#/parasito?poly=viro', ico: 'list', parasito: true, viro: true },
+      { label: '📝 Annales SU officiel', href: '#/annales', ico: 'list', keep: true, annales: true },
       { label: 'Traitements · 3 Collèges', href: ttt2Spe ? '#/ttt2' : '#/ttt', ico: 'pill' },
       { label: 'Traitements ' + String(speShort).toLowerCase(), href: '#/ttt2', ico: 'pill', keep: true, dp: true },
       { label: 'Examens en pneumo', href: '#/points/pneumo-examens', ico: 'search' },
@@ -441,6 +442,7 @@
       if (c.remote) return !!(CARDIO.remote && CARDIO.remote.active);
       if (c.edn) { const v = CARDIO.views && CARDIO.views.edn; return !!(v && v.available && v.available()); }
       if (c.ecgb) { const v = CARDIO.views && CARDIO.views.ecg; if (!(v && v.available && v.available())) return false; }
+      if (c.annales) { const v = CARDIO.views && CARDIO.views.annales; return !!(v && v.available && v.available()); }
       if (c.atlas) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.atlas) && CARDIO.registry.atlas.length);
       if (c.viro) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.viro) && CARDIO.registry.viro.length);
       if (c.bacterio) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.bacterio) && CARDIO.registry.bacterio.length);

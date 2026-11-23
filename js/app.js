@@ -99,6 +99,8 @@
     ['#/parasito',                'parasito',   'items',    'Parasito-myco',       true,  {}],
     ['#/parasito/:id',            'parasito',   'items',    'Fiche parasito',      true,  {}],
     ['#/parasito/:id/cartes',     'parasito',   'items',    'Cartes parasito',     true,  { train: true }],
+    ['#/annales',                 'annales',    'items',    'Annales SU officiel', true,  {}],
+    ['#/annales/:id',             'annales',    'items',    'Annales SU',          true,  {}],
     ['#/scroll',                  'parasito',   'review',   'Mode Scroll',         true,  { scroll: true }],
     ['#/points',                  'points',     'items',    'Points cours',        true,  {}],
     ['#/points/:id',              'points',     'items',    'Point cours',         true,  {}],
