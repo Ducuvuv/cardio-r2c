@@ -92,7 +92,16 @@
       kids.push(h('div', { class: 'caption' }, 'Question ' + str(q.num) + (q.type ? ' · ' + q.type : '')));
       kids.push(h('div', { class: 'an-stem' }, md(q.stem)));
       ['img', 'img2', 'img3', 'img4', 'img5'].forEach(function (k) {
-        if (q[k]) kids.push(h('img', { src: q[k], alt: str(q.imgAlt || 'Figure du sujet'), loading: 'lazy', style: 'max-width:100%;height:auto;border-radius:8px;margin:4px 0 10px;background:#fff;display:block' }));
+        if (q[k]) {
+          const im = h('img', { src: q[k], alt: str(q.imgAlt || 'Figure du sujet'), loading: 'lazy', style: 'max-width:100%;height:auto;border-radius:8px;margin:4px 0 10px;background:#fff;display:block' });
+          // version partagée : l'image n'est pas publiée en clair → déchiffrement à la demande
+          im.addEventListener('error', function () {
+            if (im.dataset.priv || !window.CARDIO || !CARDIO.privImg) return;
+            im.dataset.priv = '1';
+            CARDIO.privImg(q[k]).then(function (u) { im.src = u; }).catch(function () { /* ignore */ });
+          });
+          kids.push(im);
+        }
       });
       if (q.after) kids.push(h('div', { class: 'an-stem', style: 'font-weight:500' }, md(q.after)));
       if (isClosed) {
@@ -130,7 +139,8 @@
           const r = prog()[q.id];
           kids.push(h('div', { class: 'an-res', style: 'color:' + (r && r.ok ? '#16a34a' : '#dc2626') }, r && r.ok ? '✅ Juste' : '❌ Faux · réponse : ' + q.options.filter(function (o) { return o.ok; }).map(function (o) { return o.l; }).join(', ')));
         }
-        if (q.answer) kids.push(h('div', { class: 'an-box an-off' }, h('div', { class: 'caption' }, 'Réponse attendue (corrigé officiel)'), md(q.answer)));
+        if (q.unofficial) kids.push(h('div', { class: 'an-box', style: 'border-left-color:#2563eb;background:rgba(37,99,235,.07)' }, h('div', { class: 'caption' }, '📘 Corrigé non officiel'), md('Pas de corrigé de la fac pour cette question : les réponses ont été **déduites du Collège / du poly** et vérifiées, mais ce n\'est pas la grille officielle.')));
+        if (q.answer) kids.push(h('div', { class: 'an-box an-off' }, h('div', { class: 'caption' }, q.unofficial ? 'Réponse attendue (d\'après le cours)' : 'Réponse attendue (corrigé officiel)'), md(q.answer)));
         if (q.offComment) kids.push(h('div', { class: 'an-box an-off' }, h('div', { class: 'caption' }, '✍️ Corrigé officiel'), md(q.offComment)));
         if (q.conflict) kids.push(h('div', { class: 'an-box', style: 'border-left-color:#d97706;background:rgba(217,119,6,.07)' }, h('div', { class: 'caption' }, '⚠️ Corrigé officiel ≠ poly'), md(q.conflict)));
         if (q.expl) kids.push(h('div', { class: 'an-box' }, h('div', { class: 'caption' }, '📖 Correction détaillée'), md(q.expl)));

@@ -175,6 +175,19 @@
     const name = String(src).split('/').pop().replace(/\.js$/, '');
     return decryptFile(privKey, 'atlas-img/' + name).then(runCode).catch(function () { /* ignore */ });
   };
+  // Images des annales SU (img/annales/…) : chiffrées une par une, déchiffrées à la demande → URL blob
+  const privImgCache = {};
+  C.privImg = function (src) {
+    if (!privKey) return Promise.reject(new Error('locked'));
+    const rel = String(src).replace(/^.*img\/annales\//, '');
+    if (!privImgCache[rel]) {
+      privImgCache[rel] = fetch('content/enc/annales-img/' + rel.split('/').join('__') + '.enc').then(function (r) { if (!r.ok) throw new Error(rel); return r.arrayBuffer(); }).then(function (buf) {
+        const u = new Uint8Array(buf);
+        return crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.slice(0, 12) }, privKey, u.slice(12));
+      }).then(function (plain) { return URL.createObjectURL(new Blob([plain], { type: 'image/jpeg' })); });
+    }
+    return privImgCache[rel];
+  };
   C.remote = {
     active: true,
     session: session,

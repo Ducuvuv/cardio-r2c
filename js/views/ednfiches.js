@@ -73,7 +73,11 @@
       '.ef-pages canvas{display:block;background:#fff;margin:0 auto 10px;box-shadow:var(--shadow-1);border-radius:4px}',
       '.ef-status{padding:24px 8px;text-align:center;color:var(--muted)}',
       '.ef-bottom{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;margin-top:8px}',
-      '.ef-frame{width:100%;height:75vh;border:1px solid var(--line);border-radius:8px;background:#fff}'
+      '.ef-frame{width:100%;height:75vh;border:1px solid var(--line);border-radius:8px;background:#fff}',
+      '.ef-err{border-left:4px solid var(--warn)}', '.ef-err__sum{cursor:pointer;font-weight:700;list-style:none}',
+      '.ef-err__list{display:grid;gap:8px;margin-top:10px}', '.ef-err__it{font-size:.9rem;line-height:1.4;padding:8px 10px;border-radius:10px;background:var(--surface-2)}',
+      '.ef-err__bad{color:var(--bad);text-decoration:line-through;text-decoration-thickness:1px;margin-bottom:3px}', '.ef-err__ok{color:var(--ink)}',
+      '.ef-err-pill{flex:none;font-size:.7rem;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--warn-soft);color:var(--warn)}'
     ].join('\n');
     const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
   }
@@ -127,6 +131,7 @@
         box.appendChild(h('a', { class: 'ef-row', href: '#/ednfiches/' + key(f) },
           h('span', { class: 'ef-num' }, pad(f.n)),
           h('span', { class: 'ef-t' }, f.t),
+          f.e ? h('span', { class: 'ef-err-pill' }, '⚠️ corrigée') : null,
           h('span', { class: 'ef-c' + (c > min && !isBonus(f) ? ' on' : (c ? ' cur' : '')) }, c ? '×' + c : f.p + ' p.')));
       });
     }
@@ -196,6 +201,20 @@
         zoomLbl,
         h('button', { type: 'button', class: 'btn btn--sm btn--outline', 'aria-label': 'Zoomer', on: { click: function () { setZoom(zoom * 1.25); } } }, '+'),
         h('a', { class: 'btn btn--sm btn--ghost', href: f.u, target: '_blank', rel: 'noopener' }, '↗ Plein écran'))));
+
+    if (f.e && ((f.e.fix || []).length || (f.e.add || []).length)) {
+      const fx = f.e.fix || [], ad = f.e.add || [];
+      page.appendChild(h('details', { class: 'card ef-err', open: true },
+        h('summary', { class: 'ef-err__sum' }, '⚠️ Corrections d\'après le Collège · ' + fx.length + ' erreur' + (fx.length > 1 ? 's' : '') + (ad.length ? ' · ' + ad.length + ' ajout' + (ad.length > 1 ? 's' : '') : '')),
+        fx.length ? h('div', { class: 'ef-err__list' }, fx.map(function (x) {
+          return h('div', { class: 'ef-err__it' },
+            h('div', { class: 'ef-err__bad' }, '✗ Fiche : ' + x[0]),
+            h('div', { class: 'ef-err__ok' }, '✓ Collège : ' + x[1] + ' ', h('span', { class: 'src' }, x[2])));
+        })) : null,
+        ad.length ? h('div', { class: 'ef-err__list' }, h('div', { class: 'caption' }, '➕ À ajouter (absent de la fiche)'), ad.map(function (x) {
+          return h('div', { class: 'ef-err__it ef-err__ok' }, x[0] + ' ', h('span', { class: 'src' }, x[1]));
+        })) : null));
+    }
 
     const pagesEl = h('div', { class: 'ef-pages' }, h('div', { class: 'ef-status' }, 'Chargement de la fiche…'));
     page.appendChild(pagesEl);
