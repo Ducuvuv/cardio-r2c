@@ -95,11 +95,13 @@
         if (q[k]) {
           const im = h('img', { src: q[k], alt: str(q.imgAlt || 'Figure du sujet'), loading: 'lazy', style: 'max-width:100%;height:auto;border-radius:8px;margin:4px 0 10px;background:#fff;display:block' });
           // version partagée : l'image n'est pas publiée en clair → déchiffrement à la demande
-          im.addEventListener('error', function () {
-            if (im.dataset.priv || !window.CARDIO || !CARDIO.privImg) return;
-            im.dataset.priv = '1';
-            CARDIO.privImg(q[k]).then(function (u) { im.src = u; }).catch(function () { /* ignore */ });
-          });
+          let tries = 0;
+          const viaPriv = function () {
+            if (!window.CARDIO || !CARDIO.privImg || tries > 8) return;
+            tries++;
+            CARDIO.privImg(q[k]).then(function (u) { im.src = u; }).catch(function () { setTimeout(viaPriv, 1500); });
+          };
+          im.addEventListener('error', function () { if (!/^blob:/.test(im.src)) viaPriv(); });
           kids.push(im);
         }
       });

@@ -178,13 +178,17 @@
   // Images des annales SU (img/annales/…) : chiffrées une par une, déchiffrées à la demande → URL blob
   const privImgCache = {};
   C.privImg = function (src) {
-    if (!privKey) return Promise.reject(new Error('locked'));
+    if (!privKey) {
+      // clé enregistrée mais déchiffrement pas encore lancé/fini : on attend un peu
+      return new Promise(function (res, rej) { setTimeout(function () { privKey ? res(C.privImg(src)) : rej(new Error('locked')); }, 1200); });
+    }
     const rel = String(src).replace(/^.*img\/annales\//, '');
     if (!privImgCache[rel]) {
       privImgCache[rel] = fetch('content/enc/annales-img/' + rel.split('/').join('__') + '.enc').then(function (r) { if (!r.ok) throw new Error(rel); return r.arrayBuffer(); }).then(function (buf) {
         const u = new Uint8Array(buf);
         return crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.slice(0, 12) }, privKey, u.slice(12));
       }).then(function (plain) { return URL.createObjectURL(new Blob([plain], { type: 'image/jpeg' })); });
+      privImgCache[rel].catch(function () { delete privImgCache[rel]; });
     }
     return privImgCache[rel];
   };
