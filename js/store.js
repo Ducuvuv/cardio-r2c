@@ -564,7 +564,7 @@
 
   /* lsx : les clés « carte » {id: {…, at}} (compteur Vu N fois, fiches lues) fusionnent entrée par entrée (la plus
    * récente gagne), pour qu'une écriture faite avant la synchro, ou sur un autre appareil, n'efface pas les autres. */
-  const LSX_MAPS = { 'cardio.passes': 1, 'cardio.parasito': 1, 'cardio.annales': 1 };
+  const LSX_MAPS = { 'cardio.passes': 1, 'cardio.parasito': 1, 'cardio.annales': 1, 'cardio.ednfiches': 1 };
   function lsxMergeMaps(va, vb) {
     let a = null, b = null;
     try { a = JSON.parse(va); } catch (e) { a = null; }

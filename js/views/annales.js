@@ -91,7 +91,9 @@
       const kids = [];
       kids.push(h('div', { class: 'caption' }, 'Question ' + str(q.num) + (q.type ? ' · ' + q.type : '')));
       kids.push(h('div', { class: 'an-stem' }, md(q.stem)));
-      if (q.img) kids.push(h('img', { src: q.img, alt: str(q.imgAlt || 'Figure du sujet'), style: 'max-width:100%;height:auto;border-radius:8px;margin:4px 0 10px;background:#fff' }));
+      ['img', 'img2', 'img3', 'img4', 'img5'].forEach(function (k) {
+        if (q[k]) kids.push(h('img', { src: q[k], alt: str(q.imgAlt || 'Figure du sujet'), loading: 'lazy', style: 'max-width:100%;height:auto;border-radius:8px;margin:4px 0 10px;background:#fff;display:block' }));
+      });
       if (q.after) kids.push(h('div', { class: 'an-stem', style: 'font-weight:500' }, md(q.after)));
       if (isClosed) {
         q.options.forEach(function (o) {

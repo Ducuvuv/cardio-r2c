@@ -101,6 +101,8 @@
     ['#/parasito/:id/cartes',     'parasito',   'items',    'Cartes parasito',     true,  { train: true }],
     ['#/annales',                 'annales',    'items',    'Annales SU officiel', true,  {}],
     ['#/annales/:id',             'annales',    'items',    'Annales SU',          true,  {}],
+    ['#/ednfiches',               'ednfiches',  'items',    'Fiches EDN',          true,  {}],
+    ['#/ednfiches/:n',            'ednfiches',  'items',    'Fiche EDN',           true,  {}],
     ['#/scroll',                  'parasito',   'review',   'Mode Scroll',         true,  { scroll: true }],
     ['#/points',                  'points',     'items',    'Points cours',        true,  {}],
     ['#/points/:id',              'points',     'items',    'Point cours',         true,  {}],
