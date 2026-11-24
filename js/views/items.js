@@ -377,6 +377,43 @@
   function getISel() { try { return JSON.parse(sessionStorage.getItem(ISEL_KEY) || '[]') || []; } catch (e) { return []; } }
   function setISel(a) { try { sessionStorage.setItem(ISEL_KEY, JSON.stringify(a)); } catch (e) { /* ignore */ } }
   let iselMode = false;
+  /* Encart « ce qui tombe le plus » : part des questions des annales SU (content/annales-freq.js, CARDIO.annFreq) par item. */
+  const FREQ_SPE = { cardio: 'Cardio', pneumo: 'Pneumo', dermato: 'Dermato' };
+  let freqOpen = false;
+  function freqBanner(spe) {
+    const F = CARDIO.annFreq;
+    if (!F || !F.spe) return null;
+    const spes = spe === 'all' ? ['cardio', 'pneumo', 'dermato'] : [spe];
+    const blocks = spes.filter(function (k) { return F.spe[k] && F.spe[k].top && F.spe[k].top.length; });
+    if (!blocks.length) return null;
+    const card = h('div', { class: 'card', style: 'margin:0 0 14px;border-left:4px solid var(--accent);display:grid;gap:10px' });
+    const draw = function () {
+      const lim = freqOpen ? 99 : (spe === 'all' ? 4 : 6);
+      card.replaceChildren.apply(card, flat([
+        h('div', {}, h('b', { style: 'font-size:1.02rem' }, '🔥 Ce qui tombe le plus aux annales SU'),
+          h('p', { class: 'secondary muted', style: 'margin:2px 0 0' }, 'Part des questions par chapitre, d’après les ' + blocks.map(function (k) { return F.spe[k].exams; }).reduce(function (a, b) { return a + b; }, 0) + ' sujets analysés (' + blocks.map(function (k) { return F.spe[k].n; }).reduce(function (a, b) { return a + b; }, 0) + ' questions).')),
+        blocks.map(function (k) {
+          const d = F.spe[k];
+          const max = d.top[0][2] || 1;
+          return h('div', { style: 'display:grid;gap:5px' },
+            spe === 'all' ? h('div', { class: 'items__eyebrow', style: 'margin:4px 0 0' }, FREQ_SPE[k] + ' · ' + d.exams + ' sujets') : null,
+            d.top.slice(0, lim).map(function (t, i) {
+              const it = findItem(t[0]);
+              const name = it ? (it.short || it.title) : String(t[0]).replace(/^autre:/, '');
+              const row = h(it ? 'a' : 'div', { href: it ? '#/item/' + it.num : null, style: 'display:grid;grid-template-columns:22px 1fr 46px;align-items:center;gap:8px;text-decoration:none;color:inherit' },
+                h('span', { class: 'secondary muted', style: 'text-align:right;font-weight:700' }, String(i + 1)),
+                h('div', { style: 'display:grid;gap:3px;min-width:0' },
+                  h('span', { style: 'font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, (it ? lbl(it) + ' · ' : '') + name, t[3] ? h('span', { class: 'secondary muted' }, ' · dans ' + t[3] + '/' + d.exams + ' sujets') : null),
+                  h('div', { style: 'height:6px;border-radius:3px;background:var(--line);overflow:hidden' }, h('div', { style: 'height:100%;border-radius:3px;background:var(--accent);width:' + Math.max(4, Math.round(t[2] / max * 100)) + '%' }))),
+                h('b', { style: 'text-align:right;font-size:.9rem' }, String(Math.round(t[2])) + ' %'));
+              return row;
+            }));
+        }),
+        h('button', { type: 'button', class: 'btn btn--ghost btn--sm', style: 'justify-self:start', on: { click: function () { freqOpen = !freqOpen; draw(); } } }, freqOpen ? 'Réduire' : 'Voir tous les chapitres')]));
+    };
+    draw();
+    return card;
+  }
   function buildList() {
     const m = matiere();
     const spe = m ? m.current() : 'all';
@@ -390,6 +427,8 @@
     page.appendChild(h('p', { class: 'items__lead' }, items.length
       ? (available === items.length ? (SPE_LEAD[spe] || SPE_LEAD.all) : available + ' item' + (available > 1 ? 's' : '') + ' disponible' + (available > 1 ? 's' : '') + ' sur ' + items.length + '. Les autres arrivent.')
       : 'Le catalogue n’est pas encore chargé. Recharge la page si cela persiste.'));
+    const fb = safe(function () { return freqBanner(spe); }, null);
+    if (fb) page.appendChild(fb);
     const sel = getISel();
     const redraw = function () { const v = page.parentNode; if (v) v.replaceChild(buildList(), page); };
     page.appendChild(h('div', { class: 'cluster', style: 'margin-bottom:8px' },

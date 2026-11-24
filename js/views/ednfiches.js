@@ -180,7 +180,8 @@
   }
 
   /* ---------- lecteur ---------- */
-  function renderFiche(f) {
+  function renderFiche(f, query) {
+    const pq = query && query.paquet && CARDIO.paquets ? String(query.paquet) : '';   // ouverte depuis un paquet du soir
     styles();
     const page = h('div', { class: 'page page--wide' });
     page.dataset.title = pad(f.n) + ' · Fiche EDN';
@@ -200,15 +201,18 @@
         h('button', { type: 'button', class: 'btn btn--sm btn--outline', 'aria-label': 'Dézoomer', on: { click: function () { setZoom(zoom / 1.25); } } }, '−'),
         zoomLbl,
         h('button', { type: 'button', class: 'btn btn--sm btn--outline', 'aria-label': 'Zoomer', on: { click: function () { setZoom(zoom * 1.25); } } }, '+'),
-        h('a', { class: 'btn btn--sm btn--ghost', href: f.u, target: '_blank', rel: 'noopener' }, '↗ Plein écran'))));
+        h('a', { class: 'btn btn--sm btn--ghost', href: f.u, target: '_blank', rel: 'noopener' }, '↗ Plein écran'),
+        f.uo ? h('a', { class: 'btn btn--sm btn--ghost', href: f.uo, target: '_blank', rel: 'noopener' }, 'Fiche originale') : null)));
 
     if (f.e && ((f.e.fix || []).length || (f.e.add || []).length)) {
       const fx = f.e.fix || [], ad = f.e.add || [];
       page.appendChild(h('details', { class: 'card ef-err', open: true },
         h('summary', { class: 'ef-err__sum' }, '⚠️ Corrections d\'après le Collège · ' + fx.length + ' erreur' + (fx.length > 1 ? 's' : '') + (ad.length ? ' · ' + ad.length + ' ajout' + (ad.length > 1 ? 's' : '') : '')),
-        fx.length ? h('div', { class: 'ef-err__list' }, fx.map(function (x) {
+        f.e.num ? h('div', { class: 'ef-sub', style: 'margin-top:6px' }, 'Dans la fiche ci-dessous : barré en rouge [k] = erreur d’après le Collège ; souligné en orange [k] = la fiche suit une reco plus récente que le Collège. Récapitulatif en dernière page.') : null,
+        fx.length ? h('div', { class: 'ef-err__list' }, fx.map(function (x, i) {
           return h('div', { class: 'ef-err__it' },
-            h('div', { class: 'ef-err__bad' }, '✗ Fiche : ' + x[0]),
+            x[3] === 'd' ? h('div', { style: 'color:var(--warn);font-weight:600;margin-bottom:3px' }, (f.e.num ? '[' + (i + 1) + '] ' : '') + '≠ Fiche (reco plus récente que le Collège) : ' + x[0])
+              : h('div', { class: 'ef-err__bad' }, (f.e.num ? '[' + (i + 1) + '] ' : '') + '✗ Fiche : ' + x[0]),
             h('div', { class: 'ef-err__ok' }, '✓ Collège : ' + x[1] + ' ', h('span', { class: 'src' }, x[2])));
         })) : null,
         ad.length ? h('div', { class: 'ef-err__list' }, h('div', { class: 'caption' }, '➕ À ajouter (absent de la fiche)'), ad.map(function (x) {
@@ -224,12 +228,13 @@
       h('button', { type: 'button', class: 'btn btn--primary', on: { click: function () {
         setCount(f, count(f) + 1); refreshCount();
         try { CARDIO.shell && CARDIO.shell.toast && CARDIO.shell.toast('Fiche ' + pad(f.n) + ' lue ×' + count(f), { tone: 'ok' }); } catch (e) { /* ignore */ }
+        if (pq) { const nk = CARDIO.paquets.nextFiche(pq, key(f)); location.hash = nk ? '#/ednfiches/' + nk + '?paquet=' + encodeURIComponent(pq) : '#/paquets/' + encodeURIComponent(pq); return; }
         const n2 = nextFiche(prog(), f); if (n2) location.hash = '#/ednfiches/' + key(n2);
-      } } }, '✓ Lue · fiche suivante'),
+      } } }, pq ? '✓ Lue · suite du paquet' : '✓ Lue · fiche suivante'),
       h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: function () { if (count(f) > 0) { setCount(f, count(f) - 1); refreshCount(); } } } }, '↺ Annuler une lecture'),
       h('div', { class: 'cluster' },
         prev ? h('a', { class: 'btn btn--sm btn--secondary', href: '#/ednfiches/' + key(prev) }, '← ' + pad(prev.n)) : null,
-        h('a', { class: 'btn btn--sm btn--secondary', href: '#/ednfiches' }, 'Liste'),
+        pq ? h('a', { class: 'btn btn--sm btn--secondary', href: '#/paquets/' + encodeURIComponent(pq) }, '📦 Paquet') : h('a', { class: 'btn btn--sm btn--secondary', href: '#/ednfiches' }, 'Liste'),
         next ? h('a', { class: 'btn btn--sm btn--secondary', href: '#/ednfiches/' + key(next) }, pad(next.n) + ' →') : null)));
     if (nx) page.appendChild(h('div', { class: 'ef-sub' }, 'Prochaine fiche du tour : ' + pad(nx.n) + ' · ' + nx.t));
 
@@ -274,9 +279,10 @@
   function render(params, query) {
     const k = params && params.n;
     let el;
-    if (k) { const f = find(k); el = f ? renderFiche(f) : renderList(query || {}); }
+    if (k) { const f = find(k); el = f ? renderFiche(f, query || {}) : renderList(query || {}); }
     else el = renderList(query || {});
-    return { el: el, title: el.dataset.title || 'Fiches EDN' };
+    const pq = k && query && query.paquet ? '#/paquets/' + encodeURIComponent(query.paquet) : undefined;
+    return { el: el, title: el.dataset.title || 'Fiches EDN', back: pq };
   }
   CARDIO.views.ednfiches = { render: render, available: function () { return all().length > 0; } };
 })();

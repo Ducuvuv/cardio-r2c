@@ -407,6 +407,7 @@
       { label: 'Bactério', href: '#/parasito?poly=bacterio', ico: 'list', parasito: true, bacterio: true },
       { label: 'Virologie', href: '#/parasito?poly=viro', ico: 'list', parasito: true, viro: true },
       { label: '📝 Annales SU officiel', href: '#/annales', ico: 'list', keep: true, annales: true },
+      { label: '🌙 Paquets du soir', href: '#/paquets', ico: 'calendar', keep: true, ednf: true },
       { label: '📄 Fiches EDN', href: '#/ednfiches', ico: 'list', keep: true, ednf: true },
       { label: 'Traitements · 3 Collèges', href: ttt2Spe ? '#/ttt2' : '#/ttt', ico: 'pill' },
       { label: 'Traitements ' + String(speShort).toLowerCase(), href: '#/ttt2', ico: 'pill', keep: true, dp: true },

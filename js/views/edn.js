@@ -1077,6 +1077,7 @@
       record(r.q, r.s.score, null); run.recorded[r.q.id] = r.s.score;
     });
     saveAttempt(run, ag);
+    try { if (run.paquet && C.paquets && C.paquets.logSession) C.paquets.logSession(run.paquet, ag.glob.note, ag.rows.length); } catch (e) { /* ignore */ }
     try { if (C.store && C.store.gainXp) C.store.gainXp(Math.round(5 * ag.glob.pts), 'edn'); } catch (e) { /* ignore */ }
     lsSet(LS_LAST, run);
     lsDel(LS_RUN);
@@ -1113,7 +1114,7 @@
       const review = Object.keys(ag.byItem).filter(function (k) { const g = ag.byItem[k]; return g.max && g.pts / g.max < 0.7; });
       const nv = ag.rows.filter(function (r) { return r.s.unanswered; }).length;
       put(root,
-        h('div', { class: 'edn-row', style: 'margin-bottom:8px' }, h('a', { href: '#/edn', class: 'btn btn--ghost btn--sm' }, '← EDN / Partiels'), h('span', { class: 'secondary', style: 'font-size:.8rem' }, fmtDate(run.submittedAt))),
+        h('div', { class: 'edn-row', style: 'margin-bottom:8px' }, h('a', { href: run.backHref || '#/edn', class: 'btn btn--ghost btn--sm' }, run.backHref ? '← ' + (run.backLabel || 'Retour') : '← EDN / Partiels'), h('span', { class: 'secondary', style: 'font-size:.8rem' }, fmtDate(run.submittedAt))),
         partiel ? h('div', { class: 'edn-warn', role: 'note', style: 'margin-bottom:10px' }, '⚠ ' + PARTIEL_WARN) : null,
         h('div', { class: 'card stack', style: 'text-align:center' },
           h('span', { class: 'caption' }, run.title + ' · ' + plural(ag.n, 'question') + (nv ? ' · ' + nv + ' non validée' + (nv > 1 ? 's' : '') : '')),
@@ -1173,7 +1174,7 @@
             }));
         }),
         h('div', { class: 'stack', style: 'margin-top:16px' },
-          h('a', { class: 'btn btn--primary btn--block', href: '#/edn' }, 'Nouvelle épreuve')));
+          h('a', { class: 'btn btn--primary btn--block', href: run.backHref || '#/edn' }, run.backHref ? '← ' + (run.backLabel || 'Retour') : 'Nouvelle épreuve')));
     }
     paint();
   }
@@ -1200,7 +1201,7 @@
         finalize(run);
         toast('Temps écoulé : copie soumise automatiquement', 'warn');
         results(root, run);
-        return { el: root, title: 'Résultats', back: '#/edn' };
+        return { el: root, title: 'Résultats', back: run.backHref || '#/edn' };
       }
       const quit = runner(root, run);
       const done = runQuestions(run).filter(function (q) { return run.ans[q.id] && run.ans[q.id].validated; }).length;
@@ -1211,7 +1212,7 @@
       const last = lsGet(LS_LAST, null);
       if (last && last.done && Array.isArray(last.blocks)) {
         last.ans = last.ans || {}; last.recorded = last.recorded || {}; last.flags = last.flags || {};
-        results(root, last); return { el: root, title: 'Résultats', back: '#/edn' };
+        results(root, last); return { el: root, title: 'Résultats', back: last.backHref || '#/edn' };
       }
     }
     if (mode === 'examen') { examSetup(root); return { el: root, title: 'Épreuve EDN', back: '#/edn' }; }
@@ -1221,8 +1222,39 @@
     return { el: root, title: 'EDN / Partiels' };
   }
 
+  /* Séance « Paquets du soir » (js/views/paquets.js) : QCM des items choisis, correction après chaque validation.
+     keys = clés d'items de la banque (« 152 », « d111 », « p359bis »…) ; size = nombre de questions visé, réparti
+     équitablement entre les items (tour à tour, jamais vus d'abord) ; kinds = types de blocs gardés (défaut QI + TCS +
+     KFP + DP). Renvoie false s'il n'y a aucune question. */
+  function countForItems(keys) {
+    const set = {}; (keys || []).forEach(function (k) { set[k] = 1; });
+    return bank().blocks.filter(function (b) { return set[b.item]; }).reduce(function (n, b) { return n + nq(b); }, 0);
+  }
+  function trainItems(o) {
+    const keys = (o.keys || []).filter(Boolean);
+    const kinds = o.kinds || null;
+    const per = {};
+    keys.forEach(function (k) { per[k] = freshFirst(bank().blocks.filter(function (b) { return b.item === k && (!kinds || kinds.indexOf(b.kind) >= 0); })); });
+    const out = []; let n = 0; const size = o.size || 15;
+    let progress = true;
+    while (n < size && progress) {
+      progress = false;
+      keys.forEach(function (k) {
+        if (n >= size) return;
+        const b = per[k] && per[k].shift();
+        if (b) { out.push(b); n += nq(b); progress = true; }
+      });
+    }
+    if (!out.length) return false;
+    const run = makeRun({ mode: 'train', title: o.title || 'Séance', spe: 'all', blocks: out, durationSec: 0, immediate: true, shuffleOptions: true, shuffleBlocks: true });
+    run.backHref = o.backHref || null; run.backLabel = o.backLabel || null; run.paquet = o.paquet || null;
+    startRun(run);
+    return true;
+  }
+
   C.views.edn = {
-    render: render, available: available,
+    render: render, available: available, trainItems: trainItems, countForItems: countForItems,
+    itemStats: function (key) { const qs = []; bank().blocks.forEach(function (b) { if (b.item === key) b.questions.forEach(function (q) { qs.push(qStat(q.id)); }); }); const seen = qs.filter(Boolean); return { n: qs.length, seen: seen.length, avg: seen.length ? seen.reduce(function (t, v) { return t + (v.last || 0); }, 0) / seen.length : null }; },
     // exposés pour les tests (app/_dev/test-edn.html)
     scoreQ: scoreQ, aggregate: aggregate, codeOf: codeOf, norm: norm, compose: compose, partielBlocks: partielBlocks, makeRun: makeRun
   };
