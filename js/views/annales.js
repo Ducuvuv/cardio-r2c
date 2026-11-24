@@ -34,6 +34,19 @@
     if (typeof u.md === 'function') { try { html = u.md(str(text)).trim().replace(/^<p>([\s\S]*)<\/p>$/, '$1'); } catch (e) { html = ''; } }
     return html ? h('span', { html: html }) : h('span', {}, str(text));
   }
+  /* images : regroupées par sujet dans content/annales-img/<unité>.js (limite de fichiers de l'artefact), chargées à la demande */
+  const bundles = {};
+  function annCached(src) { return (CARDIO.annImg && CARDIO.annImg[src]) || ''; }
+  function annBundle(src) {
+    const m = /^img\/annales\/([^/]+)\//.exec(str(src));
+    const name = m ? m[1] : '_root';
+    if (!bundles[name]) bundles[name] = new Promise(function (res) {
+      const s = document.createElement('script');
+      s.src = 'content/annales-img/' + name + '.js'; s.charset = 'utf-8';
+      s.onload = res; s.onerror = res; document.head.appendChild(s);
+    });
+    return bundles[name];
+  }
   function closed(q) { return Array.isArray(q.options) && q.options.length > 0 && q.options.some(function (o) { return typeof o.ok === 'boolean'; }); }
 
   let styled = false;
@@ -93,7 +106,7 @@
       kids.push(h('div', { class: 'an-stem' }, md(q.stem)));
       ['img', 'img2', 'img3', 'img4', 'img5'].forEach(function (k) {
         if (q[k]) {
-          const im = h('img', { src: q[k], alt: str(q.imgAlt || 'Figure du sujet'), loading: 'lazy', style: 'max-width:100%;height:auto;border-radius:8px;margin:4px 0 10px;background:#fff;display:block' });
+          const im = h('img', { src: annCached(q[k]) || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', alt: str(q.imgAlt || 'Figure du sujet'), loading: 'lazy', style: 'max-width:100%;height:auto;border-radius:8px;margin:4px 0 10px;background:#fff;display:block' });
           // version partagée : l'image n'est pas publiée en clair → déchiffrement à la demande
           let tries = 0;
           const viaPriv = function () {
@@ -102,6 +115,7 @@
             CARDIO.privImg(q[k]).then(function (u) { im.src = u; }).catch(function () { setTimeout(viaPriv, 1500); });
           };
           im.addEventListener('error', function () { if (!/^blob:/.test(im.src)) viaPriv(); });
+          if (!annCached(q[k])) annBundle(q[k]).then(function () { im.src = annCached(q[k]) || q[k]; });
           kids.push(im);
         }
       });
