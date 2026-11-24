@@ -378,7 +378,14 @@
   function setISel(a) { try { sessionStorage.setItem(ISEL_KEY, JSON.stringify(a)); } catch (e) { /* ignore */ } }
   let iselMode = false;
   /* Encart « ce qui tombe le plus » : part des questions des annales SU (content/annales-freq.js, CARDIO.annFreq) par item. */
-  const FREQ_SPE = { cardio: 'Cardio', pneumo: 'Pneumo', dermato: 'Dermato' };
+  const FREQ_SPE = { cardio: 'Cardio', pneumo: 'Pneumo', dermato: 'Dermato', parasito: 'Parasito-myco', bacterio: 'Bactério', viro: 'Viro' };
+  /* Chapitre d'un poly (parasito / bactério / viro) : { id, title } ou null. */
+  function microFiche(id) {
+    const r = CARDIO.registry || {};
+    const all = [].concat(Array.isArray(r.parasito) ? r.parasito : [], Array.isArray(r.bacterio) ? r.bacterio : [], Array.isArray(r.viro) ? r.viro : []);
+    return all.find(function (p) { return p && p.id === id; }) || null;
+  }
+  const FREQ_MICRO = { parasito: 1, bacterio: 1, viro: 1 };
   let freqOpen = false;
   function freqBanner(spe) {
     const F = CARDIO.annFreq;
@@ -398,9 +405,10 @@
           return h('div', { style: 'display:grid;gap:5px' },
             spe === 'all' ? h('div', { class: 'items__eyebrow', style: 'margin:4px 0 0' }, FREQ_SPE[k] + ' · ' + d.exams + ' sujets') : null,
             d.top.slice(0, lim).map(function (t, i) {
-              const it = findItem(t[0]);
-              const name = it ? (it.short || it.title) : String(t[0]).replace(/^autre:/, '');
-              const row = h(it ? 'a' : 'div', { href: it ? '#/item/' + it.num : null, style: 'display:grid;grid-template-columns:22px 1fr 46px;align-items:center;gap:8px;text-decoration:none;color:inherit' },
+              const mf = /^autre:/.test(t[0]) ? null : (FREQ_MICRO[k] ? microFiche(t[0]) : null);
+              const it = mf || /^autre:/.test(t[0]) ? null : findItem(t[0]);
+              const name = it ? (it.short || it.title) : mf ? mf.title : (t[4] || String(t[0]).replace(/^autre:/, ''));
+              const row = h(it || mf ? 'a' : 'div', { href: it ? '#/item/' + it.num : mf ? '#/parasito/' + mf.id : null, style: 'display:grid;grid-template-columns:22px 1fr 46px;align-items:center;gap:8px;text-decoration:none;color:inherit' },
                 h('span', { class: 'secondary muted', style: 'text-align:right;font-weight:700' }, String(i + 1)),
                 h('div', { style: 'display:grid;gap:3px;min-width:0' },
                   h('span', { style: 'font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, (it ? lbl(it) + ' · ' : '') + name, t[3] ? h('span', { class: 'secondary muted' }, ' · dans ' + t[3] + '/' + d.exams + ' sujets') : null),
@@ -984,5 +992,5 @@
     return root;
   }
 
-  CARDIO.views.items = { render: render, renderHub: renderHub, kindMastery: kindMastery };
+  CARDIO.views.items = { render: render, renderHub: renderHub, kindMastery: kindMastery, freqBanner: freqBanner };
 })();

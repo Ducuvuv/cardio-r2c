@@ -203,6 +203,8 @@
       : curPoly === 'bacterio'
       ? 'Une fiche par chapitre du poly de bactériologie (DFGSM3). Ce poly n’a pas de code couleur rang A/B : tout le contenu utile au partiel est repris, résumé. Mode « Me tester » : les mots-clés sont cachés, à toi de les retrouver.'
       : 'Une fiche par parasite et par mycose : le rouge du poly (rang A) et le violet (rang B, pastille 🟣). Mode « Me tester » : les mots-clés sont cachés, à toi de les retrouver.'));
+    const fqb = (function () { try { const iv = CARDIO.views.items; return iv && iv.freqBanner ? iv.freqBanner(curPoly) : null; } catch (e) { return null; } })();
+    if (fqb) page.appendChild(fqb);
     if (curPoly === 'parasito' && list().some(function (p) { return p.hasB || p.hasN; })) page.appendChild(h('div', { class: 'cluster' }, list().some(function (p) { return p.hasB; }) ? bToggle(redraw) : null, list().some(function (p) { return p.hasN; }) ? nToggle(redraw) : null));
     if (!all.length) {
       page.appendChild(h('div', { class: 'empty' }, h('div', { class: 'empty__title' }, 'Fiches non disponibles ici'), 'Cette rubrique est réservée à ta version privée de l’app.'));
