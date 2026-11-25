@@ -97,7 +97,7 @@
   function questionEl(q, revision, onAnswer) {
     const rec = prog()[q.id];
     const isClosed = closed(q);
-    let sel = done(rec) && Array.isArray(rec.sel) ? rec.sel.slice() : [];
+    let sel = rec && !rec.reset && Array.isArray(rec.sel) ? rec.sel.slice() : [];
     let shown = revision || done(rec);
     const wrap = h('div', { class: 'card an-q', style: 'padding:12px 14px' });
     function draw() {
@@ -128,7 +128,8 @@
           kids.push(h('button', { type: 'button', class: cls, on: { click: function () {
             if (shown) return;
             if (q.type === 'QRU') sel = [o.l]; else sel = picked ? sel.filter(function (x) { return x !== o.l; }) : sel.concat(o.l);
-            draw();
+            saveQ(q.id, { draft: 1, sel: sel });
+            draw(); if (onAnswer) onAnswer();
           } } },
             h('span', { class: 'an-l' }, o.l + '.'),
             h('span', { style: 'flex:1' }, inline(o.t),
@@ -140,27 +141,18 @@
         q.options.forEach(function (o) { kids.push(h('div', { class: 'an-opt', style: 'cursor:default' }, h('span', { class: 'an-l' }, o.l + '.'), h('span', {}, inline(o.t)))); });
       }
       if (!shown) {
-        kids.push(h('div', { class: 'an-bar' },
-          h('button', { type: 'button', class: 'btn btn--primary btn--sm', on: { click: function () {
-            shown = true;
-            if (isClosed) {
-              const good = q.options.filter(function (o) { return o.ok; }).map(function (o) { return o.l; }).sort().join('');
-              const ok = sel.slice().sort().join('') === good;
-              saveQ(q.id, { ok: ok, sel: sel });
-            } else saveQ(q.id, { ok: true, sel: [] });
-            draw(); if (onAnswer) onAnswer();
-          } } }, isClosed ? 'Valider' : 'Voir la correction')));
+        // mode examen : pas de correction question par question, tout s'affiche à la fin du sujet
+        kids.push(h('div', { class: 'secondary', style: 'font-size:.8rem;margin-top:6px' }, isClosed ? (sel.length ? '✓ Réponse enregistrée · correction à la fin du sujet' : 'Coche ta réponse · correction à la fin du sujet') : 'Question ouverte : réponds de tête, la correction s’affiche à la fin du sujet'));
       } else {
         if (isClosed && !revision) {
           const r = prog()[q.id];
-          kids.push(h('div', { class: 'an-res', style: 'color:' + (r && r.ok ? '#16a34a' : '#dc2626') }, r && r.ok ? '✅ Juste' : '❌ Faux · réponse : ' + q.options.filter(function (o) { return o.ok; }).map(function (o) { return o.l; }).join(', ')));
+          kids.push(h('div', { class: 'an-res', style: 'color:' + (r && r.ok ? '#16a34a' : '#dc2626') }, r && r.ok ? '✅ Juste' : (r && typeof r.disc === 'number' ? '❌ ' + r.disc + ' discordance' + (r.disc > 1 ? 's' : '') + ' · réponse : ' : '❌ Faux · réponse : ') + q.options.filter(function (o) { return o.ok; }).map(function (o) { return o.l; }).join(', ')));
         }
         if (q.unofficial) kids.push(h('div', { class: 'an-box', style: 'border-left-color:#2563eb;background:rgba(37,99,235,.07)' }, h('div', { class: 'caption' }, '📘 Corrigé non officiel'), md('Pas de corrigé de la fac pour cette question : les réponses ont été **déduites du Collège / du poly** et vérifiées, mais ce n\'est pas la grille officielle.')));
         if (q.answer) kids.push(h('div', { class: 'an-box an-off' }, h('div', { class: 'caption' }, q.unofficial ? 'Réponse attendue (d\'après le cours)' : 'Réponse attendue (corrigé officiel)'), md(q.answer)));
         if (q.offComment) kids.push(h('div', { class: 'an-box an-off' }, h('div', { class: 'caption' }, '✍️ Corrigé officiel'), md(q.offComment)));
         if (q.conflict) kids.push(h('div', { class: 'an-box', style: 'border-left-color:#d97706;background:rgba(217,119,6,.07)' }, h('div', { class: 'caption' }, '⚠️ Corrigé officiel ≠ poly'), md(q.conflict)));
         if (q.expl) kids.push(h('div', { class: 'an-box' }, h('div', { class: 'caption' }, '📖 Correction détaillée'), md(q.expl)));
-        if (!revision) kids.push(h('div', { class: 'an-bar' }, h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: function () { sel = []; shown = false; saveQ(q.id, { reset: 1 }); draw(); if (onAnswer) onAnswer(); } } }, '↺ Refaire')));
       }
       wrap.replaceChildren.apply(wrap, kids.filter(Boolean));
     }
@@ -178,9 +170,41 @@
     page.appendChild(h('h1', { style: 'margin-top:6px' }, str(ex.titre)));
     if (ex.source) page.appendChild(h('p', { class: 'secondary', style: 'font-size:.85rem' }, str(ex.source)));
     const score = h('div', { class: 'an-res' });
+    const endBox = h('div', { class: 'card', style: 'margin-top:18px;display:grid;gap:8px;text-align:center' });
+    /* Barème EDN : 0 discordance = 1 point, 1 = 0,5, 2 = 0,2, 3 ou plus = 0 (QRU : tout ou rien). */
+    function pts(q, r) { if (!r || typeof r.disc !== 'number') return r && r.ok ? 1 : 0; if (q.type === 'QRU') return r.disc ? 0 : 1; return r.disc === 0 ? 1 : r.disc === 1 ? 0.5 : r.disc === 2 ? 0.2 : 0; }
+    function finished() { const p = prog(); return questions(ex).filter(closed).every(function (q) { return done(p[q.id]); }); }
+    function fmt(x) { return (Math.round(x * 10) / 10).toString().replace('.', ','); }
+    function result() {
+      const p = prog(), qs = questions(ex).filter(closed);
+      const total = qs.reduce(function (a, q) { return a + pts(q, p[q.id]); }, 0), perfect = qs.filter(function (q) { return p[q.id] && p[q.id].ok; }).length;
+      return { note: qs.length ? total / qs.length * 20 : 0, perfect: perfect, n: qs.length };
+    }
+    function finish() {
+      const p = prog();
+      questions(ex).forEach(function (q) {
+        const r = p[q.id], sel = r && !r.reset && Array.isArray(r.sel) ? r.sel : [];
+        if (closed(q)) {
+          const disc = q.options.filter(function (o) { return (sel.indexOf(o.l) >= 0) !== !!o.ok; }).length;
+          saveQ(q.id, { ok: disc === 0, sel: sel, disc: disc });
+        } else saveQ(q.id, { ok: true, sel: [] });
+      });
+      location.hash = '#/annales/' + encodeURIComponent(ex.id) + '?r=' + Date.now();
+    }
     function upd() {
-      const p = prog(), qs = questions(ex).filter(closed), nd = qs.filter(function (q) { return done(p[q.id]); });
-      score.textContent = revision ? 'Mode révision : réponses et corrections affichées' : nd.length + ' / ' + qs.length + ' QCM faits · ' + nd.filter(function (q) { return p[q.id].ok; }).length + ' justes';
+      const p = prog(), qs = questions(ex).filter(closed);
+      if (revision) { score.textContent = 'Mode révision : réponses et corrections affichées'; endBox.style.display = 'none'; return; }
+      if (finished()) {
+        const r = result();
+        score.textContent = '🎯 Note : ' + fmt(r.note) + ' / 20 (barème EDN) · ' + r.perfect + ' / ' + r.n + ' QCM sans faute';
+        endBox.replaceChildren(h('b', { style: 'font-size:1.15rem' }, '🎯 ' + fmt(r.note) + ' / 20'), h('div', { class: 'secondary' }, r.perfect + ' / ' + r.n + ' QCM sans faute · barème EDN (1 discordance = 0,5 ; 2 = 0,2 ; 3 et plus = 0)'),
+          h('button', { type: 'button', class: 'btn btn--outline btn--sm', style: 'justify-self:center', on: { click: function () { resetExam(ex); location.hash = '#/annales/' + encodeURIComponent(ex.id) + '?r=' + Date.now(); } } }, '↺ Refaire le sujet'));
+        return;
+      }
+      const answered = qs.filter(function (q) { const r = p[q.id]; return r && !r.reset && Array.isArray(r.sel) && r.sel.length; }).length;
+      score.textContent = answered + ' / ' + qs.length + ' QCM répondus · correction et note à la fin';
+      endBox.replaceChildren(h('b', {}, 'Fini ?'), h('div', { class: 'secondary' }, answered < qs.length ? (qs.length - answered) + ' QCM sans réponse (comptés faux).' : 'Tous les QCM sont répondus.'),
+        h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: finish } }, 'Terminer et voir ma note + la correction'));
     }
     upd();
     page.appendChild(h('div', { class: 'an-bar' },
@@ -196,6 +220,8 @@
         page.appendChild(questionEl(q, revision, upd));
       });
     });
+    page.appendChild(endBox);
+    upd();
     return page;
   }
 
