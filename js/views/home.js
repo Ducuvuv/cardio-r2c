@@ -407,6 +407,7 @@
       { label: 'Bactério', href: '#/parasito?poly=bacterio', ico: 'list', parasito: true, bacterio: true },
       { label: 'Virologie', href: '#/parasito?poly=viro', ico: 'list', parasito: true, viro: true },
       { label: '📝 Annales SU officiel', href: '#/annales', ico: 'list', keep: true, annales: true },
+      { label: '🦠 Hiba', href: '#/hiba', ico: 'list', keep: true, hiba: true },
       { label: '🌙 Paquets du soir', href: '#/paquets', ico: 'calendar', keep: true, ednf: true },
       { label: '📄 Fiches EDN', href: '#/ednfiches', ico: 'list', keep: true, ednf: true },
       { label: 'Traitements · 3 Collèges', href: ttt2Spe ? '#/ttt2' : '#/ttt', ico: 'pill' },
@@ -445,6 +446,7 @@
       if (c.edn) { const v = CARDIO.views && CARDIO.views.edn; return !!(v && v.available && v.available()); }
       if (c.ecgb) { const v = CARDIO.views && CARDIO.views.ecg; if (!(v && v.available && v.available())) return false; }
       if (c.ednf) { const v = CARDIO.views && CARDIO.views.ednfiches; return !!(v && v.available && v.available()); }
+      if (c.hiba) { const v = CARDIO.views && CARDIO.views.hiba; return !!(v && v.available && v.available()); }
       if (c.annales) { const v = CARDIO.views && CARDIO.views.annales; return !!(v && v.available && v.available()); }
       if (c.atlas) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.atlas) && CARDIO.registry.atlas.length);
       if (c.viro) return !!(CARDIO.registry && Array.isArray(CARDIO.registry.viro) && CARDIO.registry.viro.length);

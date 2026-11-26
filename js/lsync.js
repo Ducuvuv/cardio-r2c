@@ -8,7 +8,7 @@
   'use strict';
   window.CARDIO = window.CARDIO || {};
   const CARDIO = window.CARDIO;
-  const KEEP = /^cardio\.(parasito(\.srs|\.newday|\.seen)?|scroll\.(game|opts)|deck\.(v1(\.[a-z0-9]+)?|slots)|passes|annales|ednfiches|paquets)$/;
+  const KEEP = /^cardio\.(parasito(\.srs|\.newday|\.seen)?|scroll\.(game|opts)|deck\.(v1(\.[a-z0-9]+)?|slots)|passes|annales|ednfiches|paquets|hiba)$/;
   const LSAT = 'cardio.lsx.at';
   let LSO = null;
   try { LSO = window.localStorage; } catch (e) { LSO = null; }
