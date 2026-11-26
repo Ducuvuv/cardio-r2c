@@ -32,6 +32,45 @@
     if (typeof u.md === 'function') { try { html = u.md(str(text)).trim().replace(/^<p>([\s\S]*)<\/p>$/, '$1'); } catch (e) { html = ''; } }
     return html ? h('span', { html: html }) : h('span', {}, str(text));
   }
+
+  /* Énoncés plus digestes : lignes « Examen : valeur (normales …) » → tableau aligné, valeurs anormales (*) en rouge,
+     titres de bilan (« Bilan virologique : ») en sous-titres, paragraphes aérés. Le texte lui-même n'est pas modifié. */
+  function kv(line) {
+    let m = /^\s*[•\-–]?\s*([^:]{2,60}?)\s*:\s*(.+)$/.exec(line);
+    if (!m) m = /^\s*[•\-–]?\s*(.{2,60}?)(?:\t+|\s{3,})(\S.*)$/.exec(line);
+    if (!m || /[.?!]$/.test(m[1]) || m[1].split(' ').length > 8) return null;
+    return { k: m[1].trim(), v: m[2].trim() };
+  }
+  function digest(text) {
+    styles();
+    const t = str(text).replace(/([a-zà-ÿ\)])\.([A-ZÀ-Ý])/g, '$1. $2').replace(/\r/g, '');
+    const lines = t.split('\n');
+    const kvCount = lines.filter(function (l) { return kv(l) && !/:\s*$/.test(l); }).length;
+    if (kvCount < 3) return md(t.replace(/\n(?!\n)/g, '\n\n'));   // texte simple : un retour à la ligne = un paragraphe
+    const box = h('div', { class: 'hb-dg' });
+    let table = null;
+    lines.forEach(function (raw) {
+      const l = raw.trim();
+      if (!l) { table = null; return; }
+      const head = /^(.{2,70}?)\s*:\s*$/.exec(l) || (/^(bilan|examen|sérologie|biologie|résultats?|hémogramme|nfs|gaz du sang|ponction)/i.test(l) && l.length < 70 && !kv(l) ? [l, l] : null);
+      if (head) { box.appendChild(h('div', { class: 'hb-dg-h' }, head[1].replace(/\s*:$/, ''))); table = null; return; }
+      const x = kv(l);
+      if (x) {
+        if (!table) { table = h('div', { class: 'hb-dg-t' }); box.appendChild(table); }
+        let v = x.v, norm = '';
+        const nm = /\s*\(((?:normales?|N|VN|valeurs? normales?)\b[^)]*)\)\s*$/i.exec(v);
+        if (nm) { norm = nm[1]; v = v.slice(0, nm.index); }
+        const bad = /^\*/.test(v) || /^\*/.test(x.k);
+        v = v.replace(/^\*\s*/, '');
+        table.appendChild(h('div', { class: 'hb-dg-k' }, x.k.replace(/^\*\s*/, '')));
+        table.appendChild(h('div', { class: 'hb-dg-v' + (bad ? ' bad' : '') }, inline(v), norm ? h('span', { class: 'hb-dg-n' }, ' ' + norm) : null));
+        return;
+      }
+      table = null;
+      box.appendChild(md(l));
+    });
+    return box;
+  }
   function fmt(x) { return (Math.round(x * 10) / 10).toString().replace('.', ','); }
   function clock(ms) { const s = Math.max(0, Math.round(ms / 1000)), m = Math.floor(s / 60); return (m >= 60 ? Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0') : String(m)) + ':' + String(s % 60).padStart(2, '0'); }
 
@@ -80,7 +119,13 @@
       '.an-off{border-left-color:#b91c1c;background:rgba(185,28,28,.05)}', '.an-md p{margin:.3em 0}',
       '.an-bar{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}', '.an-res{font-weight:700;margin:6px 0}',
       '.hb-timer{position:sticky;top:calc(var(--topbar-h,0px) + 6px);z-index:5;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;border-radius:12px;background:var(--surface,#fff);box-shadow:var(--shadow-2,0 2px 10px rgba(0,0,0,.12));margin:8px 0}',
-      '.hb-time{font-variant-numeric:tabular-nums;font-weight:800;font-size:1.2rem;min-width:5.5ch}', '.hb-time.low{color:#dc2626}'
+      '.hb-time{font-variant-numeric:tabular-nums;font-weight:800;font-size:1.2rem;min-width:5.5ch}', '.hb-time.low{color:#dc2626}',
+      '.an-intro{font-size:.95rem;line-height:1.55}', '.an-intro .an-md p{margin:.45em 0}',
+      '.hb-dg-h{font-weight:800;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);margin:12px 0 4px}',
+      '.hb-dg-t{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);border:1px solid var(--line,#e5e7eb);border-radius:10px;overflow:hidden;background:var(--surface,#fff)}',
+      '.hb-dg-k,.hb-dg-v{padding:6px 10px;border-bottom:1px solid var(--line,#eee);font-size:.9rem}',
+      '.hb-dg-k{color:var(--muted,#4b5563)}', '.hb-dg-v{font-weight:600}', '.hb-dg-v.bad{color:#dc2626;font-weight:800}', '.hb-dg-v.bad::before{content:"▲ ";font-size:.7em}',
+      '.hb-dg-n{display:block;font-weight:400;font-size:.75rem;color:var(--muted,#6b7280)}'
     ].join('\n');
     const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
   }
@@ -195,7 +240,7 @@
       const isC = closed(q);
       let sel = (function () { const r = prog()[q.id]; return r && Array.isArray(r.sel) ? r.sel.slice() : []; })();
       function draw() {
-        const kids = [h('div', { class: 'caption' }, 'Question ' + str(q.num) + (q.type ? ' · ' + q.type : '')), h('div', { class: 'an-stem' }, md(q.stem))];
+        const kids = [h('div', { class: 'caption' }, 'Question ' + str(q.num) + (q.type ? ' · ' + q.type : '')), h('div', { class: 'an-stem' }, digest(q.stem))];
         ['img', 'img2', 'img3', 'img4', 'img5'].forEach(function (k) { if (q[k]) kids.push(imgEl(q, k)); });
         if (q.after) kids.push(h('div', { class: 'an-stem', style: 'font-weight:500' }, md(q.after)));
         if (isC) {
@@ -239,9 +284,9 @@
     upd();
     (ex.blocks || []).forEach(function (b) {
       if (b.titre) page.appendChild(h('h2', { style: 'margin-top:18px' }, str(b.titre)));
-      if (b.intro) page.appendChild(h('div', { class: 'an-intro' }, md(b.intro)));
+      if (b.intro) page.appendChild(h('div', { class: 'an-intro' }, digest(b.intro)));
       (b.questions || []).forEach(function (q) {
-        if (q.intro) page.appendChild(h('div', { class: 'an-intro' }, md(q.intro)));
+        if (q.intro) page.appendChild(h('div', { class: 'an-intro' }, digest(q.intro)));
         page.appendChild(questionEl(q));
       });
     });
@@ -257,5 +302,5 @@
     else el = renderList();
     return { el: el, title: el.dataset.title || 'Hiba' };
   }
-  CARDIO.views.hiba = { render: render, available: function () { return all().length > 0; }, score: score };
+  CARDIO.views.hiba = { render: render, available: function () { return all().length > 0; }, score: score, digest: digest };
 })();

@@ -29,6 +29,8 @@
     if (typeof u.md === 'function') { try { html = u.md(str(text)).trim(); } catch (e) { html = ''; } }
     return html ? h('div', { class: 'an-md', html: html }) : h('div', { class: 'an-md' }, str(text));
   }
+  /* énoncés : mise en forme digeste partagée avec views/hiba.js (tableaux de bilans, anomalies en rouge) */
+  function digest(text) { const v = CARDIO.views && CARDIO.views.hiba; return v && typeof v.digest === 'function' ? v.digest(text) : md(text); }
   function inline(text) {
     const u = util(); let html = '';
     if (typeof u.md === 'function') { try { html = u.md(str(text)).trim().replace(/^<p>([\s\S]*)<\/p>$/, '$1'); } catch (e) { html = ''; } }
@@ -103,7 +105,7 @@
     function draw() {
       const kids = [];
       kids.push(h('div', { class: 'caption' }, 'Question ' + str(q.num) + (q.type ? ' · ' + q.type : '')));
-      kids.push(h('div', { class: 'an-stem' }, md(q.stem)));
+      kids.push(h('div', { class: 'an-stem' }, digest(q.stem)));
       ['img', 'img2', 'img3', 'img4', 'img5'].forEach(function (k) {
         if (q[k]) {
           const im = h('img', { src: annCached(q[k]) || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', alt: str(q.imgAlt || 'Figure du sujet'), loading: 'lazy', style: 'max-width:100%;height:auto;border-radius:8px;margin:4px 0 10px;background:#fff;display:block' });
@@ -214,9 +216,9 @@
     page.appendChild(score);
     (ex.blocks || []).forEach(function (b) {
       if (b.titre) page.appendChild(h('h2', { style: 'margin-top:18px' }, str(b.titre)));
-      if (b.intro) page.appendChild(h('div', { class: 'an-intro' }, md(b.intro)));
+      if (b.intro) page.appendChild(h('div', { class: 'an-intro' }, digest(b.intro)));
       (b.questions || []).forEach(function (q) {
-        if (q.intro) page.appendChild(h('div', { class: 'an-intro' }, md(q.intro)));
+        if (q.intro) page.appendChild(h('div', { class: 'an-intro' }, digest(q.intro)));
         page.appendChild(questionEl(q, revision, upd));
       });
     });
