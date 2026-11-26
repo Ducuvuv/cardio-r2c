@@ -816,7 +816,7 @@
     var selected = -1;
     var validated = false;
 
-    wrap.appendChild(h('div', { 'class': 'echo-quiz__stem' }, mdBlock(quiz.stem || 'Quel est le diagnostic ?')));
+    wrap.appendChild(h('div', { 'class': 'echo-quiz__stem' }, (window.CARDIO && CARDIO.util && CARDIO.util.digest ? CARDIO.util.digest(quiz.stem || 'Quel est le diagnostic ?') : mdBlock(quiz.stem || 'Quel est le diagnostic ?'))));
     var rows = order.map(function (o, pos) {
       var key = String.fromCharCode(65 + pos);
       var row = h('button', {

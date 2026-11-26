@@ -77,6 +77,8 @@
     return m ? m[1] : html;
   }
 
+  /* énoncé lisible (CARDIO.util.digest : tableaux de bilans, paragraphes aérés, question isolée) */
+  function dg(text, cls) { const u = window.CARDIO && CARDIO.util; return u && u.digest ? u.digest(text, cls) : mdEl(text, cls); }
   function mdEl(text, cls) {
     const d = h('div', { class: cls || 'md' });
     d.innerHTML = mdHTML(text); // md() échappe le texte source
@@ -357,7 +359,7 @@
     let validated = false;
     let score = null;
     const el = h('div', { class: 'q q--mcq' });
-    el.append(kindPill(isQRU ? 'QRU' : 'QRM'), mdEl(q.stem, 'q__stem'));
+    el.append(kindPill(isQRU ? 'QRU' : 'QRM'), dg(q.stem, 'q__stem'));
     const listEl = h('div', { class: 'opts', role: isQRU ? 'radiogroup' : 'group' });
     const rows = opts.map((o, i) => {
       const row = h('div', { class: 'opt', role: isQRU ? 'radio' : 'checkbox', tabindex: '0', 'aria-checked': 'false' },
@@ -408,7 +410,7 @@
   // QROC : réponse courte, auto-évaluée 0 / 0,5 / 1 avec aide par mots-clés.
   function qrocController(q) {
     const el = h('div', { class: 'q q--qroc' });
-    el.append(kindPill('QROC'), mdEl(q.question, 'q__stem'));
+    el.append(kindPill('QROC'), dg(q.question, 'q__stem'));
     const ta = h('textarea', { class: 'q__input', rows: '2', placeholder: 'Ta réponse…', 'aria-label': 'Ta réponse', autocomplete: 'off' });
     el.append(ta);
     let score = null, validated = false;
@@ -457,7 +459,7 @@
   // OPEN : réponse rédigée (facultative), grille pondérée cochée par l'utilisateur.
   function openController(q) {
     const el = h('div', { class: 'q q--open' });
-    el.append(kindPill('OPEN'), mdEl(q.prompt, 'q__stem'));
+    el.append(kindPill('OPEN'), dg(q.prompt, 'q__stem'));
     const ta = h('textarea', { class: 'q__input', rows: '4', placeholder: 'Rédige ta réponse (facultatif), puis valide pour comparer.', 'aria-label': 'Ta réponse', autocomplete: 'off' });
     el.append(ta);
     const rubric = Array.isArray(q.rubric) ? q.rubric.filter(r => r && r.point) : [];
@@ -580,7 +582,7 @@
 
       const dossier = h('section', { class: 'dossier' },
         h('div', { class: 'dossier__label' }, icon('case'), 'Dossier patient · ' + (timeline[phase] || 'Étape ' + (idx + 1))),
-        mdEl(step.narrative, 'dossier__body'));
+        dg(step.narrative, 'dossier__body'));
       body.append(dossier);
 
       ctrl = buildController(step.question || {});

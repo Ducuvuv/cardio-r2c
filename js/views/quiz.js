@@ -88,6 +88,9 @@
 
   function h() { return U().h.apply(null, arguments); }
   function md(text, cls) { return h('div', { class: ['md', cls || null], html: U().md(text == null ? '' : String(text)) }); }
+
+  /* énoncé lisible (CARDIO.util.digest : tableaux de bilans, paragraphes aérés, question isolée) */
+  function dg(text, cls) { const u = window.CARDIO && CARDIO.util; return u && u.digest ? u.digest(text, cls) : md(text, cls); }
   function icon(name, opts) { return U().iconEl(name, opts); }
   function txt(v) { return v == null ? '' : String(v); }
   function nowMs() { return Date.now(); }
@@ -1434,7 +1437,7 @@
         const grades = ctx.gradeBar({ score: ps, title: 'Tu reviens du point de cours : comment ça s’était passé ?', onGrade: (g) => ctx.finish({ score: ps == null ? gradeToScore(g) : ps, grade: g }) });
         el = h('div', { class: 'stack' },
           h('div', { class: 'card qz-card' }, h('span', { class: 'caption' }, 'Question déjà répondue'),
-            md(card.data && (card.data.stem || card.data.question || card.data.q) || '', 'qz-stem'),
+            dg(card.data && (card.data.stem || card.data.question || card.data.q) || '', 'qz-stem'),
             ps != null ? h('p', { class: 'secondary muted' }, 'Ton résultat : ' + Math.round(ps * 100) + ' %') : null),
           grades,
           h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: () => { rt.pending = null; saveRt(rt); renderCurrent(); } } }, icon('refresh'), 'Refaire la question'));
@@ -1580,7 +1583,7 @@
     const el = h('div', { class: 'stack' },
       h('div', { class: 'card qz-card' },
         h('span', { class: 'caption' }, isQru ? 'Une seule réponse' : 'Une ou plusieurs réponses'),
-        md(d.stem, 'qz-stem'), hintBoxes[0] || null),
+        dg(d.stem, 'qz-stem'), hintBoxes[0] || null),
       qHint,
       h('div', { class: 'opts', role: 'group', 'aria-label': 'Propositions' }, rows.map((r) => r.btn)),
       slot, after);
@@ -1655,7 +1658,7 @@
     const hintBoxes = [];
     const qHint = hintBtn(d, hintBoxes);
     const el = h('div', { class: 'stack' },
-      h('div', { class: 'card qz-card' }, h('span', { class: 'caption' }, 'Réponse courte'), md(d.question, 'qz-stem'), hintBoxes[0] || null),
+      h('div', { class: 'card qz-card' }, h('span', { class: 'caption' }, 'Réponse courte'), dg(d.question, 'qz-stem'), hintBoxes[0] || null),
       qHint,
       bed ? h('p', { class: 'secondary muted' }, 'Réponds de tête, puis révèle la réponse et note-toi honnêtement.')
         : h('div', { class: 'field' }, input, h('span', { class: 'field__hint' }, 'Réponds en quelques mots, puis compare.')),
@@ -1764,7 +1767,7 @@
     });
     const after = h('div', { class: 'stack', hidden: true });
     const el = h('div', { class: 'stack' },
-      h('div', { class: 'card qz-card' }, h('span', { class: 'caption' }, 'Question ouverte'), md(d.prompt, 'qz-stem')),
+      h('div', { class: 'card qz-card' }, h('span', { class: 'caption' }, 'Question ouverte'), dg(d.prompt, 'qz-stem')),
       h('div', { class: 'field' }, ta, h('span', { class: 'field__hint' }, 'Puis compare avec la réponse modèle et coche les points que tu as cités.')),
       after);
 
@@ -1818,7 +1821,7 @@
     const count = h('div', { class: 'qz-count' });
     const qHost = h('div', { class: 'stack' });
     const el = h('div', { class: 'stack' },
-      h('div', { class: 'card qz-card' }, h('span', { class: 'caption' }, 'KFP · Scénario'), md(d.scenario, 'qz-scenario')),
+      h('div', { class: 'card qz-card' }, h('span', { class: 'caption' }, 'KFP · Scénario'), dg(d.scenario, 'qz-scenario')),
       count, qHost);
 
     function finishAll() {
@@ -1909,7 +1912,7 @@
     const count = h('div', { class: 'qz-count' });
     const host = h('div', { class: 'stack' });
     const el = h('div', { class: 'stack' },
-      h('div', { class: 'card qz-card' }, h('span', { class: 'caption' }, 'TCS · Vignette'), md(d.vignette, 'qz-scenario')),
+      h('div', { class: 'card qz-card' }, h('span', { class: 'caption' }, 'TCS · Vignette'), dg(d.vignette, 'qz-scenario')),
       count, host);
 
     function finishAll() {
@@ -2244,7 +2247,7 @@
     ctx.action.set({ label: 'Valider', disabled: true, hint: 'Choisis une réponse', onClick: validate });
     ctx.setKeys((e) => { if (validated) return false; const i = numberKey(e, rows.length); if (i >= 0) { select(i); return true; } return false; });
     return h('div', { class: 'stack' }, head, opts.figure || null,
-      h('div', { class: 'card qz-card' }, md(quiz.stem || 'Quel est le diagnostic ?', 'qz-stem')),
+      h('div', { class: 'card qz-card' }, dg(quiz.stem || 'Quel est le diagnostic ?', 'qz-stem')),
       h('div', { class: 'opts', role: 'group' }, rows.map((r) => r.btn)), slot, after);
   }
 

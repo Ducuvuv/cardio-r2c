@@ -23,6 +23,9 @@
   }
   function icon(name, size) { try { return C.util.iconEl(name, { size: size || 18 }); } catch (e) { return null; } }
   function mdEl(s, cls) { return h('div', { class: ['edn-md', cls], html: C.util && C.util.md ? C.util.md(String(s || '')) : String(s || '') }); }
+
+  /* énoncé lisible (CARDIO.util.digest : tableaux de bilans, paragraphes aérés, question isolée) */
+  function dg(text, cls) { const u = window.CARDIO && CARDIO.util; return u && u.digest ? u.digest(text, cls) : mdEl(text, cls); }
   function toast(msg, tone) { try { C.shell.toast(msg, tone ? { tone: tone } : undefined); } catch (e) { /* ignore */ } }
   function haptic(ms) { try { C.shell.haptic(ms); } catch (e) { /* ignore */ } }
   function lsGet(k, d) { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } }
@@ -887,8 +890,8 @@
       const visible = progressive(b) ? b.questions.slice(0, Math.min(b.questions.length, openIndex(b) + 1)) : b.questions;
       const act = activeQ(b);
       const vig = b.vignette ? (progressive(b)
-        ? h('details', { class: 'edn-vig', open: true }, h('summary', {}, h('span', {}, 'Énoncé du dossier'), h('span', { class: 'secondary' }, 'replier / déplier')), h('div', { class: 'edn-vig__body' }, mdEl(b.vignette)))
-        : h('div', { class: 'edn-vig edn-vig--static' }, h('div', { class: 'edn-vig__body' }, mdEl(b.vignette)))) : null;
+        ? h('details', { class: 'edn-vig', open: true }, h('summary', {}, h('span', {}, 'Énoncé du dossier'), h('span', { class: 'secondary' }, 'replier / déplier')), h('div', { class: 'edn-vig__body' }, dg(b.vignette)))
+        : h('div', { class: 'edn-vig edn-vig--static' }, h('div', { class: 'edn-vig__body' }, dg(b.vignette)))) : null;
       put(body,
         run.mode === 'partiel' ? h('div', { class: 'edn-warn', role: 'note', style: 'margin-top:10px;font-size:.8rem;padding:6px 10px' }, '⚠ ' + PARTIEL_WARN) : null,
         h('div', { class: 'edn-row', style: 'margin-top:10px' },
@@ -926,7 +929,7 @@
         h('div', { class: 'edn-q__head' },
           h('span', { class: 'pill pill--kind' }, (b.questions.length > 1 ? 'Question ' + (i + 1) + ' · ' : '') + (FMT_LABEL[q.format] || q.format) + (q.options ? ' · ' + q.options.length + ' propositions' : '')),
           h('span', { class: 'grow' }), flagBtn),
-        q.stem ? h('div', { class: 'edn-stem' }, mdEl(q.stem), stemSuffix(q) ? h('small', {}, stemSuffix(q)) : null) : null,
+        q.stem ? h('div', { class: 'edn-stem' }, dg(q.stem), stemSuffix(q) ? h('small', {}, stemSuffix(q)) : null) : null,
         inp.el,
         val && !isEditing && !showCorr ? h('div', { class: 'edn-lock' }, icon(locked ? 'lock' : 'check', 14), locked ? 'Réponse validée — verrouillée' : 'Réponse validée (modifiable : « Modifier »)') : null,
         val && isEditing ? h('div', { class: 'edn-lock', style: 'color:#C96A0E' }, 'Modification en cours : revalide, sinon ta réponse précédente reste enregistrée.') : null,
@@ -1148,7 +1151,7 @@
           const pts = b.questions.reduce(function (n, q) { return n + scoreInRun(q, run).score; }, 0);
           return h('details', { class: 'card edn-blk', open: pts < b.questions.length },
             h('summary', {}, (KIND_LABEL[b.kind] || b.kind) + ' ' + (bi + 1) + ' · ' + fmt(pts) + ' / ' + b.questions.length + ' · ' + itemLabel(b.item)),
-            b.vignette ? h('div', { class: 'edn-vig edn-vig--static' }, h('div', { class: 'edn-vig__body' }, mdEl(b.vignette))) : null,
+            b.vignette ? h('div', { class: 'edn-vig edn-vig--static' }, h('div', { class: 'edn-vig__body' }, dg(b.vignette))) : null,
             mediaEl(b),
             b.questions.map(function (q, i) {
               const res = scoreInRun(q, run);
@@ -1158,7 +1161,7 @@
                 h('div', { class: 'stack stack--sm', style: 'margin-top:6px' },
                   i > 0 && q.reveal && (b.kind === 'DP' || b.kind === 'KFP') ? h('div', { class: 'edn-reveal' }, mdEl(q.reveal)) : null,
                   q.media && q.media.length ? mediaEl(q) : null,
-                  q.stem ? h('div', { class: 'edn-stem' }, mdEl(q.stem), stemSuffix(q) ? h('small', {}, stemSuffix(q)) : null) : null,
+                  q.stem ? h('div', { class: 'edn-stem' }, dg(q.stem), stemSuffix(q) ? h('small', {}, stemSuffix(q)) : null) : null,
                   correction(q, a, res, optOrder(run, b, q), { weight: run.weights ? run.weights[q.id] : null,
                     itemLink: h('a', { href: '#/item/' + encodeURIComponent(b.item), style: 'font-size:.8rem' }, itemLabel(b.item)),
                     onSelf: function (k) {

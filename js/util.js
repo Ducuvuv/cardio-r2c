@@ -652,6 +652,119 @@
     return h('span', { class: 'pill pill--' + r, title: 'Rang ' + r, 'aria-label': 'Rang ' + r }, opts && opts.long ? 'Rang ' + r : r);
   }
 
+
+  /* ------------------------------------------------------------------ */
+  /* digest(text) : énoncés plus lisibles (présentation seulement, texte inchangé)                         */
+  /*  - lignes « Examen : valeur (normales …) » → tableau ; « * » = valeur anormale en rouge               */
+  /*  - listes en ligne « Bilan : pH 7,31 ; PaO2 64 mmHg ; … » → tableau                                    */
+  /*  - longs paragraphes découpés toutes les 2-3 phrases ; la question finale (« … ? ») isolée en gras     */
+  /* ------------------------------------------------------------------ */
+  let dgStyled = false;
+  function dgStyles() {
+    if (dgStyled || typeof document === 'undefined') return; dgStyled = true;
+    const st = document.createElement('style');
+    st.textContent = [
+      '.dg p{margin:.5em 0;line-height:1.55}', '.dg p:first-child{margin-top:0}', '.dg p:last-child{margin-bottom:0}',
+      '.dg-q{font-weight:700}',
+      '.dg-h{font-weight:800;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);margin:12px 0 4px}',
+      '.dg-t{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);border:1px solid var(--line,#e5e7eb);border-radius:10px;overflow:hidden;background:var(--surface,#fff);margin:6px 0;font-weight:400}',
+      '.dg-k,.dg-v{padding:6px 10px;border-bottom:1px solid var(--line,#eee);font-size:.9rem;line-height:1.35}',
+      '.dg-k{color:var(--ink-2,#4b5563)}', '.dg-v{font-weight:650;color:var(--ink,inherit)}', '.dg-v.bad{color:#dc2626;font-weight:800}', '.dg-v.bad::before{content:"▲ ";font-size:.7em}',
+      '.dg-n{display:block;font-weight:400;font-size:.75rem;color:var(--muted,#6b7280)}'
+    ].join('\n');
+    document.head.appendChild(st);
+  }
+  function dgInline(text) {
+    let html = '';
+    try { html = md(String(text)).trim().replace(/^<p>([\s\S]*)<\/p>$/, '$1'); } catch (e) { html = esc(String(text)); }
+    const sp = document.createElement('span'); sp.innerHTML = html; return sp;
+  }
+  function dgKV(line) {
+    let m = /^\s*[•\-–]?\s*([^:]{2,60}?)\s*:\s*(.+)$/.exec(line);
+    if (!m) m = /^\s*[•\-–]?\s*(.{2,60}?)(?:\t+|\s{3,})(\S.*)$/.exec(line);
+    if (!m || /[.?!]$/.test(m[1]) || m[1].split(' ').length > 8) return null;
+    return { k: m[1].trim(), v: m[2].trim() };
+  }
+  function dgRow(table, k, v) {
+    let norm = '';
+    const nm = /\s*\(((?:normales?|normaux|N|VN|valeurs? normales?)\b[^)]*)\)\s*$/i.exec(v);
+    if (nm) { norm = nm[1]; v = v.slice(0, nm.index); }
+    const bad = /^\*/.test(v) || /^\*/.test(k);
+    v = v.replace(/^\*\s*/, '');
+    table.appendChild(h('div', { class: 'dg-k' }, k.replace(/^\*\s*/, '')));
+    table.appendChild(h('div', { class: 'dg-v' + (bad ? ' bad' : '') }, dgInline(v), norm ? h('span', { class: 'dg-n' }, norm) : null));
+  }
+  /* liste en ligne « Libellé : a ; b ; c » (≥ 3 éléments chiffrés) → {head, rows:[[nom, valeur]], rest} */
+  function dgInlineList(par) {
+    const m = /(^|[.;]\s+)([A-ZÀ-Ýa-zà-ÿ][^:.;?!]{1,60}?)\s*:\s*([^?]+?)(?=(?:\.\s+[A-ZÀ-Ý]|\.?\s*$|\?))/.exec(par);
+    if (!m) return null;
+    const body = m[3];
+    let items = body.split(/\s*;\s*/);
+    if (items.length < 3) items = body.split(/,\s+(?=[A-Za-zÀ-ÿ])/);
+    items = items.map(function (x) { return x.trim().replace(/\.$/, ''); }).filter(Boolean);
+    if (items.length < 3 || items.filter(function (x) { return /\d/.test(x); }).length < Math.ceil(items.length * 0.6) || items.some(function (x) { return x.length > 70; })) return null;
+    const rows = items.map(function (x) {
+      const t = /^(.+?)\s+((?:[<>≤≥=~±*]\s*)?\d.*|positi.*|négati.*|normal.*|absen.*|présen.*)$/i.exec(x);
+      return t ? [t[1], t[2]] : [x, ''];
+    });
+    const start = m.index + m[1].length;
+    return { before: par.slice(0, start).trim(), head: m[2].trim(), rows: rows, after: par.slice(m.index + m[0].length).replace(/^[\s.;,]+/, '').trim() };
+  }
+  function dgSentences(par) {
+    // découpe en phrases sans casser les abréviations courantes ni les décimales
+    const out = []; let cur = '';
+    const parts = par.replace(/([.!?])\s+(?=[A-ZÀ-Ý«(])/g, '$1\u0001').split('\u0001');
+    parts.forEach(function (p) { if (cur && /\b(?:Dr|Pr|M|Mme|Mlle|cf|vs|env|ex|p|n°)\.$/.test(cur)) cur += ' ' + p; else { if (cur) out.push(cur); cur = p; } });
+    if (cur) out.push(cur);
+    return out;
+  }
+  function digest(text, cls) {
+    dgStyles();
+    const t = String(text == null ? '' : text).replace(/\r/g, '').replace(/([a-zà-ÿ\)])\.([A-ZÀ-Ý])/g, '$1. $2');
+    const box = h('div', { class: 'dg' + (cls ? ' ' + cls : '') });
+    const lines = t.split('\n');
+    const kvCount = lines.filter(function (l) { return dgKV(l) && !/:\s*$/.test(l); }).length;
+    if (kvCount >= 3) {
+      let table = null;
+      lines.forEach(function (raw) {
+        const l = raw.trim();
+        if (!l) { table = null; return; }
+        const head = /^(.{2,70}?)\s*:\s*$/.exec(l);
+        if (head) { box.appendChild(h('div', { class: 'dg-h' }, head[1])); table = null; return; }
+        const x = dgKV(l);
+        if (x) { if (!table) { table = h('div', { class: 'dg-t' }); box.appendChild(table); } dgRow(table, x.k, x.v); return; }
+        table = null;
+        box.appendChild(h('p', {}, dgInline(l)));
+      });
+      return box;
+    }
+    const pars = t.split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean);
+    pars.forEach(function (par) {
+      // listes chiffrées en ligne → tableau (plusieurs possibles dans un paragraphe)
+      let guard = 0, L;
+      while (guard++ < 4 && (L = dgInlineList(par))) {
+        if (L.before) addProse(L.before, false);
+        box.appendChild(h('div', { class: 'dg-h' }, L.head));
+        const table = h('div', { class: 'dg-t' });
+        L.rows.forEach(function (r) { dgRow(table, r[0], r[1]); });
+        box.appendChild(table);
+        par = L.after;
+        if (!par) break;
+      }
+      if (par) addProse(par, true);
+    });
+    function addProse(par, last) {
+      const ss = dgSentences(par);
+      let q = null;
+      if (last && (ss.length > 1 || box.childNodes.length) && /\?\s*(\([^)]*\))?\s*$/.test(ss[ss.length - 1])) q = ss.pop();
+      if (par.length > 380 && ss.length > 3) {
+        for (let i = 0; i < ss.length; i += 2) box.appendChild(h('p', {}, dgInline(ss.slice(i, i + 2).join(' '))));
+      } else if (ss.length) box.appendChild(h('p', {}, dgInline(ss.join(' '))));
+      if (q) box.appendChild(h('p', { class: 'dg-q' }, dgInline(q)));
+    }
+    return box;
+  }
+
   /* ------------------------------------------------------------------ */
   /* Export                                                               */
   /* ------------------------------------------------------------------ */
@@ -663,6 +776,7 @@
     debounce, throttle, clamp, mean, sum, normalize, ls,
     on, off, emit,
     icon, iconEl, iconNames, kindLabel, kindIcon, kindPill, rankPill,
+    digest,
     NBSP
   };
 })();

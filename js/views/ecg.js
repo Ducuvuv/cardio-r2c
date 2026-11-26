@@ -108,6 +108,8 @@
   }
 
   /* markdown-lite : texte échappé, **gras**, retours à la ligne */
+  /* énoncé lisible (CARDIO.util.digest : tableaux de bilans, paragraphes aérés, question isolée) */
+  function dg(text, cls) { const u = window.CARDIO && CARDIO.util; return u && u.digest ? u.digest(text, cls) : md(text, cls); }
   function md(s, cls) {
     const e = String(s || '').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
     return h('div', { class: cls || null, html: e.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>') });
@@ -433,11 +435,11 @@
         h('div', { class: 'eb-top', style: 'margin-bottom:8px' },
           h('button', { type: 'button', class: 'btn btn--ghost btn--sm', on: { click: onExit } }, '✕ Quitter'),
           h('span', { class: 'secondary' }, 'Question ' + (i + 1) + ' / ' + list.length + (results.length ? ' · ' + fmtScore(total) + ' pt' : ''))),
-        q.vignette ? h('div', { class: 'card', style: 'margin-bottom:10px' }, md(q.vignette)) : null,
+        q.vignette ? h('div', { class: 'card', style: 'margin-bottom:10px' }, dg(q.vignette)) : null,
         figure(e),
         h('div', { class: 'card stack', style: 'margin-top:10px' },
           h('div', { class: 'eb-seg' }, h('span', { class: 'pill pill--kind' }, fmtLabel), q.rank ? h('span', { class: 'pill pill--' + (q.rank === 'A' ? 'accent' : 'info') }, 'Rang ' + q.rank) : null),
-          md(q.stem, 'qz-stem')),
+          dg(q.stem, 'qz-stem')),
         input ? h('div', { style: 'margin-top:10px' }, input) : h('div', { class: 'opts', role: multi ? 'group' : 'radiogroup', style: 'margin-top:10px' }, rows.map(function (r) { return r.btn; })),
         h('div', { style: 'margin-top:10px' }, slot),
         actions);

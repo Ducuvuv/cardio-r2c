@@ -43,6 +43,7 @@
   }
   function digest(text) {
     styles();
+    if (util().digest) return util().digest(text);
     const t = str(text).replace(/([a-zà-ÿ\)])\.([A-ZÀ-Ý])/g, '$1. $2').replace(/\r/g, '');
     const lines = t.split('\n');
     const kvCount = lines.filter(function (l) { return kv(l) && !/:\s*$/.test(l); }).length;
