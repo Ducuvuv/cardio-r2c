@@ -25,6 +25,14 @@
     ['viro-gen', 'Généralités de virologie'], ['viro-vir', 'Les virus']
   ];
   const LS = 'cardio.parasito';
+  const polyFigBundles = {};
+  function polyFig(poly) {
+    if (!polyFigBundles[poly]) polyFigBundles[poly] = new Promise(function (res) {
+      const sc = document.createElement('script'); sc.src = 'content/polyfig/' + poly + '.js'; sc.charset = 'utf-8';
+      sc.onload = res; sc.onerror = res; document.head.appendChild(sc);
+    });
+    return polyFigBundles[poly];
+  }
 
   function util() { return CARDIO.util || {}; }
   function h() { const u = util(); return u.h.apply(null, arguments); }
@@ -370,10 +378,18 @@
       if (m === 'explain') drawExplain(); else draw(m === 'test');
     }
     // Figures de cours (content/figs.js : images sous licence libre, rattachées à une partie « Comprendre »)
-    const FIGS = (CARDIO.registry.figs && CARDIO.registry.figs[p.id]) || [];
+    // figures libres (content/figs.js) + figures du poly (content/polyfigs.js, images chargées à la demande : content/polyfig/<poly>.js)
+    const FIGS = ((CARDIO.registry.figs && CARDIO.registry.figs[p.id]) || []).concat((CARDIO.registry.polyFigs && CARDIO.registry.polyFigs[p.id]) || []);
     function figsFor(i, used) {
       return FIGS.filter(function (f, k) { if (used[k] || f.sec !== i) return false; used[k] = 1; return true; }).map(function (f) {
-        return h('figure', { class: 'pz-fig' }, h('a', { href: f.src, target: '_blank', rel: 'noopener' }, h('img', { src: f.src, alt: str(f.cap), loading: 'lazy' })),
+        const pf = /^pf:([a-z]+)\//.exec(str(f.src));
+        const img = h('img', { src: pf ? 'data:image/gif;base64,R0lGODlhAQABAAAAACw=' : f.src, alt: str(f.cap), loading: 'lazy', style: pf ? 'min-height:120px;background:#fff' : null });
+        const a = h('a', { href: pf ? 'javascript:void 0' : f.src, target: pf ? null : '_blank', rel: 'noopener' }, img);
+        if (pf) polyFig(pf[1]).then(function () {
+          const u = CARDIO.polyFigImg && CARDIO.polyFigImg[f.src.slice(3)];
+          if (u) { img.src = u; img.style.minHeight = ''; a.addEventListener('click', function (e) { e.preventDefault(); const w = window.open(); if (w) w.document.write('<img src="' + u + '" style="max-width:100%">'); }); }
+        });
+        return h('figure', { class: 'pz-fig' }, a,
           h('figcaption', {}, inlineMd(f.cap), h('span', { class: 'pz-fig__cred' }, ' — ' + str(f.credit) + (f.lic ? ', ' + f.lic : ''))));
       });
     }
