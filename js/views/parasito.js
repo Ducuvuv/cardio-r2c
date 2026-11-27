@@ -383,7 +383,7 @@
     function figsFor(i, used) {
       return FIGS.filter(function (f, k) { if (used[k] || f.sec !== i) return false; used[k] = 1; return true; }).map(function (f) {
         const pf = /^pf:([a-z]+)\//.exec(str(f.src));
-        const img = h('img', { src: pf ? 'data:image/gif;base64,R0lGODlhAQABAAAAACw=' : f.src, alt: str(f.cap), loading: 'lazy', style: pf ? 'min-height:120px;background:#fff' : null });
+        const img = h('img', { src: pf ? 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' : f.src, alt: str(f.cap), loading: 'lazy', style: pf ? 'min-height:120px;background:#fff' : null });
         const a = h('a', { href: pf ? 'javascript:void 0' : f.src, target: pf ? null : '_blank', rel: 'noopener' }, img);
         if (pf) polyFig(pf[1]).then(function () {
           const u = CARDIO.polyFigImg && CARDIO.polyFigImg[f.src.slice(3)];
@@ -650,6 +650,12 @@
       h('div', { class: 'pz-train__t' }, scope ? 'S’entraîner sur cette fiche' : (curPoly === 'bacterio' ? 'Réviser les cartes bactério' : curPoly === 'viro' ? 'Réviser les cartes viro' : 'Réviser les cartes parasito')),
       h('div', { class: 'pz-train__s' }, nf + ' flashcards · ' + nq + ' QROC — ' + (n.due ? n.due + ' à revoir · ' : '') + n.fresh + ' nouvelles · ' + n.known + ' bien sues'),
       h('div', { style: 'margin-top:6px' }, trainChooser(base, n.total)),
+      (function () {
+        const v = CARDIO.views && CARDIO.views.qcmmicro;
+        if (!v || !v.available || !v.available()) return null;
+        if (scope) { const nq2 = v.count ? v.count(scope.id) : 0; return nq2 ? h('a', { class: 'btn btn--primary btn--block', style: 'margin-top:8px', href: '#/qcm-micro/' + encodeURIComponent(scope.id) }, '📝 ' + nq2 + ' QCM sur cette fiche (barème EDN)') : null; }
+        return h('a', { class: 'btn btn--primary btn--block', style: 'margin-top:8px', href: '#/qcm-micro?mat=' + curPoly }, '📝 20 QCM mélangés ' + (curPoly === 'bacterio' ? 'bactério' : curPoly === 'viro' ? 'viro' : 'parasito'));
+      })(),
       h('a', { class: 'btn btn--secondary btn--block', style: 'margin-top:8px', href: '#/scroll' }, '📱 Mode Scroll · swipe, combos, cœurs'));
   }
 
