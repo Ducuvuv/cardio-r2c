@@ -8,7 +8,7 @@
   'use strict';
   window.CARDIO = window.CARDIO || {};
   const CARDIO = window.CARDIO;
-  const KEEP = /^cardio\.(parasito(\.srs|\.newday|\.seen)?|scroll\.(game|opts)|deck\.(v1(\.[a-z0-9]+)?|slots)|passes|annales|ednfiches|paquets|hiba)$/;
+  const KEEP = /^cardio\.(parasito(\.srs|\.newday|\.seen)?|scroll\.(game|opts)|deck\.(v1(\.[a-z0-9]+)?|slots)|passes|annales|ednfiches|paquets|hiba|aymen)$/;
   const LSAT = 'cardio.lsx.at';
   let LSO = null;
   try { LSO = window.localStorage; } catch (e) { LSO = null; }
@@ -26,11 +26,13 @@
     const p = pending; pending = {};
     if (!Object.keys(p).length) return;
     try { st.update(function (s) { if (!s.lsx || typeof s.lsx !== 'object') s.lsx = {}; Object.keys(p).forEach(function (k) { s.lsx[k] = p[k]; }); }); } catch (e) { /* ignore */ }
+    // envoi immédiat (sans attendre le délai du store) : sinon quitter l'app juste après « lu » pouvait perdre la marque
+    try { if (typeof st.flush === 'function') st.flush(); } catch (e) { /* ignore */ }
   }
   function queue(k, v) {
     const t = Date.now(), a = ats(); a[k] = t; saveAts(a);
     pending[k] = { v: v, at: t };
-    if (!timer) timer = setTimeout(flush, 1200);
+    if (!timer) timer = setTimeout(flush, 400);
   }
   P.setItem = function (k, v) {
     const r = oSet.apply(this, arguments);
@@ -42,7 +44,11 @@
     if (!mute && this === LSO && KEEP.test(String(k))) queue(String(k), null);
     return r;
   };
-  window.addEventListener('pagehide', function () { if (timer) { clearTimeout(timer); flush(); } });
+  // quitter / masquer l'app : tout ce qui est en attente part tout de suite (le store pousse aussi vers le cloud)
+  function now() { if (timer) { clearTimeout(timer); flush(); } }
+  window.addEventListener('pagehide', now);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') now(); });
+  window.addEventListener('blur', now);
 
   /* Restaure depuis le store les clés plus récentes que la copie locale ; renvoie le nombre de clés restaurées. */
   function restore() {

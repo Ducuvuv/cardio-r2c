@@ -101,6 +101,7 @@
     ['#/parasito/:id/cartes',     'parasito',   'items',    'Cartes parasito',     true,  { train: true }],
     ['#/annales',                 'annales',    'items',    'Annales SU officiel', true,  {}],
     ['#/annales/:id',             'annales',    'items',    'Annales SU',          true,  {}],
+    ['#/aymen',                   'aymen',      'home',     'Aymen',               true,  {}],
     ['#/hiba',                    'hiba',       'items',    'Hiba',                true,  {}],
     ['#/hiba/:id',                'hiba',       'items',    'Hiba',                true,  {}],
     ['#/ednfiches',               'ednfiches',  'items',    'Fiches EDN',          true,  {}],

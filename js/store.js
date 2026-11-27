@@ -564,12 +564,20 @@
 
   /* lsx : les clés « carte » {id: {…, at}} (compteur Vu N fois, fiches lues) fusionnent entrée par entrée (la plus
    * récente gagne), pour qu'une écriture faite avant la synchro, ou sur un autre appareil, n'efface pas les autres. */
-  const LSX_MAPS = { 'cardio.passes': 1, 'cardio.parasito': 1, 'cardio.annales': 1, 'cardio.ednfiches': 1 };
+  const LSX_MAPS = { 'cardio.passes': 1, 'cardio.parasito': 1, 'cardio.annales': 1, 'cardio.ednfiches': 1, 'cardio.aymen': 1 };
   function lsxMergeMaps(va, vb) {
     let a = null, b = null;
     try { a = JSON.parse(va); } catch (e) { a = null; }
     try { b = JSON.parse(vb); } catch (e) { b = null; }
     if (!isObj(a) || !isObj(b)) return null;
+    // planning « Aymen » ({_at, learned:{}, rev:{}, ann:{}, done:{}, cap, ex1, ex2…}) : union clé par clé, le plus récent gagne
+    if ('_at' in a || '_at' in b) {
+      const nw = (Number(b._at) || 0) > (Number(a._at) || 0) ? b : a, od = nw === b ? a : b, res = {};
+      uniqStrings(Object.keys(od).concat(Object.keys(nw))).forEach(function (k) {
+        res[k] = isObj(nw[k]) && isObj(od[k]) && k !== 'timer' ? Object.assign({}, od[k], nw[k]) : (k in nw ? nw[k] : od[k]);
+      });
+      return res;
+    }
     const out = {};
     uniqStrings(Object.keys(a).concat(Object.keys(b))).forEach(function (id) {
       const ea = a[id], eb = b[id];

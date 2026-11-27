@@ -397,6 +397,7 @@
     const chips = [
       { label: '📱 Mode Scroll', href: '#/scroll', ico: 'flash', keep: true, parasito: true },
       { label: deckLabel(), href: '#/scroll?deck=1', ico: 'layers', keep: true, deck: true },
+      { label: '🎯 Aymen · mon planning', href: '#/aymen', ico: 'calendar', keep: true },
       { label: 'Méthode des J', href: '#/planj', ico: 'calendar', keep: true },
       { label: 'EDN / Partiels', href: '#/edn', ico: 'timer', keep: true, edn: true },
       { label: 'Algos de stage', href: '#/algos', ico: 'tree' },
