@@ -457,6 +457,7 @@
       const nx = i >= 0 && i + 1 < all.length ? all[i + 1] : null;
       return h('div', { class: 'stack' },
         h('div', { class: 'cluster' }, h('span', { class: 'src' }, polyName(p) + ' · p. ' + str(p.pages))),
+        (function () { const v = CARDIO.views && CARDIO.views.qcmmicro, n = v && v.count ? v.count(p.id) : 0; return n ? h('a', { class: 'btn btn--secondary btn--block', href: '#/qcm-micro/' + encodeURIComponent(p.id) }, '📝 ' + n + ' QCM sur cette fiche') : null; })(),
         nx ? h('a', { class: 'btn btn--primary btn--block', href: '#/parasito/' + encodeURIComponent(nx.id) }, 'Fiche suivante : ' + str(nx.title))
           : h('a', { class: 'btn btn--secondary btn--block', href: '#/parasito' }, 'Toutes les fiches'));
     }

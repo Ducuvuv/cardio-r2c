@@ -102,6 +102,8 @@
     ['#/annales',                 'annales',    'items',    'Annales SU officiel', true,  {}],
     ['#/annales/:id',             'annales',    'items',    'Annales SU',          true,  {}],
     ['#/aymen',                   'aymen',      'home',     'Aymen',               true,  {}],
+    ['#/qcm-micro',               'qcmmicro',   'items',    'QCM micro',           true,  {}],
+    ['#/qcm-micro/:id',           'qcmmicro',   'items',    'QCM micro',           true,  {}],
     ['#/hiba',                    'hiba',       'items',    'Hiba',                true,  {}],
     ['#/hiba/:id',                'hiba',       'items',    'Hiba',                true,  {}],
     ['#/ednfiches',               'ednfiches',  'items',    'Fiches EDN',          true,  {}],

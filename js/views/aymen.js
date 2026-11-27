@@ -83,7 +83,8 @@
       const f = microAll().filter(function (x) { return x.key === key; })[0];
       if (!f) return null;
       return { key: key, title: f.title, tag: f.tag, mat: f.mat, cost: f.mat === 'bacterio' ? (/^bact-lz-/.test(f.id) && f.id !== 'bact-lz-mycobacterium-tuberculosis' ? 1 : (COST1[f.id] || 2)) : (COST1[f.id] || 2),
-        href: '#/parasito/' + encodeURIComponent(f.id), fc: '#/fc?fiche=' + encodeURIComponent(f.id) + '&go=1&mode=all' };
+        href: '#/parasito/' + encodeURIComponent(f.id), fc: '#/fc?fiche=' + encodeURIComponent(f.id) + '&go=1&mode=all',
+        qcm: CARDIO.views.qcmmicro && CARDIO.views.qcmmicro.count && CARDIO.views.qcmmicro.count(f.id) ? '#/qcm-micro/' + encodeURIComponent(f.id) : null };
     }
     const num = key.slice(2), it = itemMeta(num);
     if (!it) return null;
