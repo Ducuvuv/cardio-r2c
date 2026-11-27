@@ -24,6 +24,8 @@
   /* ce qui est déjà vu au départ (27/11) : rappels antérieurs au 27/11 considérés comme faits */
   const SEED = {
     'm:bact-diagnostic': '2026-11-24', 'm:bact-urinaires': '2026-11-24', 'm:bact-meningites': '2026-11-26', 'm:bact-respiratoires': '2026-11-26',
+    'm:viro-hepatites-a-e': '2026-11-27', 'm:viro-hepatite-b-d': '2026-11-27', 'm:viro-hepatite-c': '2026-11-27',
+    'm:bact-antibiotiques': '2026-11-27', 'm:bact-anatomie': '2026-11-27', 'm:bact-genetique': '2026-11-27', 'm:bact-familles': '2026-11-27',
     'm:viro-vih-structure': '2026-11-23', 'm:viro-vih-clinique': '2026-11-23', 'm:viro-rubeole-parvo': '2026-11-23', 'm:viro-arbo': '2026-11-23',
     'i:d187': 'old', 'i:d302': 'old', 'i:d350': 'old', 'i:d112': 'old', 'i:d168': 'old',
     'i:p209': 'old', 'i:p188': 'old', 'i:p154': 'old', 'i:p110': 'old', 'i:p159': 'old', 'i:p210': 'old'
