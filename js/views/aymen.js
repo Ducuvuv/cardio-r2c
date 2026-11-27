@@ -126,7 +126,7 @@
     microAll().forEach(function (f) { if (f.mat === 'parasito') par[f.key] = 'old'; });   // parasito : tout revu
     const learned = Object.assign(par, SEED, autoRead(), s.learned || {});
     Object.keys(learned).forEach(function (k) { if (!learned[k]) delete learned[k]; });
-    return { learned: learned, rev: Object.assign({}, s.rev || {}), ann: Object.assign({}, s.ann || {}), done: s.done || {}, cap: CAPS[s.cap] ? s.cap : 'normal' };
+    return { learned: learned, rev: Object.assign({}, s.rev || {}), ann: Object.assign({}, s.ann || {}), done: s.done || {}, cap: CAPS[s.cap] ? s.cap : 'intense' };
   }
   function phaseOf(d) { return d < ex1() ? 1 : d === ex1() ? 'x1' : d < ex2() ? 2 : d === ex2() ? 'x2' : 'fin'; }
   function capOf(d, cap) {
@@ -423,7 +423,7 @@
 
   function renderRegl(page, rerender) {
     const s = st();
-    const cap = CAPS[s.cap] ? s.cap : 'normal';
+    const cap = CAPS[s.cap] ? s.cap : 'intense';
     page.appendChild(h('div', { class: 'ay-blk' }, h('div', { class: 'ay-bt' }, 'Rythme'),
       h('div', { class: 'ay-tip' }, 'Combien de nouveau par jour. Si tu finis tes journées trop tard, passe en Léger : le planning se recale tout seul (les chapitres les moins tombés passent en « si tu as le temps »).'),
       h('div', { class: 'ay-row' }, Object.keys(CAPS).map(function (k) {
