@@ -65,6 +65,18 @@
     document.head.appendChild(h('style', {}, css));
   }
 
+  /* nombre de QCM au choix : 10 / 20 / 30 / 50 / tous (selon le nombre dispo) */
+  function poolCount(mat) { return fiches().filter(function (f) { return mat === 'all' || f.mat === mat; }).reduce(function (a, f) { return a + bank()[f.id].length; }, 0); }
+  function chooser(mat, label) {
+    const tot = poolCount(mat);
+    if (!tot) return null;
+    const ns = [10, 20, 30, 50].filter(function (n) { return n < tot; });
+    return h('div', { class: 'qm-row', style: 'align-items:center' },
+      label ? h('span', { class: 'secondary', style: 'font-size:.85rem' }, label) : null,
+      ns.map(function (n) { return h('a', { class: 'btn btn--secondary btn--sm', href: '#/qcm-micro?mat=' + mat + '&n=' + n }, String(n)); }),
+      h('a', { class: 'btn btn--primary btn--sm', href: '#/qcm-micro?mat=' + mat + '&n=all' }, 'Tous (' + tot + ')'));
+  }
+
   /* ---------- accueil ---------- */
   function renderHome() {
     const page = h('div', { class: 'page' });
@@ -75,15 +87,14 @@
     const allQ = all.reduce(function (a, f) { return a.concat(bank()[f.id]); }, []), sa = stats(allQ);
     page.appendChild(h('div', { class: 'card', style: 'padding:12px 14px;margin:10px 0' },
       h('b', {}, allQ.length + ' QCM · ' + sa.done + ' faits' + (sa.pct != null ? ' · ' + sa.pct + ' % des points' : '')),
-      h('div', { class: 'qm-row' }, h('a', { class: 'btn btn--primary btn--sm', href: '#/qcm-micro?mat=all' }, '🎲 20 QCM mélangés (toute la micro)'))));
+      chooser('all', '🎲 QCM mélangés (toute la micro) :')));
     Object.keys(MAT).forEach(function (m) {
       const fs = all.filter(function (f) { return f.mat === m; });
       if (!fs.length) return;
       const qs = fs.reduce(function (a, f) { return a.concat(bank()[f.id]); }, []), s = stats(qs);
       const box = h('div', { class: 'card', style: 'padding:12px 14px;margin:12px 0' },
-        h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap' },
-          h('b', { style: 'font-size:1.05rem' }, MAT[m] + ' · ' + qs.length + ' QCM'),
-          h('a', { class: 'btn btn--secondary btn--sm', href: '#/qcm-micro?mat=' + m }, '🎲 20 mélangés')),
+        h('b', { style: 'font-size:1.05rem' }, MAT[m] + ' · ' + qs.length + ' QCM'),
+        chooser(m, '🎲 Mélangés :'),
         h('div', { class: 'secondary', style: 'font-size:.8rem;margin-top:2px' }, s.done + ' / ' + s.n + ' faits' + (s.pct != null ? ' · ' + s.pct + ' % des points' : '')));
       fs.forEach(function (f) {
         const st = stats(bank()[f.id]);
@@ -97,7 +108,7 @@
   }
 
   /* ---------- une session ---------- */
-  function renderSession(qs, title, back) {
+  function renderSession(qs, title, back, more) {
     const page = h('div', { class: 'page' });
     page.appendChild(h('a', { href: back, class: 'secondary', style: 'text-decoration:none' }, '← ' + (back === '#/qcm-micro' ? 'QCM micro' : 'Retour')));
     page.appendChild(h('h1', { style: 'margin-top:6px;font-size:1.25rem' }, title));
@@ -146,6 +157,7 @@
         h('div', { class: 'secondary' }, fmt(tot) + ' points sur ' + qs.length + ' · ' + (qs.length - bad.length) + ' sans faute'),
         h('div', { class: 'qm-row', style: 'justify-content:center' },
           bad.length ? h('button', { type: 'button', class: 'btn btn--primary btn--sm', on: { click: function () { qs = bad.map(function (r) { return r.q; }); i = 0; sel = []; shown = false; tot = 0; res.length = 0; drawQ(); } } }, '↻ Refaire les ' + bad.length + ' ratés') : null,
+          more ? h('a', { class: 'btn btn--primary btn--sm', href: more.href + '&r=' + Date.now() }, '➕ Enchaîner ' + more.n + ' autres') : null,
           h('a', { class: 'btn btn--secondary btn--sm', href: back }, 'Terminer'))),
         bad.length ? h('div', { class: 'card', style: 'padding:12px 14px;margin-top:12px' }, h('b', {}, 'À revoir sur la fiche'),
           bad.map(function (r) { const f = r.q._f ? fiche(r.q._f) : null; return h('div', { class: 'qm-ch' }, h('div', { class: 't' }, (f ? f.title + ' · ' : '') + str(r.q.sec)), f ? h('a', { class: 'btn btn--ghost btn--sm', href: '#/parasito/' + encodeURIComponent(f.id) }, 'Fiche') : null); })) : null);
@@ -168,11 +180,14 @@
         return a.concat(bank()[f.id].map(function (q) { return Object.assign({ _f: f.id, _t: f.title }, q); }));
       }, []);
       const never = shuffle(pool.filter(function (q) { return !p[q.qid]; })), weak = shuffle(pool.filter(function (q) { return p[q.qid] && p[q.qid].p < 1; })), good = shuffle(pool.filter(function (q) { return p[q.qid] && p[q.qid].p >= 1; }));
-      const n = Math.min(20, pool.length);
+      const nq = query.n === 'all' ? pool.length : Math.max(1, parseInt(query.n, 10) || 20);
+      const n = Math.min(nq, pool.length);
       const pick = never.slice(0, Math.ceil(n * 0.6)).concat(weak.slice(0, n)).concat(never.slice(Math.ceil(n * 0.6))).concat(good).slice(0, n);
-      el = renderSession(shuffle(pick), '🎲 ' + (query.mat === 'all' ? 'Micro' : MAT[query.mat]) + ' · 20 QCM mélangés', '#/qcm-micro');
+      el = renderSession(shuffle(pick), '🎲 ' + (query.mat === 'all' ? 'Micro' : MAT[query.mat]) + ' · ' + n + ' QCM mélangés', '#/qcm-micro',
+        n < pool.length ? { n: Math.min(n, pool.length), href: '#/qcm-micro?mat=' + query.mat + '&n=' + n } : null);
     } else el = renderHome();
     return { el: el, title: 'QCM micro' };
   }
-  CARDIO.views.qcmmicro = { render: render, available: function () { return fiches().length > 0; }, count: function (id) { return (bank()[id] || []).length; } };
+  CARDIO.views.qcmmicro = { render: render, available: function () { return fiches().length > 0; }, count: function (id) { return (bank()[id] || []).length; },
+    chooser: function (mat, label) { styles(); return chooser(mat, label); } };
 })();
