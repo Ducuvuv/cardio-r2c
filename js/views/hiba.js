@@ -145,7 +145,7 @@
         h('b', {}, str(ex.titre)),
         h('div', { class: 'secondary', style: 'font-size:.85rem;margin-top:2px' }, [questions(ex).length + ' questions', st && st.end ? '🎯 ' + fmt(st.note) + ' / 20 en ' + clock(st.used) : st && st.t0 ? 'en cours' : 'pas encore fait'].join(' · '))));
     });
-    page.appendChild(h('p', { class: 'secondary', style: 'font-size:.8rem;margin-top:14px' }, 'Barème : proposition indispensable non cochée ou inacceptable cochée = 0 ; sinon tout juste = 1, une erreur ou un oubli = 0,5, deux = 0,2, trois et plus = 0 (QRU : tout ou rien). Les questions ouvertes ne sont pas notées.'));
+    page.appendChild(h('p', { class: 'secondary', style: 'font-size:.8rem;margin-top:14px' }, 'Barème : proposition indispensable non cochée ou inacceptable cochée = 0 ; sinon tout juste = 1, une erreur ou un oubli = 0,5, deux = 0,2, trois et plus = 0 (QRU : tout ou rien). QROC : tu écris ta réponse, estimation automatique puis tu te corriges (juste 1, partiel 0,5, faux 0).'));
     return page;
   }
 
@@ -200,13 +200,26 @@
     page.appendChild(head);
     const endBox = h('div', { class: 'card', style: 'margin-top:18px;display:grid;gap:8px;text-align:center' });
 
-    function answered() { const p = prog(); return questions(ex).filter(closed).filter(function (q) { const r = p[q.id]; return r && Array.isArray(r.sel) && r.sel.length; }).length; }
+    function graded(q) { return closed(q) || isOpen(q); }
+    function answered() { const p = prog(); return questions(ex).filter(graded).filter(function (q) { const r = p[q.id]; return r && ((Array.isArray(r.sel) && r.sel.length) || str(r.txt).trim()); }).length; }
+    /* recalcule la note (après une autocorrection de QROC) */
+    function rescore() {
+      const p = prog(); let tot = 0, n = 0, perfect = 0;
+      questions(ex).forEach(function (q) {
+        const r = p[q.id] || {};
+        if (closed(q)) { tot += r.pts || 0; n++; if (r.pts === 1) perfect++; }
+        else if (isOpen(q)) { const v = Q().pts(r); tot += v; n++; if (v === 1) perfect++; }
+      });
+      const s = st();
+      put(SK, Object.assign({}, s, { note: n ? tot / n * 20 : 0, pts: tot, n: n, perfect: perfect }));
+    }
     function finish() {
       const p = prog(), qs = questions(ex);
       let tot = 0, n = 0, perfect = 0;
       qs.forEach(function (q) {
         const r = p[q.id], sel = r && Array.isArray(r.sel) ? r.sel : [];
         if (closed(q)) { const sc = score(q, sel); put(q.id, { sel: sel, pts: sc.pts, disc: sc.disc, why: sc.why || '' }); tot += sc.pts; n++; if (sc.pts === 1) perfect++; }
+        else if (isOpen(q)) { const txt = r ? str(r.txt) : '', est = Q().grade(txt, q.answer); put(q.id, { txt: txt, qroc: est }); tot += est; n++; if (est === 1) perfect++; }
       });
       const s = st();
       put(SK, { t0: s.t0, acc: 0, run: 0, dur: s.dur || 0, end: Date.now(), used: used(s), note: n ? tot / n * 20 : 0, pts: tot, n: n, perfect: perfect });
@@ -221,18 +234,18 @@
     }
     function upd() {
       if (revision) { head.textContent = 'Mode révision : réponses, commentaires et corrections affichés'; endBox.style.display = 'none'; return; }
-      const n = questions(ex).filter(closed).length;
+      const n = questions(ex).filter(graded).length;
       if (isEnd) {
         const s = st();
-        head.textContent = '🎯 ' + fmt(s.note) + ' / 20 · ' + fmt(s.pts) + ' / ' + s.n + ' points · ' + s.perfect + ' QCM sans faute · ⏱️ ' + clock(s.used);
+        head.textContent = '🎯 ' + fmt(s.note) + ' / 20 · ' + fmt(s.pts) + ' / ' + s.n + ' points · ' + s.perfect + ' sans faute · ⏱️ ' + clock(s.used);
         endBox.replaceChildren(h('b', { style: 'font-size:1.2rem' }, '🎯 ' + fmt(s.note) + ' / 20'),
-          h('div', { class: 'secondary' }, fmt(s.pts) + ' points sur ' + s.n + ' · ' + s.perfect + ' QCM sans faute · temps : ' + clock(s.used)),
+          h('div', { class: 'secondary' }, fmt(s.pts) + ' points sur ' + s.n + ' · ' + s.perfect + ' questions sans faute · temps : ' + clock(s.used)),
           h('button', { type: 'button', class: 'btn btn--outline btn--sm', style: 'justify-self:center', on: { click: restart } }, '↺ Refaire le sujet'));
         return;
       }
       const a = answered();
-      head.textContent = a + ' / ' + n + ' QCM répondus · note et correction à la fin';
-      endBox.replaceChildren(h('b', {}, 'Fini ?'), h('div', { class: 'secondary' }, a < n ? (n - a) + ' QCM sans réponse (comptés 0).' : 'Tous les QCM sont répondus.'),
+      head.textContent = a + ' / ' + n + ' questions répondues · note et correction à la fin';
+      endBox.replaceChildren(h('b', {}, 'Fini ?'), h('div', { class: 'secondary' }, a < n ? (n - a) + ' questions sans réponse (comptées 0).' : 'Toutes les questions sont répondues.'),
         h('button', { type: 'button', class: 'btn btn--primary btn--block', on: { click: finish } }, 'Terminer et voir ma note + la correction'));
     }
 
@@ -265,12 +278,14 @@
         } else if (Array.isArray(q.options) && q.options.length) {
           q.options.forEach(function (o) { kids.push(h('div', { class: 'an-opt', style: 'cursor:default' }, h('span', { class: 'an-l' }, o.l + '.'), h('span', {}, inline(o.t)))); });
         }
+        if (!shown && isOpen(q)) kids.push(Q().editor((prog()[q.id] || {}).txt, function (v) { put(q.id, { txt: v, draft: 1 }); upd(); }));
         if (!shown) {
-          kids.push(h('div', { class: 'secondary', style: 'font-size:.8rem;margin-top:6px' }, isC ? (sel.length ? '✓ Réponse enregistrée' : 'Coche ta réponse') : 'Question ouverte : réponds de tête (non notée), la correction s’affiche à la fin'));
+          kids.push(h('div', { class: 'secondary', style: 'font-size:.8rem;margin-top:6px' }, isC ? (sel.length ? '✓ Réponse enregistrée' : 'Coche ta réponse') : isOpen(q) ? 'QROC notée : écris ta réponse, correction et note à la fin' : 'Question ouverte : réponds de tête (non notée), la correction s’affiche à la fin'));
         } else {
           const r = prog()[q.id];
           if (isC && !revision && r) kids.push(h('div', { class: 'an-res', style: 'color:' + (r.pts === 1 ? '#16a34a' : r.pts > 0 ? '#d97706' : '#dc2626') },
             (r.pts === 1 ? '✅ 1 point' : (r.pts > 0 ? '🟠 ' : '❌ ') + fmt(r.pts || 0) + ' point' + (r.why ? ' · ' + r.why : ' · ' + r.disc + ' discordance' + (r.disc > 1 ? 's' : ''))) + ' · réponse : ' + q.options.filter(function (o) { return o.ok; }).map(function (o) { return o.l; }).join(', ')));
+          if (isOpen(q) && !revision) kids.push(Q().correction(prog()[q.id], function (v) { put(q.id, Object.assign({}, prog()[q.id], { self: v })); rescore(); draw(); upd(); }));
           if (q.answer) kids.push(h('div', { class: 'an-box an-off' }, h('div', { class: 'caption' }, 'Réponse attendue (corrigé officiel)'), md(q.answer)));
           if (q.offComment) kids.push(h('div', { class: 'an-box an-off' }, h('div', { class: 'caption' }, '🎓 Commentaire pédagogique (officiel)'), md(q.offComment)));
           if (q.conflict) kids.push(h('div', { class: 'an-box', style: 'border-left-color:#d97706;background:rgba(217,119,6,.07)' }, h('div', { class: 'caption' }, '⚠️ Corrigé officiel ≠ poly'), md(q.conflict)));
@@ -295,6 +310,10 @@
     upd();
     return page;
   }
+
+  /* QROC : helpers partagés avec les annales (views/annales.js) */
+  function Q() { const a = CARDIO.views && CARDIO.views.annales; return a && a.qroc ? a.qroc : null; }
+  function isOpen(q) { const x = Q(); return !!x && x.open(q); }
 
   function render(params, query) {
     const id = params && params.id;
