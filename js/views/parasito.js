@@ -653,7 +653,7 @@
       (function () {
         const v = CARDIO.views && CARDIO.views.qcmmicro;
         if (!v || !v.available || !v.available()) return null;
-        if (scope) { const nq2 = v.count ? v.count(scope.id) : 0; return nq2 ? h('a', { class: 'btn btn--primary btn--block', style: 'margin-top:8px', href: '#/qcm-micro/' + encodeURIComponent(scope.id) }, '📝 ' + nq2 + ' QCM sur cette fiche (barème EDN)') : null; }
+        if (scope) { return v.ficheChooser ? h('div', { style: 'margin-top:8px' }, v.ficheChooser(scope.id, '📝 QCM de cette fiche (barème EDN) :')) : null; }
         return v.chooser ? h('div', { style: 'margin-top:8px' }, v.chooser(curPoly, '📝 QCM mélangés :')) : null;
       })(),
       h('a', { class: 'btn btn--secondary btn--block', style: 'margin-top:8px', href: '#/scroll' }, '📱 Mode Scroll · swipe, combos, cœurs'));

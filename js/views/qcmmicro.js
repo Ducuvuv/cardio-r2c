@@ -171,9 +171,17 @@
     query = query || {};
     let el;
     const id = params && params.id;
-    if (id && bank()[id]) {
+    if (id && bank()[id] && query.n && query.n !== 'all') {
+      // une fiche, nombre choisi : priorité aux jamais faits puis aux ratés, enchaînement possible
+      const f = fiche(id), p = prog();
+      const pool = bank()[id].map(function (q) { return Object.assign({ _f: id }, q); });
+      const never = shuffle(pool.filter(function (q) { return !p[q.qid]; })), weak = shuffle(pool.filter(function (q) { return p[q.qid] && p[q.qid].p < 1; })), good = shuffle(pool.filter(function (q) { return p[q.qid] && p[q.qid].p >= 1; }));
+      const n = Math.min(Math.max(1, parseInt(query.n, 10) || 5), pool.length);
+      el = renderSession(never.concat(weak, good).slice(0, n), (f ? f.title : id) + ' · ' + n + ' QCM', '#/parasito/' + encodeURIComponent(id),
+        n < pool.length ? { n: n, href: '#/qcm-micro/' + encodeURIComponent(id) + '?n=' + n } : null);
+    } else if (id && bank()[id]) {
       const f = fiche(id);
-      el = renderSession(bank()[id].map(function (q) { return Object.assign({ _f: id }, q); }), (f ? f.title : id) + ' · QCM', '#/qcm-micro');
+      el = renderSession(bank()[id].map(function (q) { return Object.assign({ _f: id }, q); }), (f ? f.title : id) + ' · ' + bank()[id].length + ' QCM', '#/parasito/' + encodeURIComponent(id));
     } else if (query.mat && (MAT[query.mat] || query.mat === 'all')) {
       const p = prog();
       const pool = fiches().filter(function (f) { return query.mat === 'all' || f.mat === query.mat; }).reduce(function (a, f) {
@@ -189,5 +197,15 @@
     return { el: el, title: 'QCM micro' };
   }
   CARDIO.views.qcmmicro = { render: render, available: function () { return fiches().length > 0; }, count: function (id) { return (bank()[id] || []).length; },
-    chooser: function (mat, label) { styles(); return chooser(mat, label); } };
+    chooser: function (mat, label) { styles(); return chooser(mat, label); },
+    /* choix du nombre pour UNE fiche : 5 / 10 / 15 (selon le nombre dispo) / Tous */
+    ficheChooser: function (id, label) {
+      styles();
+      const tot = (bank()[id] || []).length;
+      if (!tot) return null;
+      return h('div', { class: 'qm-row', style: 'align-items:center' },
+        label ? h('span', { class: 'secondary', style: 'font-size:.85rem' }, label) : null,
+        [5, 10, 15].filter(function (n) { return n < tot; }).map(function (n) { return h('a', { class: 'btn btn--secondary btn--sm', href: '#/qcm-micro/' + encodeURIComponent(id) + '?n=' + n }, String(n)); }),
+        h('a', { class: 'btn btn--primary btn--sm', href: '#/qcm-micro/' + encodeURIComponent(id) }, 'Tous (' + tot + ')'));
+    } };
 })();
