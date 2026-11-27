@@ -36,7 +36,7 @@
       wrap.replaceChildren(
         h('div', { style: 'flex:1;min-width:150px' },
           h('b', {}, n ? '👁️ Vu ' + n + ' fois' : '👁️ Pas encore vu'),
-          h('div', { class: 'secondary muted', style: 'font-size:.8125rem' }, n ? 'Dernier passage ' + when(e && e.at) + ' · ajuste si besoin' : 'Note chaque lecture complète de ce cours')),
+          h('div', { class: 'secondary muted', style: 'font-size:.8125rem' }, n ? 'Dernier passage ' + when(e && e.at) + ' · compté dans ton planning Aymen' : 'Note chaque lecture complète de ce cours (compte dans ton planning Aymen)')),
         b('−', 'Un passage de moins', function () { set(k, n - 1); draw(); }),
         h('button', { type: 'button', class: 'btn btn--sm btn--primary', on: { click: function () { set(k, n + 1); draw(); } } }, n ? '+1 passage' : 'Je l’ai vu ✓'));
     }

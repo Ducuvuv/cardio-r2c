@@ -119,15 +119,46 @@
     Object.keys(ef).forEach(function (n) { const e = ef[n]; if (e && Number(e.c) > 0) (byLabel[String(n)] || []).forEach(function (num) { put('i:' + num, e.at); }); });
     const pz = readLS('cardio.parasito');
     Object.keys(pz).forEach(function (id) { const e = pz[id]; if (e && typeof e.ok === 'boolean') put('m:' + id, e.at); });
+    passEvents().forEach(function (x) { put(x.key, x.at); });
+    return out;
+  }
+  /* passages déclarés : « Je l'ai vu / +1 passage » d'une fiche (cardio.passes : i:<num> item, p:<id> fiche micro)
+     et fiches EDN marquées lues (cardio.ednfiches, par n° d'item) → [{key, at}] (clés du planning) */
+  function passEvents() {
+    const out = [];
+    const micro = {};
+    microAll().forEach(function (f) { micro[f.id] = 1; });
+    const ps = readLS('cardio.passes');
+    Object.keys(ps).forEach(function (k) {
+      const e = ps[k]; if (!e || !(Number(e.n) > 0) || !e.at) return;
+      if (k.indexOf('i:') === 0) out.push({ key: k, at: e.at });
+      else if (k.indexOf('p:') === 0 && micro[k.slice(2)]) out.push({ key: 'm:' + k.slice(2), at: e.at });
+    });
+    const byLabel = {};
+    try { const r = CARDIO.registry; (r && typeof r.items === 'function' ? r.items() || [] : []).forEach(function (it) { if (it && it.label) (byLabel[String(it.label)] = byLabel[String(it.label)] || []).push(it.num); }); } catch (e) { /* ignore */ }
+    const ef = readLS('cardio.ednfiches');
+    Object.keys(ef).forEach(function (n) { const e = ef[n]; if (e && Number(e.c) > 0 && e.at) (byLabel[String(n).replace(/b$/, '')] || []).forEach(function (num) { out.push({ key: 'i:' + num, at: e.at }); }); });
     return out;
   }
   function baseState() {
     const s = st();
     const par = {};
     microAll().forEach(function (f) { if (f.mat === 'parasito') par[f.key] = 'old'; });   // parasito : tout revu
-    const learned = Object.assign(par, SEED, autoRead(), s.learned || {});
+    // sources automatiques : on garde la date la plus ancienne (« old » d'abord) ; les choix manuels de « Mes cours » priment
+    const learned = par;
+    [SEED, autoRead()].forEach(function (src) {
+      Object.keys(src).forEach(function (k) { const v = src[k], c = learned[k]; if (!c || v === 'old' || (c !== 'old' && v < c)) learned[k] = v; });
+    });
+    Object.assign(learned, s.learned || {});
     Object.keys(learned).forEach(function (k) { if (!learned[k]) delete learned[k]; });
-    return { learned: learned, rev: Object.assign({}, s.rev || {}), ann: Object.assign({}, s.ann || {}), done: s.done || {}, cap: CAPS[s.cap] ? s.cap : 'intense' };
+    // un passage déclaré un jour J (fiche « +1 passage » ou fiche EDN lue) valide les rappels dus ce jour-là ou en retard
+    const rev = Object.assign({}, s.rev || {});
+    passEvents().forEach(function (x) {
+      const l = learned[x.key], d = iso(new Date(Number(x.at)));
+      if (!l || l === 'old' || d <= l || d < START) return;
+      OFFS.forEach(function (off) { const due = dueOf(x.key, l, off), rk = x.key + '@' + off; if (due && due <= d && !rev[rk]) rev[rk] = d; });
+    });
+    return { learned: learned, rev: rev, ann: Object.assign({}, s.ann || {}), done: s.done || {}, cap: CAPS[s.cap] ? s.cap : 'intense' };
   }
   function phaseOf(d) { return d < ex1() ? 1 : d === ex1() ? 'x1' : d < ex2() ? 2 : d === ex2() ? 'x2' : 'fin'; }
   function capOf(d, cap) {

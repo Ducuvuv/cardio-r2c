@@ -24,7 +24,15 @@
   function prog() { try { const o = JSON.parse(localStorage.getItem(LS) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } }
   function count(f, p) { const e = (p || prog())[key(f)]; return e && Number(e.c) > 0 ? Number(e.c) : 0; }
   function setCount(f, c) {
+    const before = count(f);
     try { const o = prog(); o[key(f)] = { c: Math.max(0, c), at: Date.now() }; localStorage.setItem(LS, JSON.stringify(o)); } catch (e) { /* ignore */ }
+    // une lecture de fiche EDN = un passage (« Vu N fois ») sur l'item du même numéro (cardio / pneumo / dermato)
+    try {
+      const d = Math.max(0, c) - before, P = CARDIO.passes, r = CARDIO.registry;
+      if (d && P && r && typeof r.items === 'function') (r.items() || []).forEach(function (it) {
+        if (it && String(it.label) === String(f.n)) P.set('i:' + it.num, P.get('i:' + it.num) + d);
+      });
+    } catch (e) { /* ignore */ }
   }
   function viewPrefs() { try { return JSON.parse(localStorage.getItem(LSV) || '{}') || {}; } catch (e) { return {}; } }
   function saveView(o) { try { localStorage.setItem(LSV, JSON.stringify(Object.assign(viewPrefs(), o))); } catch (e) { /* ignore */ } }
